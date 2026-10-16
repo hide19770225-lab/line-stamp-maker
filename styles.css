@@ -1477,3 +1477,102 @@ body.modal-open {
     transition: none !important;
   }
 }
+
+/* Individual image editing keeps the original visual language and touch target sizes. */
+.image-controls {
+  margin: 0 0 20px;
+}
+.image-controls .hint,
+.crop-controls .hint {
+  margin-top: 4px;
+}
+.image-controls input[type="range"],
+.crop-controls input[type="range"] {
+  min-height: 44px;
+  margin-bottom: 10px;
+}
+.size-buttons {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.size-buttons .button {
+  flex: 1;
+}
+.individual-crop {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  margin-bottom: 20px;
+}
+.individual-crop summary,
+.comparison summary {
+  min-height: 48px;
+  padding: 14px 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.split-settings > .crop-controls {
+  margin: 0 0 24px;
+}
+.comparison {
+  margin-top: 12px;
+}
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.comparison-grid figure {
+  margin: 0;
+  min-width: 0;
+}
+.comparison-grid canvas {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: repeating-conic-gradient(#e8ece6 0% 25%, white 0% 50%) 0 / 14px
+    14px;
+}
+.comparison-grid figcaption {
+  text-align: center;
+  font-size: 10px;
+  padding: 8px 0;
+  color: var(--muted);
+}
+.comparison[data-background="dark"] canvas {
+  background: #35463e;
+}
+.comparison[data-background="pink"] canvas {
+  background: #e9bdc6;
+}
+.inline-actions {
+  flex-wrap: wrap;
+  column-gap: 15px;
+}
+@media (max-width: 600px) {
+  .dialog-content > div:first-child {
+    min-width: 0;
+  }
+  .image-controls legend,
+  .crop-controls legend,
+  .comparison summary,
+  .individual-crop summary {
+    font-size: 13px;
+  }
+}
+@media (max-width: 600px) and (min-height: 650px) {
+  .dialog-content > div:first-child {
+    display: contents;
+  }
+  .dialog-content .edit-preview {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    width: 100%;
+    max-width: 300px;
+    box-shadow: 0 3px 14px #233d3222;
+  }
+}

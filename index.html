@@ -199,6 +199,13 @@
               </button>
             </div>
             <div class="split-settings">
+              <fieldset class="crop-controls">
+                <legend>各コマの端を切り抜く</legend>
+                <p class="hint">
+                  隣のコマの線が入る場合に、四辺を内側へ。オレンジの枠が実際の切り抜き範囲です。この元画像の10個に適用します。
+                </p>
+                <div id="source-insets"></div>
+              </fieldset>
               <h3>背景の取り除き方</h3>
               <p class="hint">
                 画像の端につながる背景だけを透過します。囲まれた白い部分は残します。白いキャラクターと背景がつながっている場合は、次の確認画面で修正してください。
@@ -375,6 +382,19 @@
               aria-label="透過・文字プレビュー。修正モードではドラッグで描けます。"
             ></canvas>
           </div>
+          <details class="comparison" id="comparison-panel">
+            <summary>編集前後を比較する</summary>
+            <div class="comparison-grid">
+              <figure>
+                <canvas id="before-canvas" width="370" height="320"></canvas>
+                <figcaption>編集前（背景あり）</figcaption>
+              </figure>
+              <figure>
+                <canvas id="after-canvas" width="370" height="320"></canvas>
+                <figcaption>現在の仕上がり</figcaption>
+              </figure>
+            </div>
+          </details>
           <p class="hint">
             白い体・目・服が欠けていないか、背景色を変えて確認してください。
           </p>
@@ -392,13 +412,16 @@
                 見る</button
               ><button class="button secondary" data-brush="restore">
                 元の色を戻す</button
-              ><button class="button secondary" data-brush="erase">消す</button>
+              ><button class="button secondary" data-brush="erase">
+                消しゴム
+              </button>
             </div>
             <label for="brush-size"
               >ブラシの太さ <output id="brush-value">16</output> px</label
             ><input id="brush-size" type="range" min="4" max="64" value="16" />
             <div class="inline-actions">
               <button class="text-button" id="undo-brush">1つ戻す</button
+              ><button class="text-button" id="redo-brush">やり直す</button
               ><button class="text-button" id="reset-mask">
                 自動透過に戻す
               </button>
@@ -406,6 +429,49 @@
           </fieldset>
         </div>
         <div class="caption-settings">
+          <fieldset class="image-controls">
+            <legend>キャラクターの大きさ・位置</legend>
+            <p class="hint">
+              透明な余白を除いて大きく配置します。縦横比と外周10pxの余白は維持。上下左右へ動かす余地がない場合は、少し縮小してください。
+            </p>
+            <label for="image-scale"
+              >大きさ <output id="image-scale-value">90</output> %</label
+            >
+            <input
+              id="image-scale"
+              type="range"
+              min="20"
+              max="100"
+              value="90"
+            />
+            <div class="size-buttons">
+              <button class="button secondary" id="image-smaller">− 縮小</button
+              ><button class="button secondary" id="image-larger">
+                ＋ 拡大
+              </button>
+            </div>
+            <label for="image-x"
+              >左右の位置 <output id="image-x-value">50</output> %</label
+            >
+            <input id="image-x" type="range" min="0" max="100" value="50" />
+            <label for="image-y"
+              >上下の位置 <output id="image-y-value">50</output> %</label
+            >
+            <input id="image-y" type="range" min="0" max="100" value="50" />
+            <button class="button secondary wide" id="reset-layout">
+              大きく中央に配置する
+            </button>
+          </fieldset>
+          <details class="crop-controls individual-crop">
+            <summary>このスタンプの切り抜き範囲</summary>
+            <p class="hint">
+              各辺から除く割合です。不要な線・影を除けます。消しゴム修正は維持され、値を0に戻すと範囲を戻せます。
+            </p>
+            <div id="stamp-insets"></div>
+            <button class="text-button" id="reset-stamp-crop">
+              切り抜き範囲を戻す
+            </button>
+          </details>
           <label for="caption-text">セリフ</label
           ><textarea
             id="caption-text"

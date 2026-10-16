@@ -114,51 +114,64 @@
       ? null
       : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
   }
-  function createTile(source, column, row, mode, tolerance, color) {
+  function tileRect(source, column, row) {
     const { xs, ys, image } = source;
-    const sx = Math.round(xs[column] * image.width),
-      sy = Math.round(ys[row] * image.height);
-    const sw = Math.round(xs[column + 1] * image.width) - sx,
-      sh = Math.round(ys[row + 1] * image.height) - sy;
-    // Remove the background before resizing, so transparent padding cannot affect corner sampling.
-    const scale = Math.min(1, 600 / Math.max(sw, sh));
-    const crop = canvas(
-      Math.max(1, Math.round(sw * scale)),
-      Math.max(1, Math.round(sh * scale)),
+    const left = Math.round(xs[column] * image.width);
+    const top = Math.round(ys[row] * image.height);
+    const right = Math.round(xs[column + 1] * image.width);
+    const bottom = Math.round(ys[row + 1] * image.height);
+    const inset = source.insets || { left: 0, right: 0, top: 0, bottom: 0 };
+    const x = Math.min(
+      right - 1,
+      left + Math.ceil(((right - left) * inset.left) / 100),
     );
-    const cropContext = crop.getContext("2d", { willReadFrequently: true });
-    cropContext.drawImage(image, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
-    const cropData = cropContext.getImageData(0, 0, crop.width, crop.height);
-    const cropMask = floodMask(cropData, mode, tolerance, color);
-    const art = canvas(WIDTH, HEIGHT),
-      clean = canvas(crop.width, crop.height);
-    const cleanContext = clean.getContext("2d");
-    const cleaned = new ImageData(
-      new Uint8ClampedArray(cropData.data),
+    const y = Math.min(
+      bottom - 1,
+      top + Math.ceil(((bottom - top) * inset.top) / 100),
+    );
+    return {
+      x,
+      y,
+      width: Math.max(
+        1,
+        right - Math.ceil(((right - left) * inset.right) / 100) - x,
+      ),
+      height: Math.max(
+        1,
+        bottom - Math.ceil(((bottom - top) * inset.bottom) / 100) - y,
+      ),
+    };
+  }
+  function createTile(source, column, row, mode, tolerance, color) {
+    const rect = tileRect(source, column, row);
+    // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
+    const scale = Math.min(1, 600 / Math.max(rect.width, rect.height));
+    const crop = canvas(
+      Math.max(1, Math.round(rect.width * scale)),
+      Math.max(1, Math.round(rect.height * scale)),
+    );
+    const ctx = crop.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(
+      source.image,
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+      0,
+      0,
       crop.width,
       crop.height,
     );
-    for (let i = 0; i < cropMask.length; i++)
-      cleaned.data[i * 4 + 3] = cropMask[i];
-    cleanContext.putImageData(cleaned, 0, 0);
-    const ratio = Math.min(350 / crop.width, 250 / crop.height);
-    const w = Math.max(1, Math.round(crop.width * ratio)),
-      h = Math.max(1, Math.round(crop.height * ratio));
-    const x = Math.round((WIDTH - w) / 2),
-      y = MARGIN + Math.round((250 - h) / 2);
-    const ctx = art.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(crop, x, y, w, h);
-    const original = ctx.getImageData(0, 0, WIDTH, HEIGHT);
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
-    ctx.drawImage(clean, x, y, w, h);
-    const initial = ctx.getImageData(0, 0, WIDTH, HEIGHT);
-    const mask = new Uint8ClampedArray(WIDTH * HEIGHT);
-    for (let i = 0; i < mask.length; i++) mask[i] = initial.data[i * 4 + 3];
+    const original = ctx.getImageData(0, 0, crop.width, crop.height);
+    const mask = floodMask(original, mode, tolerance, color);
+    crop.width = crop.height = 1;
     return {
       original,
       mask,
       autoMask: mask.slice(),
       caption: "",
+      crop: { left: 0, right: 0, top: 0, bottom: 0 },
+      layout: { scale: 90, x: 50, y: 50 },
       style: {
         font: "sans",
         size: 32,
@@ -169,7 +182,122 @@
       },
       reviewed: false,
       undo: [],
+      redo: [],
     };
+  }
+  function stampCrop(stamp) {
+    const { width, height } = stamp.original;
+    const crop = stamp.crop || { left: 0, right: 0, top: 0, bottom: 0 };
+    const x = Math.ceil((width * crop.left) / 100),
+      y = Math.ceil((height * crop.top) / 100);
+    return {
+      x,
+      y,
+      width: Math.max(1, width - Math.ceil((width * crop.right) / 100) - x),
+      height: Math.max(1, height - Math.ceil((height * crop.bottom) / 100) - y),
+    };
+  }
+  function maskBounds(
+    mask,
+    width,
+    height,
+    rect = { x: 0, y: 0, width, height },
+  ) {
+    let left = width,
+      right = -1,
+      top = height,
+      bottom = -1;
+    for (let y = rect.y; y < rect.y + rect.height; y++) {
+      for (let x = rect.x; x < rect.x + rect.width; x++) {
+        if (mask[y * width + x]) {
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+          top = Math.min(top, y);
+          bottom = Math.max(bottom, y);
+        }
+      }
+    }
+    return right < 0
+      ? null
+      : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+  }
+  function imagePlacement(stamp) {
+    if (stamp.activePlacement) return stamp.activePlacement;
+    const crop = stampCrop(stamp);
+    const bounds =
+      maskBounds(
+        stamp.mask,
+        stamp.original.width,
+        stamp.original.height,
+        crop,
+      ) || crop;
+    const layout = stamp.layout || { scale: 90, x: 50, y: 50 };
+    const ratio =
+      (Math.min(
+        (WIDTH - MARGIN * 2) / bounds.width,
+        (HEIGHT - MARGIN * 2) / bounds.height,
+      ) *
+        Math.max(20, Math.min(100, layout.scale))) /
+      100;
+    const width = bounds.width * ratio,
+      height = bounds.height * ratio;
+    const x =
+      MARGIN +
+      ((WIDTH - MARGIN * 2 - width) * Math.max(0, Math.min(100, layout.x))) /
+        100;
+    const y =
+      MARGIN +
+      ((HEIGHT - MARGIN * 2 - height) * Math.max(0, Math.min(100, layout.y))) /
+        100;
+    return {
+      crop,
+      bounds,
+      ratio,
+      offsetX: x - bounds.x * ratio,
+      offsetY: y - bounds.y * ratio,
+    };
+  }
+  function applyBrush(stamp, x, y, radius, mode) {
+    const p = imagePlacement(stamp),
+      crop = p.crop;
+    const sx = (x - p.offsetX) / p.ratio,
+      sy = (y - p.offsetY) / p.ratio,
+      sr = radius / p.ratio;
+    for (
+      let py = Math.max(crop.y, Math.floor(sy - sr));
+      py < Math.min(crop.y + crop.height, Math.ceil(sy + sr));
+      py++
+    ) {
+      for (
+        let px = Math.max(crop.x, Math.floor(sx - sr));
+        px < Math.min(crop.x + crop.width, Math.ceil(sx + sr));
+        px++
+      ) {
+        if ((px - sx) ** 2 + (py - sy) ** 2 <= sr ** 2) {
+          const i = py * stamp.original.width + px;
+          stamp.mask[i] =
+            mode === "restore" ? stamp.original.data[i * 4 + 3] : 0;
+        }
+      }
+    }
+  }
+  function renderBefore(stamp, target = canvas(WIDTH, HEIGHT)) {
+    target.width = WIDTH;
+    target.height = HEIGHT;
+    const layer = canvas(stamp.original.width, stamp.original.height);
+    layer.getContext("2d").putImageData(stamp.original, 0, 0);
+    const ratio = Math.min(350 / layer.width, 300 / layer.height);
+    target
+      .getContext("2d")
+      .drawImage(
+        layer,
+        (WIDTH - layer.width * ratio) / 2,
+        (HEIGHT - layer.height * ratio) / 2,
+        layer.width * ratio,
+        layer.height * ratio,
+      );
+    layer.width = layer.height = 1;
+    return target;
   }
   function wrapText(ctx, text, maxWidth) {
     const lines = [];
@@ -198,14 +326,35 @@
     target.width = WIDTH;
     target.height = HEIGHT;
     const ctx = target.getContext("2d", { willReadFrequently: true });
+    const { width, height } = stamp.original;
     const data = new ImageData(
       new Uint8ClampedArray(stamp.original.data),
-      WIDTH,
-      HEIGHT,
+      width,
+      height,
     );
     for (let i = 0; i < stamp.mask.length; i++)
       data.data[i * 4 + 3] = stamp.mask[i];
-    ctx.putImageData(data, 0, 0);
+    const layer = canvas(width, height);
+    layer.getContext("2d").putImageData(data, 0, 0);
+    const p = imagePlacement(stamp),
+      crop = p.crop;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(MARGIN, MARGIN, WIDTH - MARGIN * 2, HEIGHT - MARGIN * 2);
+    ctx.clip();
+    ctx.drawImage(
+      layer,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      p.offsetX + crop.x * p.ratio,
+      p.offsetY + crop.y * p.ratio,
+      crop.width * p.ratio,
+      crop.height * p.ratio,
+    );
+    ctx.restore();
+    layer.width = layer.height = 1;
     let textClipped = false;
     if (stamp.caption.trim()) {
       const s = stamp.style,
@@ -282,6 +431,7 @@
         h,
       );
     }
+    rendered.canvas.width = rendered.canvas.height = 1;
     return output;
   }
   function pngBlob(c) {
@@ -367,6 +517,12 @@
     floodMask,
     alphaBounds,
     createTile,
+    tileRect,
+    stampCrop,
+    maskBounds,
+    imagePlacement,
+    applyBrush,
+    renderBefore,
     renderStamp,
     specialImage,
     pngBlob,
