@@ -76,7 +76,7 @@
       .forEach((step, i) => step.classList.toggle("current", i === index));
   }
   const signature = (s) =>
-    JSON.stringify([s.xs, s.ys, s.mode, s.tolerance, s.color]);
+    JSON.stringify([s.xs, s.ys, s.mode, s.tolerance, s.color, s.insets]);
   function addSource(image, name) {
     state.sources.push({
       id: nextId++,
@@ -84,6 +84,7 @@
       name,
       xs: [0, 0.5, 1],
       ys: [0, 0.2, 0.4, 0.6, 0.8, 1],
+      insets: { left: 0, right: 0, top: 0, bottom: 0 },
       stamps: [],
       mode: "auto",
       tolerance: 24,
@@ -327,7 +328,41 @@
     $("tolerance").value = source.tolerance;
     $("tolerance-value").textContent = source.tolerance;
     renderGridControls();
+    insetControls("source-insets", source.insets, 20, () => {
+      invalidate();
+      drawSplit();
+    });
     drawSplit();
+  }
+  function insetControls(id, values, max, onChange) {
+    $(id).replaceChildren();
+    for (const [key, title] of [
+      ["top", "上"],
+      ["bottom", "下"],
+      ["left", "左"],
+      ["right", "右"],
+    ]) {
+      const label = document.createElement("label"),
+        output = document.createElement("output"),
+        input = document.createElement("input");
+      const inputId = `${id}-${key}`;
+      label.htmlFor = inputId;
+      label.append(`${title}から切り抜く `);
+      output.textContent = `${values[key]} %`;
+      label.append(output);
+      input.id = inputId;
+      input.type = "range";
+      input.min = "0";
+      input.max = String(max);
+      input.step = "0.5";
+      input.value = values[key];
+      input.oninput = () => {
+        values[key] = Number(input.value);
+        output.textContent = `${values[key]} %`;
+        onChange();
+      };
+      $(id).append(label, input);
+    }
   }
   function renderGridControls() {
     const source = state.sources[state.selectedSource];
@@ -411,6 +446,23 @@
       ctx.moveTo(0, yy);
       ctx.lineTo(c.width, yy);
       ctx.stroke();
+    }
+    if (Object.values(source.insets).some((value) => value > 0)) {
+      ctx.save();
+      ctx.strokeStyle = "#b87522";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      for (let row = 0; row < 5; row++)
+        for (let col = 0; col < 2; col++) {
+          const rect = C.tileRect(source, col, row);
+          ctx.strokeRect(
+            rect.x * ratio,
+            rect.y * ratio,
+            rect.width * ratio,
+            rect.height * ratio,
+          );
+        }
+      ctx.restore();
     }
     for (let r = 0; r < 5; r++)
       for (let col = 0; col < 2; col++) {
@@ -598,7 +650,12 @@
   };
   function validation() {
     const all = stamps(),
-      rendered = all.map((stamp) => C.renderStamp(stamp));
+      rendered = all.map((stamp) => {
+        const result = C.renderStamp(stamp);
+        // Only keep inspection metadata; release temporary canvas memory on iPhone.
+        result.canvas.width = result.canvas.height = 1;
+        return result;
+      });
     const unreviewed = all.filter((s) => !s.reviewed).length,
       empty = rendered.flatMap((r, i) => (r.empty ? [i + 1] : [])),
       clipped = rendered.flatMap((r, i) => (r.textClipped ? [i + 1] : []));
@@ -688,6 +745,10 @@
     state.selectedStamp = index;
     const stamp = selected();
     state.brush = "none";
+    $("edit-canvas").style.cursor = "default";
+    syncLayoutControls();
+    insetControls("stamp-insets", stamp.crop, 40, changedImage);
+    C.renderBefore(stamp, $("before-canvas"));
     $("dialog-title").textContent =
       `スタンプ ${String(index + 1).padStart(2, "0")} を編集`;
     $("caption-text").value = stamp.caption;
@@ -715,19 +776,78 @@
     }
   }
   function drawEditor() {
-    if (selected()) C.renderStamp(selected(), $("edit-canvas"));
+    if (selected()) {
+      C.renderStamp(selected(), $("edit-canvas"));
+      if ($("comparison-panel").open)
+        C.renderStamp(selected(), $("after-canvas"));
+      $("undo-brush").disabled = !selected().undo.length;
+      $("redo-brush").disabled = !selected().redo.length;
+    }
   }
+  function syncLayoutControls() {
+    const stamp = selected();
+    for (const [id, key] of [
+      ["image-scale", "scale"],
+      ["image-x", "x"],
+      ["image-y", "y"],
+    ]) {
+      $(id).value = stamp.layout[key];
+      $(`${id}-value`).textContent = stamp.layout[key];
+    }
+  }
+  function changedImage() {
+    selected().reviewed = false;
+    $("reviewed-checkbox").checked = false;
+    invalidate();
+    drawEditor();
+  }
+  for (const [id, key] of [
+    ["image-scale", "scale"],
+    ["image-x", "x"],
+    ["image-y", "y"],
+  ]) {
+    $(id).oninput = () => {
+      selected().layout[key] = Number($(id).value);
+      syncLayoutControls();
+      changedImage();
+    };
+  }
+  for (const [id, delta] of [
+    ["image-smaller", -5],
+    ["image-larger", 5],
+  ]) {
+    $(id).onclick = () => {
+      selected().layout.scale = Math.max(
+        20,
+        Math.min(100, selected().layout.scale + delta),
+      );
+      syncLayoutControls();
+      changedImage();
+    };
+  }
+  $("reset-layout").onclick = () => {
+    selected().layout = { scale: 100, x: 50, y: 50 };
+    syncLayoutControls();
+    changedImage();
+  };
+  $("reset-stamp-crop").onclick = () => {
+    selected().crop = { top: 0, bottom: 0, left: 0, right: 0 };
+    insetControls("stamp-insets", selected().crop, 40, changedImage);
+    changedImage();
+  };
+  $("comparison-panel").ontoggle = drawEditor;
   function closeEditor() {
     $("stamp-dialog").close();
   }
   $("close-dialog").onclick = closeEditor;
   $("stamp-dialog").addEventListener("close", () => {
-    drawing = false;
+    endPaint();
     document.body.classList.remove("modal-open");
     renderResults();
   });
   $("edit-background").onchange = () => {
     $("edit-preview").className = `edit-preview ${$("edit-background").value}`;
+    $("comparison-panel").dataset.background = $("edit-background").value;
   };
   for (const id of [
     "caption-text",
@@ -801,6 +921,7 @@
     $("brush-value").textContent = $("brush-size").value;
   };
   function snapshot(stamp) {
+    stamp.redo = [];
     stamp.undo.push(stamp.mask.slice());
     if (stamp.undo.length > 8) stamp.undo.shift();
   }
@@ -812,30 +933,21 @@
     };
   }
   function paint(x, y) {
-    const stamp = selected(),
-      radius = Number($("brush-size").value) / 2;
-    for (
-      let py = Math.max(10, Math.floor(y - radius));
-      py < Math.min(310, Math.ceil(y + radius));
-      py++
-    )
-      for (
-        let px = Math.max(10, Math.floor(x - radius));
-        px < Math.min(360, Math.ceil(x + radius));
-        px++
-      ) {
-        if ((px - x) ** 2 + (py - y) ** 2 <= radius ** 2) {
-          const p = py * 370 + px;
-          stamp.mask[p] =
-            state.brush === "restore" ? stamp.original.data[p * 4 + 3] : 0;
-        }
-      }
+    C.applyBrush(
+      selected(),
+      x,
+      y,
+      Number($("brush-size").value) / 2,
+      state.brush,
+    );
   }
   $("edit-canvas").onpointerdown = (e) => {
-    if (state.brush === "none") return;
+    if (state.brush === "none" || drawing || !e.isPrimary) return;
     e.preventDefault();
     drawing = true;
     snapshot(selected());
+    // Freeze the mapping for the whole stroke. Removing an edge must not move the brush target.
+    selected().activePlacement = C.imagePlacement(selected());
     lastPoint = brushPoint(e);
     paint(lastPoint.x, lastPoint.y);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -857,19 +969,31 @@
     drawEditor();
   };
   function endPaint() {
+    const wasDrawing = drawing;
     drawing = false;
     lastPoint = null;
+    if (selected()) delete selected().activePlacement;
+    if (wasDrawing) drawEditor();
   }
   $("edit-canvas").onpointerup = endPaint;
   $("edit-canvas").onpointercancel = endPaint;
   $("undo-brush").onclick = () => {
     const stamp = selected();
     if (stamp.undo.length) {
+      stamp.redo.push(stamp.mask.slice());
       stamp.mask = stamp.undo.pop();
       stamp.reviewed = false;
       $("reviewed-checkbox").checked = false;
       invalidate();
       drawEditor();
+    }
+  };
+  $("redo-brush").onclick = () => {
+    const stamp = selected();
+    if (stamp.redo.length) {
+      stamp.undo.push(stamp.mask.slice());
+      stamp.mask = stamp.redo.pop();
+      changedImage();
     }
   };
   $("reset-mask").onclick = () => {
@@ -925,7 +1049,9 @@
       for (let i = 0; i < v.all.length; i++) {
         notify(`PNGを作成中… ${i + 1} / ${v.all.length + 2}`, false, true);
         await frame();
-        const blob = await C.pngBlob(v.rendered[i].canvas);
+        const rendered = C.renderStamp(v.all[i]);
+        const blob = await C.pngBlob(rendered.canvas);
+        rendered.canvas.width = rendered.canvas.height = 1;
         if (blob.size > 1024 * 1024)
           throw new Error(`${i + 1}番の画像が1MBを超えています。`);
         files.push({ name: `${String(i + 1).padStart(2, "0")}.png`, blob });
