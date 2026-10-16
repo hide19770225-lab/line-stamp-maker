@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="theme-color" content="#f6f8f5" />
+    <meta
+      name="description"
+      content="画像を送信せず、ブラウザだけでLINEスタンプの分割・透過・文字入れ・ZIP作成。無料のスタンプ制作ツール。"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
+    />
+    <title>STAMP atelier — LINEスタンプ制作ツール</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="core.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="./" aria-label="STAMP atelier ホーム"
+        ><span class="brand-mark">s<span>✦</span></span
+        ><span>STAMP<span class="brand-sub">atelier</span></span></a
+      >
+      <div class="sidebar-label">YOUR LITTLE STUDIO</div>
+      <nav aria-label="制作メニュー">
+        <a class="nav-item active" href="#workspace"
+          ><span>▦</span> スタンプをつくる <span class="nav-dot"></span
+        ></a>
+        <a class="nav-item" href="#guide"><span>ⓘ</span> 使い方ガイド</a>
+      </nav>
+      <div class="side-note">
+        <span class="shield">♧</span
+        ><strong>あなたの画像は、<br />あなたの端末の中に。</strong>
+        <p>
+          画像のアップロードや外部送信はありません。すべての加工をブラウザで行います。
+        </p>
+        <span class="local-tag"><i></i> 100% ローカル処理</span>
+      </div>
+      <div class="side-footer">
+        SMALL STAMPS, BIG FEELINGS.<br /><span>Made for your creativity.</span>
+      </div>
+    </aside>
+    <div class="app-shell" id="workspace">
+      <header class="topbar">
+        <span
+          >ワークスペース
+          <span class="breadcrumb">/ 新しいスタンプセット</span></span
+        ><span class="free-badge"><i></i> ずっと無料・API不要</span>
+      </header>
+      <main>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">LET’S MAKE SOMETHING YOURS</p>
+            <h1>想いを、スタンプに。</h1>
+            <p class="lead">
+              キャラクター画像から、あなただけのLINEスタンプをつくりましょう。
+            </p>
+          </div>
+          <span class="heading-art" aria-hidden="true">✳︎</span>
+        </div>
+        <ol class="steps" aria-label="制作の流れ">
+          <li class="current"><b>01</b><span>画像を読み込む</span></li>
+          <li><b>02</b><span>分割・背景を調整</span></li>
+          <li><b>03</b><span>セリフを入れる</span></li>
+          <li><b>04</b><span>確認・書き出し</span></li>
+        </ol>
+        <div class="workspace-grid">
+          <section class="panel upload-panel" aria-labelledby="upload-title">
+            <div class="panel-heading">
+              <h2 id="upload-title">
+                <span class="section-num">01</span>画像を読み込む
+              </h2>
+              <span class="subtle" id="source-count">0 / 4 枚</span>
+            </div>
+            <p class="section-description">
+              2列 × 5段に並んだ、10個入りの画像を選んでください。
+            </p>
+            <label class="dropzone" id="dropzone" for="file-input"
+              ><span class="upload-icon" aria-hidden="true"
+                ><svg viewBox="0 0 40 40" fill="none">
+                  <rect
+                    x="6"
+                    y="9"
+                    width="28"
+                    height="25"
+                    rx="5"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                  />
+                  <path
+                    d="m10 28 8-8 6 6 4-4 6 6M27 3v12m-5-7 5-5 5 5"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <circle
+                    cx="14"
+                    cy="16"
+                    r="2"
+                    fill="currentColor"
+                  /></svg></span
+              ><strong>画像を選択する</strong
+              ><span>タップ、またはここにドラッグ＆ドロップ</span
+              ><span class="file-types">PNG / JPEG / WebP · 最大4枚</span
+              ><input
+                type="file"
+                id="file-input"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+            /></label>
+            <div class="sample-row">
+              <span>まずは気軽にお試し</span
+              ><button class="text-button" id="sample-button">
+                サンプル画像で試す <span>↗</span>
+              </button>
+            </div>
+            <div id="source-list" class="source-list"></div>
+            <div class="info-box">
+              <span>✦</span>
+              <p>
+                <strong>1枚だけでもテストできます</strong
+                ><br />10個で加工を試してから、4枚・40個へ。途中で画像を追加できます。
+              </p>
+            </div>
+          </section>
+          <section
+            class="panel overview-panel"
+            aria-labelledby="overview-title"
+          >
+            <div class="panel-heading">
+              <h2 id="overview-title">できあがりのイメージ</h2>
+              <span class="tiny-tag">40 STAMPS</span>
+            </div>
+            <div class="overview-illustration" aria-hidden="true">
+              <div class="mini-stamp">
+                <span>☺︎</span><small>ありがとう</small>
+              </div>
+              <div class="mini-stamp pink">
+                <span>♡</span><small>だいすき</small>
+              </div>
+              <div class="mini-stamp yellow">
+                <span>☀</span><small>おはよう</small>
+              </div>
+              <div class="mini-stamp lilac">
+                <span>☾</span><small>おやすみ</small>
+              </div>
+            </div>
+            <div class="overview-bottom">
+              <div>
+                <strong>40<span>枚</span></strong
+                ><small>スタンプ画像</small>
+              </div>
+              <b>＋</b>
+              <div>
+                <strong>2<span>枚</span></strong
+                ><small>メイン・タブ画像</small>
+              </div>
+              <b>→</b>
+              <div>
+                <strong class="zip-icon">ZIP</strong><small>まとめて保存</small>
+              </div>
+            </div>
+            <p class="overview-caption">
+              分割から透過、文字入れまで。この場所ひとつで。
+            </p>
+          </section>
+        </div>
+        <section class="panel editor-panel" id="split-section" hidden>
+          <div class="panel-heading">
+            <h2><span class="section-num">02</span>分割・背景を調整</h2>
+            <span class="tiny-tag">端末内で加工</span>
+          </div>
+          <div class="editor-columns">
+            <div>
+              <label for="source-select">調整する元画像</label
+              ><select id="source-select"></select>
+              <div class="split-canvas-wrap">
+                <canvas
+                  id="split-canvas"
+                  aria-label="分割位置プレビュー"
+                ></canvas>
+              </div>
+              <p class="hint">
+                緑の線をドラッグ、または下の数値で位置を調整。外周も動かせます。
+              </p>
+              <div id="grid-controls" class="grid-controls"></div>
+              <button class="button secondary" id="reset-grid">
+                分割位置をリセット
+              </button>
+            </div>
+            <div class="split-settings">
+              <h3>背景の取り除き方</h3>
+              <p class="hint">
+                画像の端につながる背景だけを透過します。囲まれた白い部分は残します。白いキャラクターと背景がつながっている場合は、次の確認画面で修正してください。
+              </p>
+              <label for="background-mode">背景色</label
+              ><select id="background-mode">
+                <option value="auto">四隅から自動判定</option>
+                <option value="white">白</option>
+                <option value="custom">色を選ぶ</option>
+                <option value="none">
+                  透過しない（元の透明部分は維持）
+                </option></select
+              ><label class="color-row" for="background-color"
+                >取り除く色<input
+                  type="color"
+                  id="background-color"
+                  value="#ffffff" /></label
+              ><label for="tolerance"
+                >色の許容差 <output id="tolerance-value">24</output></label
+              ><input
+                id="tolerance"
+                type="range"
+                min="0"
+                max="100"
+                value="24"
+              />
+              <p class="hint">
+                大きくすると近い色も透過します。白い部分が欠ける場合は小さくします。
+              </p>
+              <button class="button primary wide" id="process-button">
+                10個に分割して、透過を確認 <span>→</span>
+              </button>
+              <p class="hint">
+                分割し直すと、この元画像のセリフ・透過修正はリセットされます。ほかの元画像の編集は残ります。
+              </p>
+            </div>
+          </div>
+        </section>
+        <section class="panel" id="results-section" hidden>
+          <div class="panel-heading">
+            <h2>
+              <span class="section-num">03</span>透過を確認・セリフを入れる
+            </h2>
+            <span class="subtle" id="stamp-count"></span>
+          </div>
+          <div class="result-toolbar">
+            <p class="hint">
+              画像をタップして編集。チェック柄の部分が透明になります。
+            </p>
+            <label class="compact-label"
+              >確認用背景<select id="preview-background">
+                <option value="checker">チェック柄</option>
+                <option value="dark">濃い色</option>
+                <option value="pink">ピンク</option>
+              </select></label
+            >
+          </div>
+          <div class="stamp-grid" id="stamp-grid"></div>
+          <details class="bulk-text">
+            <summary>
+              セリフをまとめて入力する <span>1行につき1個</span>
+            </summary>
+            <label for="bulk-captions"
+              >最大40行。画像内にすでに文字がある場合は空欄でOKです。</label
+            ><textarea
+              id="bulk-captions"
+              rows="8"
+              placeholder="ありがとう&#10;おはよう&#10;おつかれさま"
+            ></textarea
+            ><button class="button secondary" id="apply-captions">
+              一覧に反映する
+            </button>
+          </details>
+        </section>
+        <section class="panel" id="export-section" hidden>
+          <div class="panel-heading">
+            <h2><span class="section-num">04</span>確認・書き出し</h2>
+            <span class="tiny-tag">PNG + ZIP</span>
+          </div>
+          <div class="export-layout">
+            <div>
+              <h3>メイン・タブ画像</h3>
+              <p class="hint">選んだスタンプを中央に配置して自動作成します。</p>
+              <div class="export-selects">
+                <label>メイン画像<select id="main-select"></select></label
+                ><label>タブ画像<select id="tab-select"></select></label>
+              </div>
+              <div class="special-previews">
+                <div>
+                  <canvas id="main-preview" width="240" height="240"></canvas
+                  ><span>main.png · 240 × 240</span>
+                </div>
+                <div>
+                  <canvas id="tab-preview" width="96" height="74"></canvas
+                  ><span>tab.png · 96 × 74</span>
+                </div>
+              </div>
+            </div>
+            <div class="export-actions">
+              <h3>申請前チェック</h3>
+              <ul id="validation-list" class="validation-list"></ul>
+              <p class="hint">
+                自動検査は画像仕様の補助です。権利・表現・視認性やLINEの審査通過は保証しません。
+              </p>
+              <button class="button primary wide" id="download-button">
+                ZIPを作成して保存 <span>↓</span>
+              </button>
+              <p class="hint" id="download-note">
+                iPhoneでは保存後「ファイル」アプリから確認できます。
+              </p>
+              <a id="download-link" class="button secondary wide" hidden
+                >作成したZIPを保存する</a
+              >
+            </div>
+          </div>
+        </section>
+        <section id="guide" class="guide">
+          <span class="eyebrow">A LITTLE HELP</span>
+          <h2>はじめてでも、ひとつずつ。</h2>
+          <div class="guide-grid">
+            <div>
+              <b>01 / 読み込む</b>
+              <p>
+                10個入り画像を1〜4枚選択。画像がずれていたら分割線を調整します。
+              </p>
+            </div>
+            <div>
+              <b>02 / 整える</b>
+              <p>
+                透過後の白い部分を確認して修正。好きなセリフや文字の位置を設定します。
+              </p>
+            </div>
+            <div>
+              <b>03 / 持ち出す</b>
+              <p>
+                全40枚とメイン・タブを確認してZIP保存。LINE Creators
+                Marketへ申請します。
+              </p>
+            </div>
+          </div>
+          <p class="guide-note">
+            作品とセリフは自動保存されません。再読み込み・タブを閉じる前にZIPを保存してください。<br />このツールはLINEヤフー株式会社の公式サービスではありません。<a
+              href="https://creator.line.me/ja/guideline/sticker/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >LINEの最新の制作ガイドライン ↗</a
+            >
+          </p>
+        </section>
+        <footer class="page-footer">
+          <span>STAMP atelier</span
+          ><span>あなたの「つくりたい」を、もっと気軽に。</span
+          ><span>LOCAL & PRIVATE <i>●</i></span>
+        </footer>
+      </main>
+    </div>
+    <dialog id="stamp-dialog" aria-labelledby="dialog-title">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">MAKE IT JUST RIGHT</p>
+          <h2 id="dialog-title">スタンプを編集</h2>
+        </div>
+        <button class="icon-button" id="close-dialog" aria-label="編集を閉じる">
+          ×
+        </button>
+      </div>
+      <div class="dialog-content">
+        <div>
+          <div class="edit-preview checker" id="edit-preview">
+            <canvas
+              id="edit-canvas"
+              width="370"
+              height="320"
+              aria-label="透過・文字プレビュー。修正モードではドラッグで描けます。"
+            ></canvas>
+          </div>
+          <p class="hint">
+            白い体・目・服が欠けていないか、背景色を変えて確認してください。
+          </p>
+          <label
+            >確認用背景<select id="edit-background">
+              <option value="checker">チェック柄</option>
+              <option value="dark">濃い色</option>
+              <option value="pink">ピンク</option>
+            </select></label
+          >
+          <fieldset>
+            <legend>透過の手動修正</legend>
+            <div class="brush-modes">
+              <button class="button secondary selected" data-brush="none">
+                見る</button
+              ><button class="button secondary" data-brush="restore">
+                元の色を戻す</button
+              ><button class="button secondary" data-brush="erase">消す</button>
+            </div>
+            <label for="brush-size"
+              >ブラシの太さ <output id="brush-value">16</output> px</label
+            ><input id="brush-size" type="range" min="4" max="64" value="16" />
+            <div class="inline-actions">
+              <button class="text-button" id="undo-brush">1つ戻す</button
+              ><button class="text-button" id="reset-mask">
+                自動透過に戻す
+              </button>
+            </div>
+          </fieldset>
+        </div>
+        <div class="caption-settings">
+          <label for="caption-text">セリフ</label
+          ><textarea
+            id="caption-text"
+            rows="2"
+            maxlength="120"
+            placeholder="例：ありがとう！"
+          ></textarea
+          ><label for="font-family">フォント</label
+          ><select id="font-family">
+            <option value="sans">ゴシック</option>
+            <option value="serif">明朝</option>
+            <option value="rounded">丸ゴシック（端末対応時）</option></select
+          ><label for="font-size"
+            >文字サイズ <output id="font-size-value">32</output> px</label
+          ><input
+            type="range"
+            id="font-size"
+            min="14"
+            max="64"
+            value="32"
+          /><label for="text-x"
+            >左右の位置 <output id="text-x-value">50</output> %</label
+          ><input type="range" id="text-x" min="10" max="90" value="50" /><label
+            for="text-y"
+            >上下の位置 <output id="text-y-value">84</output> %</label
+          ><input type="range" id="text-y" min="10" max="90" value="84" /><label
+            class="color-row"
+            for="text-color"
+            >文字の色<input
+              type="color"
+              id="text-color"
+              value="#293c33" /></label
+          ><label class="check-label"
+            ><input
+              type="checkbox"
+              id="text-outline"
+              checked
+            />白いふちを付ける</label
+          ><button class="button secondary wide" id="apply-style-all">
+            文字の見た目を全スタンプに適用
+          </button>
+          <div class="review-box">
+            <label class="check-label"
+              ><input
+                type="checkbox"
+                id="reviewed-checkbox"
+              />白い部分と透過の仕上がりを確認した</label
+            >
+          </div>
+          <button class="button primary wide" id="save-edit">
+            確認して次へ <span>→</span></button
+          ><button class="text-button wide" id="download-single">
+            この1枚をPNG保存 ↓
+          </button>
+        </div>
+      </div>
+    </dialog>
+    <div
+      class="status-bar"
+      id="status"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
+    <noscript
+      ><div class="noscript">
+        このツールを使うにはJavaScriptを有効にしてください。画像は端末内で処理されます。
+      </div></noscript
+    >
+  </body>
+</html>
