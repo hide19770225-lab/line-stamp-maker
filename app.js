@@ -24,6 +24,7 @@
     dragLine = null,
     textDrag = null,
     residueScan = null,
+    matteProposal = null,
     residuePlacement = null,
     nextId = 1;
   const stamps = () =>
@@ -957,6 +958,7 @@
       rendered = all.map((stamp) => {
         const result = C.renderStamp(stamp);
         result.finalResidueCount = inspectFinal(result).candidates.length;
+        stamp.finalResidueCount = result.finalResidueCount;
         // Only keep inspection metadata; release temporary canvas memory on iPhone.
         result.canvas.width = result.canvas.height = 1;
         return result;
@@ -1145,6 +1147,7 @@
     }
   }
   function drawEditor() {
+    if (matteProposal) clearMatteProposal();
     if (selected()) {
       const rendered = C.renderStamp(selected(), $("edit-canvas"));
       const plan = rendered.textPlan;
@@ -1162,6 +1165,76 @@
       $("redo-brush").disabled = !selected().redo.length;
     }
   }
+  function clearMatteProposal() {
+    matteProposal = null;
+    $("matte-pending").hidden = true;
+  }
+  $("preview-matte").onclick = () => {
+    const stamp = selected(),
+      source = state.sources.find((s) => s.stamps.includes(stamp));
+    const proposal = C.proposeMatteCleanup(
+      stamp.original,
+      stamp.mask,
+      source.mode,
+      source.tolerance,
+      source.color,
+    );
+    if (!proposal.changed) {
+      clearMatteProposal();
+      notify(
+        "安全に提案できる不透明な縁がありません。元から半透明の部分は保護します。",
+        true,
+      );
+      return;
+    }
+    matteProposal = { stamp, mask: proposal.mask, before: stamp.mask.slice() };
+    C.renderStamp(stamp, $("matte-before"));
+    C.renderStamp({ ...stamp, mask: proposal.mask }, $("matte-after"));
+    $("matte-status").textContent =
+      `${proposal.changed}画素の不透明度を軽減する案です。まだPNG・ZIPには反映していません。`;
+    $("matte-pending").hidden = false;
+  };
+  $("cancel-matte").onclick = clearMatteProposal;
+  $("apply-matte").onclick = () => {
+    if (
+      !matteProposal ||
+      selected() !== matteProposal.stamp ||
+      selected().mask.some((a, i) => a !== matteProposal.before[i])
+    ) {
+      clearMatteProposal();
+      notify("編集内容が変わりました。案を作り直してください。", true);
+      return;
+    }
+    snapshot(selected());
+    selected().mask = matteProposal.mask;
+    clearMatteProposal();
+    residueScan = null;
+    changedImage();
+    notify("比較した案を適用しました。「1つ戻す」で戻せます。");
+  };
+  function nextResidue() {
+    const all = stamps(),
+      indexes = all.flatMap((s, i) => {
+        if (residueSummary(s)) return [i];
+        if (!s.finalResidueCount) return [];
+        const rendered = C.renderStamp(s);
+        s.finalResidueCount = inspectFinal(rendered).candidates.length;
+        rendered.canvas.width = rendered.canvas.height = 1;
+        return s.finalResidueCount ? [i] : [];
+      });
+    if (!indexes.length) {
+      notify(
+        "削除可能な残留候補はありません。保護候補や完成一覧も目視で確認してください。",
+      );
+      return;
+    }
+    const current = $("stamp-dialog").open ? state.selectedStamp : -1;
+    openEditor(indexes.find((i) => i > current) ?? indexes[0]);
+    $("residue-panel").open = true;
+    drawEditor();
+  }
+  $("review-residues").onclick = nextResidue;
+  $("next-residue").onclick = nextResidue;
   function inspectFinal(rendered) {
     const ctx = rendered.canvas.getContext("2d"),
       image = ctx.getImageData(0, 0, 370, 320);
@@ -1237,7 +1310,7 @@
         label.className = "check-label";
         label.append(
           checkbox,
-          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""} · 左${component.x}／上${component.y}px · 不透明度${component.alphaMin}〜${component.alphaMax}/255${component.protected ? "・装飾候補として保護" : ""}`,
+          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""} · 左${component.x}／上${component.y}px · 不透明度${component.alphaMin}〜${component.alphaMax}/255${component.nearBoundary ? "・切り抜き境界付近（線・番号か要確認）" : ""}${component.protected ? "・装飾候補として保護" : ""}`,
         );
         button.className = "button secondary";
         button.textContent = "拡大";

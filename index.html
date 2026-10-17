@@ -21,11 +21,11 @@
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
     <link rel="stylesheet" href="styles.css" />
-    <script src="core.js" defer></script>
-    <script src="residue.js?v=real-review-3" defer></script>
+    <script src="core.js?v=matte-review-4" defer></script>
+    <script src="residue.js?v=matte-review-4" defer></script>
     <script src="typography.js" defer></script>
     <script src="project.js" defer></script>
-    <script src="app.js?v=real-review-3" defer></script>
+    <script src="app.js?v=matte-review-4" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -400,6 +400,9 @@
               </select></label
             >
           </div>
+          <button id="review-residues" class="button secondary wide">
+            残留候補のあるスタンプを順番に確認
+          </button>
           <div class="stamp-grid" id="stamp-grid"></div>
         </section>
         <section class="panel" id="export-section" hidden>
@@ -552,6 +555,9 @@
             <p id="residue-status" class="hint" role="status"></p>
             <p id="residue-output-status" class="hint" role="status"></p>
             <div id="residue-candidates" class="residue-candidates"></div>
+            <button id="next-residue" class="button secondary wide">
+              次の候補のあるスタンプへ
+            </button>
             <button id="scan-residue" class="button secondary wide">
               候補を再検出する
             </button>
@@ -561,6 +567,34 @@
             <p class="hint">
               取り消しは下の「1つ戻す」。候補がない場合も消しゴムで修正できます。表示した完成画像とZIPは同じ描画処理を使います。
             </p>
+          </details>
+          <details class="comparison" id="matte-panel">
+            <summary>輪郭の背景色にじみを確認する</summary>
+            <p class="hint">
+              白・単色背景に近い、不透明な縁の1層だけを薄くする案です。色は変更せず、内部の白と元から半透明の影・装飾は保護します。明るい輪郭も変わる可能性があるため、比較してから適用してください。
+            </p>
+            <button id="preview-matte" class="button secondary wide">
+              にじみ軽減案を比較する
+            </button>
+            <div id="matte-pending" hidden>
+              <div class="comparison-grid">
+                <figure>
+                  <canvas id="matte-before" width="370" height="320"></canvas>
+                  <figcaption>現在の完成画像</figcaption>
+                </figure>
+                <figure>
+                  <canvas id="matte-after" width="370" height="320"></canvas>
+                  <figcaption>軽減案（未適用）</figcaption>
+                </figure>
+              </div>
+              <p id="matte-status" class="hint"></p>
+              <button id="apply-matte" class="button secondary wide">
+                比較した案を適用する
+              </button>
+              <button id="cancel-matte" class="button secondary wide">
+                適用せず閉じる
+              </button>
+            </div>
           </details>
           <details class="comparison" id="comparison-panel">
             <summary>編集前後を比較する</summary>

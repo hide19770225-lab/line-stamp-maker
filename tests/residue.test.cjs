@@ -202,3 +202,20 @@ test("final RGBA audit excludes any component covered by rendered text/outline/s
   assert.deepEqual(im.data, before);
   assert.throws(() => R.inspectFinal(im, new Uint8Array(1)));
 });
+
+test("boundary fragments are labeled without deletion; nearby motion marks stay protected", () => {
+  const im = image(120, 120);
+  fill(im, 30, 30, 60, 70);
+  fill(im, 10, 0, 35, 1);
+  fill(im, 4, 10, 3, 5);
+  fill(im, 27, 40, 1, 12);
+  const mask = alpha(im),
+    before = mask.slice(),
+    scan = R.analyse(im, mask, undefined, true);
+  assert(scan.candidates.some((c) => c.y === 0 && c.kind === "boundary"));
+  assert(scan.candidates.some((c) => c.x === 4 && c.boundaryDistance <= 4));
+  const motion = scan.candidates.find((c) => c.x === 27);
+  assert(motion?.protected);
+  assert.throws(() => R.removeSelected(mask, scan, [motion.id]));
+  assert.deepEqual(mask, before);
+});
