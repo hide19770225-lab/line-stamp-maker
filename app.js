@@ -2392,7 +2392,10 @@
   };
   $("easy-process").onclick = () =>
     task(async () => {
-      const plan = window.StampEasy.plan(state.sources, state.target);
+      // Partial production may preview captions; application export stays strict.
+      const plan = window.StampEasy.plan(state.sources, state.target, {
+        allowPartial: true,
+      });
       easyWarnings([...plan.errors, ...plan.warnings]);
       if (plan.errors.length) throw new Error(plan.errors.join(" / "));
       if (easyCaptionDirty) window.StampEasy.captions($("easy-captions").value);
@@ -2460,7 +2463,10 @@
       await inspectAll();
       easyStep(2);
       notify(
-        "自動加工と検査が完了しました。下の一覧を目視し、必要な画像だけ編集してください。自動承認はしていません。",
+        (plan.missing.length
+          ? `${stamps().length} / ${state.target}個のテスト加工です。申請用ZIPには全${state.target}個が必要です。`
+          : "") +
+          "自動加工と検査が完了しました。下の一覧を目視し、必要な画像だけ編集してください。自動承認はしていません。",
         false,
         true,
       );

@@ -1,7 +1,7 @@
 /* Validation only; never changes image data, assignments or captions. */
 (function (root) {
   "use strict";
-  function plan(sources, target) {
+  function plan(sources, target, { allowPartial = false } = {}) {
     const errors = [],
       warnings = [],
       seen = new Set(),
@@ -35,7 +35,7 @@
       (n) => !assigned.has(n),
     );
     if (missing.length)
-      errors.push(
+      (allowPartial && assigned.size > 0 ? warnings : errors).push(
         `画像・採用コマが不足しています。未割当の番号：${missing.join("、")}`,
       );
     const unused = sources.reduce(
