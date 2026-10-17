@@ -20,12 +20,12 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css" />
-    <script src="core.js?v=matte-review-4" defer></script>
-    <script src="residue.js?v=matte-review-4" defer></script>
+    <link rel="stylesheet" href="styles.css?v=auto-cleanup-5" />
+    <script src="core.js?v=auto-cleanup-5" defer></script>
+    <script src="residue.js?v=auto-cleanup-5" defer></script>
     <script src="typography.js" defer></script>
-    <script src="project.js" defer></script>
-    <script src="app.js?v=matte-review-4" defer></script>
+    <script src="project.js?v=auto-cleanup-5" defer></script>
+    <script src="app.js?v=auto-cleanup-5" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -507,6 +507,42 @@
               aria-label="透過・文字プレビュー。修正モードではドラッグで描けます。"
             ></canvas>
           </div>
+          <label class="check-label"
+            ><input
+              id="auto-cleanup-enabled"
+              type="checkbox"
+              checked
+            />上端の残留線を自動除去する（限定条件）</label
+          >
+          <p id="auto-cleanup-status" class="hint" role="status"></p>
+          <details
+            class="comparison"
+            id="auto-cleanup-comparison"
+            data-background="dark"
+          >
+            <summary>自動除去の前後を比較する</summary>
+            <p class="hint">
+              中央寄りの上端に離れた、薄い中性色・半透明の1行だけが対象です。誤判定が疑われる場合は自動除去をOFFに戻し、確認候補・消しゴムで調整してください。
+            </p>
+            <div class="comparison-grid">
+              <figure>
+                <canvas
+                  id="auto-cleanup-before"
+                  width="370"
+                  height="320"
+                ></canvas>
+                <figcaption>自動除去前（同じ配置・文字）</figcaption>
+              </figure>
+              <figure>
+                <canvas
+                  id="auto-cleanup-after"
+                  width="370"
+                  height="320"
+                ></canvas>
+                <figcaption>完成PNG</figcaption>
+              </figure>
+            </div>
+          </details>
           <details id="residue-panel" class="residue-panel">
             <summary>孤立した線・点を拡大確認する</summary>
             <p class="hint">

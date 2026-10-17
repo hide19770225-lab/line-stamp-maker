@@ -1811,6 +1811,7 @@ body.modal-open {
 }
 
 /* Keep the dedicated magnifier visible instead of covering it with the sticky editor. */
-.dialog-content.residue-inspecting .edit-preview {
+.dialog-content.residue-inspecting .edit-preview,
+.dialog-content.auto-cleanup-inspecting .edit-preview {
   position: static;
 }

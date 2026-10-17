@@ -42,6 +42,7 @@
       const slot = state.slots[stamp.slot - 1];
       Object.assign(slot, {
         caption: stamp.caption,
+        cleanupEnabled: stamp.cleanupEnabled !== false,
         style: { ...stamp.style },
         layout: { ...stamp.layout },
         crop: { ...stamp.crop },
@@ -833,6 +834,7 @@
       const settings = state.slots[number - 1];
       Object.assign(stamp, {
         caption: settings.caption,
+        cleanupEnabled: settings.cleanupEnabled !== false,
         style: { ...settings.style },
         layout: { ...settings.layout },
         crop: { ...settings.crop },
@@ -959,6 +961,7 @@
         const result = C.renderStamp(stamp);
         result.finalResidueCount = inspectFinal(result).candidates.length;
         stamp.finalResidueCount = result.finalResidueCount;
+        stamp.autoRemovedCount = result.autoRemoved?.length || 0;
         // Only keep inspection metadata; release temporary canvas memory on iPhone.
         result.canvas.width = result.canvas.height = 1;
         return result;
@@ -974,9 +977,7 @@
           : [],
       ),
       residueSlots = all.flatMap((stamp, i) =>
-        residueSummary(stamp) || rendered[i].finalResidueCount
-          ? [stamp.slot]
-          : [],
+        rendered[i].finalResidueCount ? [stamp.slot] : [],
       ),
       clipped = rendered.flatMap((r, i) =>
         r.textClipped ? [all[i].slot] : [],
@@ -996,6 +997,9 @@
       clipped,
       overlaps,
       residueSlots,
+      autoCleanedSlots: rendered.flatMap((r, i) =>
+        r.autoRemoved?.length ? [all[i].slot] : [],
+      ),
       unsafe,
       stale,
       complete:
@@ -1050,9 +1054,13 @@
         `文字とキャラクターの重なり：${v.overlaps.join(", ")}番。自動配置または位置を調整してください。`,
         v.unsafe.length ? "error" : "warning",
       );
+    if (v.autoCleanedSlots.length)
+      item(
+        `上端残留線を自動除去：${v.autoCleanedSlots.join(", ")}番。前後比較・OFFで確認できます。`,
+      );
     if (v.residueSlots.length)
       item(
-        `元画像／完成PNGの孤立した線・点の候補：${v.residueSlots.join(", ")}番。装飾の可能性もあるため、編集画面で拡大確認してください（自動削除しません）。`,
+        `完成PNGの未解決の孤立した線・点の候補：${v.residueSlots.join(", ")}番。装飾の可能性もあるため、編集画面で拡大確認してください（自動削除しません）。`,
         "warning",
       );
     item("1画像1MB以下・ZIP 20MB以下を保存時に検査", "pending");
@@ -1150,6 +1158,14 @@
     if (matteProposal) clearMatteProposal();
     if (selected()) {
       const rendered = C.renderStamp(selected(), $("edit-canvas"));
+      $("auto-cleanup-enabled").checked = selected().cleanupEnabled !== false;
+      $("auto-cleanup-status").textContent = rendered.autoRemoved?.length
+        ? `上端の残留線を${rendered.autoRemoved.length}本自動除去しました。元画像データ・配置設定は保持し、完成描画の該当成分だけを除去しています。OFFで元に戻せます。`
+        : "自動除去対象の上端線はありません。不確かな成分は確認候補に残します。";
+      if ($("auto-cleanup-comparison").open) {
+        C.renderUncleaned(selected(), $("auto-cleanup-before"));
+        copyCanvas(rendered.canvas, $("auto-cleanup-after"));
+      }
       const plan = rendered.textPlan;
       $("text-placement-status").textContent = !plan
         ? "セリフを入れるとデザインと配置をプレビューします。"
@@ -1165,6 +1181,20 @@
       $("redo-brush").disabled = !selected().redo.length;
     }
   }
+  $("auto-cleanup-enabled").onchange = () => {
+    selected().cleanupEnabled = $("auto-cleanup-enabled").checked;
+    residueScan = null;
+    changedImage();
+  };
+  $("auto-cleanup-comparison").ontoggle = () => {
+    $("auto-cleanup-comparison")
+      .closest(".dialog-content")
+      .classList.toggle(
+        "auto-cleanup-inspecting",
+        $("auto-cleanup-comparison").open,
+      );
+    drawEditor();
+  };
   function clearMatteProposal() {
     matteProposal = null;
     $("matte-pending").hidden = true;
@@ -1215,6 +1245,12 @@
   function nextResidue() {
     const all = stamps(),
       indexes = all.flatMap((s, i) => {
+        if (
+          s.cleanupEnabled !== false &&
+          s.finalResidueCount === 0 &&
+          s.autoRemovedCount > 0
+        )
+          return [];
         if (residueSummary(s)) return [i];
         if (!s.finalResidueCount) return [];
         const rendered = C.renderStamp(s);
@@ -1279,7 +1315,11 @@
     preview.getContext("2d").clearRect(0, 0, 370, 320);
     preview.getContext("2d").drawImage(rendered.canvas, 0, 0);
     residuePlacement = rendered.imagePlacement || C.imagePlacement(stamp);
-    const key = JSON.stringify(C.stampCrop(stamp)),
+    const key = JSON.stringify([
+        C.stampCrop(stamp),
+        rendered.autoRemoved || [],
+        residuePlacement,
+      ]),
       revision = stamp.residueRevision || 0;
     if (
       !drawing &&
@@ -1302,15 +1342,29 @@
           label = document.createElement("label"),
           checkbox = document.createElement("input"),
           button = document.createElement("button");
+        const p = residuePlacement;
+        component.automatic = (rendered.autoRemoved || []).some(
+          (line) =>
+            Math.abs(
+              p.offsetY +
+                (component.y + component.height / 2) * p.ratio -
+                (line.y + 0.5),
+            ) < 2 &&
+            Math.abs(
+              p.offsetX +
+                (component.x + component.width / 2) * p.ratio -
+                (line.x + line.width / 2),
+            ) < 2,
+        );
         checkbox.type = "checkbox";
-        checkbox.disabled = !!component.protected;
+        checkbox.disabled = !!component.protected || component.automatic;
         checkbox.value = component.id;
         checkbox.dataset.residueId = component.id;
         checkbox.onchange = drawResidueOverlay;
         label.className = "check-label";
         label.append(
           checkbox,
-          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""} · 左${component.x}／上${component.y}px · 不透明度${component.alphaMin}〜${component.alphaMax}/255${component.nearBoundary ? "・切り抜き境界付近（線・番号か要確認）" : ""}${component.protected ? "・装飾候補として保護" : ""}`,
+          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""} · 左${component.x}／上${component.y}px · 不透明度${component.alphaMin}〜${component.alphaMax}/255${component.nearBoundary ? "・切り抜き境界付近（線・番号か要確認）" : ""}${component.protected ? "・装飾候補として保護" : ""}${component.automatic ? "・完成画像では自動除去済み" : ""}`,
         );
         button.className = "button secondary";
         button.textContent = "拡大";
@@ -1320,7 +1374,7 @@
         $("residue-candidates").append(row);
       });
       $("residue-status").textContent = scan.candidates.length
-        ? `${scan.candidates.filter((c) => !c.protected).length}件の削除候補、${scan.candidates.filter((c) => c.protected).length}件の装飾候補を保護。元の切り抜き画像に残っている前景です。輪郭から離れたものも確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
+        ? `${scan.candidates.filter((c) => !c.protected && !c.automatic).length}件の削除候補、${scan.candidates.filter((c) => c.protected).length}件の装飾候補を保護。自動除去済みの線は完成PNGには残りません。元の切り抜き画像に残っている前景です。輪郭から離れたものも確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
         : "孤立した線・点の候補は見つかりませんでした。検出で全ての不要部分を判断できるわけではありません。完成画像も目視で確認してください。";
     }
     if (!drawing) {

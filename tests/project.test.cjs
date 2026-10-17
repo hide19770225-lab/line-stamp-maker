@@ -140,3 +140,14 @@ test("invalid JSON is rejected before application state can change", () => {
   assert.equal(p.target, 8);
   assert.equal(p.sources[0].assignments[1], 2);
 });
+
+test("automatic cleanup defaults on for old JSON, preserves per-slot OFF and rejects invalid flags", () => {
+  const p = project();
+  delete p.slots[0].cleanupEnabled;
+  p.slots[1].cleanupEnabled = false;
+  const restored = P.readProject(p);
+  assert.equal(restored.slots[0].cleanupEnabled, true);
+  assert.equal(restored.slots[1].cleanupEnabled, false);
+  p.slots[0].cleanupEnabled = "yes";
+  assert.throws(() => P.readProject(p));
+});

@@ -54,6 +54,7 @@ const base = process.env.STAMP_TEST_URL || "http://127.0.0.1:4173",
         .locator(".stamp-card")
         .nth(slot - 1)
         .click();
+      await p.uncheck("#auto-cleanup-enabled"); // This suite verifies the manual fallback, not default automatic cleanup.
       if (!(await p.locator("#residue-panel").evaluate((e) => e.open)))
         await p.locator("#residue-panel summary").click();
       await p.waitForFunction(
