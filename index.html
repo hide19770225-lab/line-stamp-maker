@@ -23,15 +23,15 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=layout-review-1" />
-    <script src="core.js?v=layout-review-1" defer></script>
-    <script src="residue.js?v=layout-review-1" defer></script>
-    <script src="typography.js?v=layout-review-1" defer></script>
-    <script src="project.js?v=layout-review-1" defer></script>
-    <script src="audit.js?v=layout-review-1" defer></script>
-    <script src="easy.js?v=layout-review-1" defer></script>
-    <script src="suggestions.js?v=layout-review-1" defer></script>
-    <script src="app.js?v=layout-review-1" defer></script>
+    <link rel="stylesheet" href="styles.css?v=shared-captions-1" />
+    <script src="core.js?v=shared-captions-1" defer></script>
+    <script src="residue.js?v=shared-captions-1" defer></script>
+    <script src="typography.js?v=shared-captions-1" defer></script>
+    <script src="project.js?v=shared-captions-1" defer></script>
+    <script src="audit.js?v=shared-captions-1" defer></script>
+    <script src="easy.js?v=shared-captions-1" defer></script>
+    <script src="suggestions.js?v=shared-captions-1" defer></script>
+    <script src="app.js?v=shared-captions-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -82,6 +82,23 @@
             <option value="easy">かんたん一括制作</option>
           </select></label
         >
+        <section id="auto-caption-panel" class="panel" hidden>
+          <h2>セリフを自動提案（両モード共通）</h2>
+          <p class="hint">
+            画像の表情は解析しません。短い日常セリフを番号順に自動登録し、20px余白の文字入り画像を生成します。既存のセリフは維持します。加工後の一覧で表情に合う候補へ変更・個別編集できます。
+          </p>
+          <button id="auto-captions" class="button primary wide">
+            セリフを自動提案・文字入り画像を作成
+          </button>
+          <p
+            id="auto-caption-status"
+            class="hint"
+            role="status"
+            aria-live="polite"
+          >
+            表情未解析・汎用候補を使用します。
+          </p>
+        </section>
         <section
           id="easy-panel"
           class="panel"

@@ -236,3 +236,7 @@ NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/suggestions-browser.c
 NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/safe-layout-browser.cjs
 python3 tests/verify_suggestions_zip.py /tmp/stamp-suggestion-results
 ```
+
+### 両モード共通のセリフ自動入力
+
+画像の読み込み後、「セリフを自動提案・文字入り画像を作成」を押すと、空の番号に日常会話の短い日本語セリフを登録して描画します。10個だけでも試せます。**画像の表情解析は行いません**。既存のセリフは維持します。一覧で画像との一致を確認し、必要なら表情選択から候補を変更・個別編集してください。透過の目視確認と40個の申請ZIP不足チェックは従来どおり必要です。詳細は [方式と制約](docs/shared-auto-captions.md) を参照してください。

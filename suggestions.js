@@ -119,6 +119,31 @@
     const values = free.length ? free : pool;
     return values[((offset % values.length) + values.length) % values.length];
   }
+  // Neutral daily phrases: assignment is by number, never by inferred emotion.
+  function automatic(rows) {
+    const pool = [
+      ...groups.greeting.phrases,
+      ...groups.smile.phrases,
+      ...groups.support.phrases,
+      ...groups.sleepy.phrases,
+      "ありがとうね",
+      "また連絡するね",
+      "よろしくです",
+      "確認します",
+    ];
+    const used = new Set(
+      rows.map((row) => row.caption.normalize("NFKC").trim()).filter(Boolean),
+    );
+    return rows.map((row) => {
+      if (row.caption.trim()) return { ...row };
+      const caption = pool.find(
+        (text) => !used.has(text.normalize("NFKC").trim()),
+      );
+      if (!caption) throw new Error("重複しない候補が不足しています。");
+      used.add(caption.normalize("NFKC").trim());
+      return { ...row, caption };
+    });
+  }
   function duplicates(rows) {
     const counts = new Map();
     for (const row of rows) {
@@ -131,7 +156,7 @@
       .filter(([, slots]) => slots.length > 1)
       .map(([caption, slots]) => ({ caption, slots }));
   }
-  const api = { groups, candidates, choose, duplicates };
+  const api = { groups, candidates, choose, duplicates, automatic };
   root.StampSuggestions = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
