@@ -69,9 +69,11 @@
 
 編集画面の「孤立した線・点を拡大確認する」を開きます。完成PNGと同じ画像をグレー／黒／チェック柄、全体／2／4／8倍で確認でき、拡大時は指で上下左右にスクロールできます。候補横の「拡大」で該当部分へ移動します。枠・番号・確認用背景は出力しません。
 
-候補は文字合成前の前景の連結成分から検出します。**手足・葉っぱ・白い装飾も候補になるため、自動削除しません。** 不要だと確認できたものだけチェックし「選択した候補だけ消す」を押します。「1つ戻す」「やり直す」で取り消し可能です。線が本体につながるなど検出できない部分は既存の切り抜き・消しゴムで修正します。削除内容はPNG／ZIPとJSONの透明度差分にも反映されます。申請前の検査にも孤立候補の番号を表示しますが、正しい装飾を残したまま出力できます。
+候補は文字合成前の前景の連結成分から検出します。本体を囲む長方形の内側でも、輪郭の外の空白に浮いた線を検出します。閉じた輪郭内の目・口を候補から外し、追加した検出範囲では輪郭に近い部品も保護します。**手足・葉っぱ・白い装飾も候補になるため、自動削除しません。** 不要だと確認できたものだけチェックし「選択した候補だけ消す」を押します。「1つ戻す」「やり直す」で取り消し可能です。線が本体につながるなど検出できない部分は既存の切り抜き・消しゴムで修正します。削除内容はPNG／ZIPとJSONの透明度差分にも反映されます。申請前の検査では全スタンプの完成RGBA画素も調べ、文字・白フチ・影の成分を保護します。拡大画面には完成PNGの候補の座標・寸法も表示します。申請前の検査にも孤立候補の番号を表示しますが、正しい装飾を残したまま出力できます。
 
 切り抜いた範囲外の線が拡大補間で復活する問題は、範囲を別Canvasへ切り出してから拡大することで防ぎます。自動透過では、角に透明画素のある透過済み画像の白い本体・装飾を保持します。背景が残るときは「白」などを明示指定し、目視確認してください。[調査・修正前後とテスト範囲](docs/white-residue-investigation.md)も参照してください。実際の不具合ZIPは未入手のため、報告された09.png／10.pngそのものは未検証です。
+
+[上25pxの49×1px・上10pxの16×1pxについての追加調査とテスト](docs/exterior-horizontal-residue-investigation.md)も参照してください。`line-stamps-test-10(4).zip`そのものは未取得であり、同じ座標・寸法の合成データで検証しています。
 
 ## 出力と検査
 
@@ -125,9 +127,11 @@ NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/browser.cjs
 NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/project-browser.cjs
 NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/typography-browser.cjs
 NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/residue-browser.cjs
+NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/exterior-residue-browser.cjs
 python3 tests/verify_zip.py /tmp/stamp-test-artifacts
 python3 tests/verify_typography_zip.py /tmp/stamp-test-artifacts
 python3 tests/verify_residue_zip.py /tmp/stamp-test-artifacts
+python3 tests/verify_exterior_zip.py /tmp/stamp-test-artifacts
 ```
 
 既定の実行ブラウザは `/usr/bin/chromium`。`CHROMIUM_PATH`、`STAMP_TEST_URL`、`STAMP_TEST_ARTIFACTS` で変更できます。結果は `/tmp/stamp-test-artifacts` に保存します。
@@ -143,7 +147,7 @@ python3 tests/verify_residue_zip.py /tmp/stamp-test-artifacts
 - `index.html`：日本語UI、Pages公開ルート
 - `styles.css`：既存デザインとタッチ対応
 - `core.js`：画像分割・透過・描画・ブラシ・PNG・ZIP
-- `residue.js`：孤立成分の非破壊検出、利用者が選択した候補だけの削除
+- `residue.js`：輪郭外の孤立成分の非破壊検出、文字を保護した完成RGBA監査、選択した候補だけの削除
 - `typography.js`：日本語文字デザイン、セリフからの提案、アルファ値による配置と余白確保
 - `project.js`：固定番号の割り当て、レイアウト、JSON検証、透明度差分
 - `app.js`：画像読込・UI・セリフ管理・JSON保存復元・申請前チェック

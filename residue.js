@@ -10,9 +10,7 @@
     const { width, height, data } = image;
     if (mask.length !== width * height)
       throw new Error("画像と透明度の寸法が一致しません。");
-    const visited = detailed
-        ? new Uint32Array(mask.length)
-        : new Uint8Array(mask.length),
+    const visited = new Uint32Array(mask.length),
       queue = new Uint32Array(mask.length),
       components = [];
     const xEnd = rect.x + rect.width,
@@ -31,7 +29,7 @@
           bottom = y,
           white = 0;
         queue[tail++] = index;
-        visited[index] = detailed ? id : 1;
+        visited[index] = id;
         while (head < tail) {
           const i = queue[head++],
             px = i % width,
@@ -55,7 +53,7 @@
                 continue;
               const n = ny * width + nx;
               if (mask[n] && !visited[n]) {
-                visited[n] = detailed ? id : 1;
+                visited[n] = id;
                 queue[tail++] = n;
               }
             }
@@ -79,6 +77,86 @@
       (best, c) => (!best || c.area > best.area ? c : best),
       null,
     );
+    // A bounding box is not the silhouette: a tall leaf/ear can put a stray
+    // top line *inside* the box while it is still outside the character.
+    // Flood the complement of the main component from the crop boundary.
+    // 4-connected background is dual to the 8-connected foreground above;
+    // enclosed eyes/mouth/decorations stay protected, including diagonal outlines.
+    const exterior = new Uint8Array(mask.length),
+      nearMain = new Uint8Array(mask.length),
+      guard = Math.max(3, Math.round(Math.min(width, height) * 0.01));
+    if (main && components.length > 1) {
+      let head = 0,
+        tail = 0;
+      const visitOutside = (i) => {
+        if (!exterior[i] && visited[i] !== main.id) {
+          exterior[i] = 1;
+          queue[tail++] = i;
+        }
+      };
+      for (let x = rect.x; x < xEnd; x++) {
+        visitOutside(rect.y * width + x);
+        visitOutside((yEnd - 1) * width + x);
+      }
+      for (let y = rect.y; y < yEnd; y++) {
+        visitOutside(y * width + rect.x);
+        visitOutside(y * width + xEnd - 1);
+      }
+      while (head < tail) {
+        const i = queue[head++],
+          x = i % width,
+          y = Math.floor(i / width);
+        if (x > rect.x) visitOutside(i - 1);
+        if (x + 1 < xEnd) visitOutside(i + 1);
+        if (y > rect.y) visitOutside(i - width);
+        if (y + 1 < yEnd) visitOutside(i + width);
+      }
+      // Protect near-outline facial details as well. Only expand a few native
+      // pixels; no image/color/mask data is modified by either pass.
+      head = 0;
+      tail = 0;
+      for (let y = rect.y; y < yEnd; y++)
+        for (let x = rect.x; x < xEnd; x++) {
+          const i = y * width + x;
+          if (visited[i] === main.id) {
+            nearMain[i] = 1;
+            queue[tail++] = i;
+          }
+        }
+      for (let distance = 0; distance < guard; distance++) {
+        const end = tail;
+        while (head < end) {
+          const i = queue[head++],
+            x = i % width,
+            y = Math.floor(i / width);
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx,
+                ny = y + dy;
+              if (nx < rect.x || nx >= xEnd || ny < rect.y || ny >= yEnd)
+                continue;
+              const n = ny * width + nx;
+              if (!nearMain[n]) {
+                nearMain[n] = 1;
+                queue[tail++] = n;
+              }
+            }
+        }
+      }
+      for (const c of components) {
+        c.exterior = true;
+        c.nearMain = false;
+      }
+      for (let y = rect.y; y < yEnd; y++)
+        for (let x = rect.x; x < xEnd; x++) {
+          const i = y * width + x,
+            label = visited[i];
+          if (!label || label === main.id) continue;
+          const c = components[label - 1];
+          if (!exterior[i]) c.exterior = false;
+          if (nearMain[i]) c.nearMain = true;
+        }
+    }
     const candidates = main
       ? components.filter((c) => {
           if (c.id === main.id) return false;
@@ -96,7 +174,7 @@
               c.height / c.width >= 4);
           const tiny = c.area <= Math.max(4, main.area * 0.015);
           return (
-            outside &&
+            (outside || (c.exterior && !c.nearMain)) &&
             (thin || tiny || (c.touchesEdge && c.area <= main.area * 0.1)) &&
             c.area <= Math.max(64, main.area * 0.25)
           );
@@ -136,7 +214,28 @@
       }
     return { mask: result, removed };
   }
-  const api = { analyse, removeSelected };
+  // Inspect the *actual final RGBA pixels*. Text, outline and shadow coverage
+  // is supplied by the canonical typography painter; never suggest those components.
+  // This is an audit only: deletions still edit the original/native alpha mask.
+  function inspectFinal(image, protectedAlpha = null) {
+    const mask = Uint8ClampedArray.from(
+      { length: image.width * image.height },
+      (_, i) => image.data[i * 4 + 3],
+    );
+    if (protectedAlpha && protectedAlpha.length !== mask.length)
+      throw new Error("文字保護マスクの寸法が一致しません。");
+    const scan = analyse(image, mask, undefined, true),
+      protectedIds = new Set();
+    if (protectedAlpha)
+      for (let i = 0; i < mask.length; i++)
+        if (protectedAlpha[i] && scan.labels[i])
+          protectedIds.add(scan.labels[i]);
+    return {
+      candidates: scan.candidates.filter((c) => !protectedIds.has(c.id)),
+      protectedIds: [...protectedIds],
+    };
+  }
+  const api = { analyse, removeSelected, inspectFinal };
   root.StampResidue = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

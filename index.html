@@ -22,10 +22,10 @@
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="core.js" defer></script>
-    <script src="residue.js" defer></script>
+    <script src="residue.js?v=exterior-review-2" defer></script>
     <script src="typography.js" defer></script>
     <script src="project.js" defer></script>
-    <script src="app.js" defer></script>
+    <script src="app.js?v=exterior-review-2" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -507,7 +507,7 @@
           <details id="residue-panel" class="residue-panel">
             <summary>孤立した線・点を拡大確認する</summary>
             <p class="hint">
-              候補には手足・葉っぱ・白い装飾が含まれることがあります。自動では削除しません。必要なものは選択せず残してください。検出は文字合成前の前景だけが対象です。
+              候補には手足・葉っぱ・白い装飾が含まれることがあります。自動では削除しません。必要なものは選択せず残してください。削除対象は元画像の前景だけです。完成PNGも検査し、文字・白フチ・影を保護します。
             </p>
             <div class="residue-toolbar">
               <label
@@ -550,6 +550,7 @@
               枠と番号は確認用です。PNGには出力しません。拡大後は指で上下左右へスクロールできます。
             </p>
             <p id="residue-status" class="hint" role="status"></p>
+            <p id="residue-output-status" class="hint" role="status"></p>
             <div id="residue-candidates" class="residue-candidates"></div>
             <button id="scan-residue" class="button secondary wide">
               候補を再検出する

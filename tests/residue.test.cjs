@@ -114,3 +114,91 @@ test("empty images and explicit background modes keep their documented behavior"
   assert(C.floodMask(im, "auto", 24).every((a) => a === 0));
   assert.deepEqual(C.floodMask(im, "none", 24), alpha(im));
 });
+
+test("reported 49×1 at y25 and 16×1 at y10 are candidates even inside the main bounding box", () => {
+  for (const [length, y] of [
+    [49, 25],
+    [16, 10],
+  ]) {
+    const im = image(370, 320);
+    fill(im, 10, 100, 350, 210, [70, 124, 169, 255]);
+    fill(im, 10, 10, 5, 100, [70, 124, 169, 255]);
+    fill(im, 130, y, length, 1, [255, 255, 255, 1]);
+    fill(im, 300, 60, 6, 8); // detached legitimate ornament must not be auto-deleted
+    const mask = alpha(im),
+      before = mask.slice(),
+      scan = R.analyse(im, mask, undefined, true);
+    const line = scan.candidates.find((c) => c.x === 130 && c.y === y);
+    assert(line, `${length}×1 top line was missed`);
+    assert.equal(line.width, length);
+    assert.equal(line.height, 1);
+    assert(line.exterior);
+    assert(!line.nearMain);
+    const main = scan.components.find((c) => c.id === scan.mainId);
+    const oldOutsideRule =
+      line.x + line.width <= main.x ||
+      line.x >= main.x + main.width ||
+      line.y + line.height <= main.y ||
+      line.y >= main.y + main.height;
+    assert.equal(
+      oldOutsideRule,
+      false,
+      "this was excluded by the previous detector",
+    );
+    assert.deepEqual(mask, before, "detection alone never deletes anything");
+    assert.deepEqual(
+      R.analyse(im, mask).candidates,
+      scan.candidates,
+      "summary and detailed scan use the same rules",
+    );
+    const removed = R.removeSelected(mask, scan, [line.id]);
+    assert.equal(removed.removed, length);
+    for (let i = 0; i < mask.length; i++)
+      assert.equal(removed.mask[i], scan.labels[i] === line.id ? 0 : before[i]);
+  }
+});
+
+test("enclosed facial details and near-outline detached marks inside the bounding box remain protected", () => {
+  const im = image(100, 100);
+  // Closed frame (face), with a tall connected stalk creating exterior space within its box.
+  fill(im, 10, 40, 70, 2);
+  fill(im, 10, 80, 70, 2);
+  fill(im, 10, 40, 2, 40);
+  fill(im, 78, 40, 2, 42);
+  fill(im, 10, 10, 2, 31);
+  fill(im, 30, 60, 12, 1); // mouth: thin but enclosed
+  fill(im, 45, 37, 8, 1); // near-outline expression: exterior, within 3px
+  fill(im, 45, 20, 16, 1); // distant line: exterior inside the bounding box
+  const scan = R.analyse(im, alpha(im), undefined, true);
+  assert(!scan.candidates.some((c) => c.y === 60));
+  assert(!scan.candidates.some((c) => c.y === 37));
+  assert(scan.candidates.some((c) => c.y === 20));
+});
+
+test("a diagonal closed contour protects interior decorations from exterior flood", () => {
+  const im = image(60, 60);
+  for (let i = 0; i <= 20; i++) {
+    fill(im, 30 + i, 10 + i, 1, 1);
+    fill(im, 50 - i, 30 + i, 1, 1);
+    fill(im, 30 - i, 50 - i, 1, 1);
+    fill(im, 10 + i, 30 - i, 1, 1);
+  }
+  fill(im, 24, 30, 12, 1);
+  assert.equal(R.analyse(im, alpha(im)).candidates.length, 0);
+});
+
+test("final RGBA audit excludes any component covered by rendered text/outline/shadow without changing pixels", () => {
+  const im = image(370, 320);
+  fill(im, 10, 100, 350, 210, [70, 124, 169, 255]);
+  fill(im, 10, 10, 5, 100);
+  fill(im, 130, 25, 49, 1);
+  fill(im, 200, 60, 20, 1);
+  const protectedAlpha = new Uint8ClampedArray(370 * 320);
+  protectedAlpha[60 * 370 + 200] = 1;
+  const before = im.data.slice(),
+    audit = R.inspectFinal(im, protectedAlpha);
+  assert(audit.candidates.some((c) => c.y === 25 && c.width === 49));
+  assert(!audit.candidates.some((c) => c.y === 60));
+  assert.deepEqual(im.data, before);
+  assert.throws(() => R.inspectFinal(im, new Uint8Array(1)));
+});
