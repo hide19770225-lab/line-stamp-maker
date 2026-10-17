@@ -10,6 +10,9 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="STAMP atelier" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#f6f8f5" />
     <meta
       name="description"
@@ -20,12 +23,13 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=auto-cleanup-5" />
-    <script src="core.js?v=auto-cleanup-5" defer></script>
-    <script src="residue.js?v=auto-cleanup-5" defer></script>
+    <link rel="stylesheet" href="styles.css?v=bulk-review-1" />
+    <script src="core.js?v=bulk-review-1" defer></script>
+    <script src="residue.js?v=bulk-review-1" defer></script>
     <script src="typography.js" defer></script>
-    <script src="project.js?v=auto-cleanup-5" defer></script>
-    <script src="app.js?v=auto-cleanup-5" defer></script>
+    <script src="project.js?v=bulk-review-1" defer></script>
+    <script src="audit.js?v=bulk-review-1" defer></script>
+    <script src="app.js?v=bulk-review-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -404,6 +408,29 @@
             残留候補のあるスタンプを順番に確認
           </button>
           <div class="stamp-grid" id="stamp-grid"></div>
+          <section class="bulk-review" aria-labelledby="bulk-review-heading">
+            <h3 id="bulk-review-heading">スタンプ画像の一括透過確認</h3>
+            <p class="hint">
+              画像は変更しません。検査後、全スタンプとメイン・タブを背景色を切り替えながら目視してください。「正常」は目視確認済みという意味ではありません。
+            </p>
+            <button id="bulk-inspect" class="button secondary wide">
+              全画像を自動検査して一覧確認
+            </button>
+            <p id="bulk-summary" role="status" aria-live="polite">
+              一括検査はまだ行っていません。
+            </p>
+            <div id="bulk-results" class="bulk-results checker"></div>
+            <label class="check-label"
+              ><input
+                type="checkbox"
+                id="bulk-visual"
+                disabled
+              />一覧の全画像と要確認の理由を目視し、白い部分・影・装飾の仕上がりを確認した</label
+            >
+            <button id="bulk-confirm" class="button primary wide" disabled>
+              すべて確認済みにする
+            </button>
+          </section>
         </section>
         <section class="panel" id="export-section" hidden>
           <div class="panel-heading">
