@@ -119,6 +119,78 @@
     const values = free.length ? free : pool;
     return values[((offset % values.length) + values.length) % values.length];
   }
+  // Conservative visual cues, not a general expression/pose classifier.
+  // Source pixels and the transparency mask are read only; no generated text is sampled.
+  function analyze(image, mask) {
+    const { width: w, height: h, data } = image;
+    const unknown = {
+      emotion: "unknown",
+      reason: "判定できず（表情・ポーズの汎用解析は未実装）",
+    };
+    if (!w || !h || data.length !== w * h * 4 || mask.length !== w * h)
+      return unknown;
+    const seen = new Uint8Array(w * h),
+      regions = [];
+    const blue = (i) =>
+      mask[i] >= 96 &&
+      data[i * 4 + 2] > 125 &&
+      data[i * 4 + 2] - data[i * 4] > 35 &&
+      data[i * 4 + 1] - data[i * 4] > 15;
+    for (let i = 0; i < w * h; i++) {
+      if (seen[i] || !blue(i)) continue;
+      const queue = [i];
+      seen[i] = 1;
+      let left = w,
+        right = 0,
+        top = h,
+        bottom = 0;
+      for (let q = 0; q < queue.length; q++) {
+        const n = queue[q],
+          x = n % w,
+          y = Math.floor(n / w);
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+        for (const k of [
+          x > 0 ? n - 1 : -1,
+          x < w - 1 ? n + 1 : -1,
+          y > 0 ? n - w : -1,
+          y < h - 1 ? n + w : -1,
+        ])
+          if (k >= 0 && !seen[k] && blue(k)) {
+            seen[k] = 1;
+            queue.push(k);
+          }
+      }
+      const rw = right - left + 1,
+        rh = bottom - top + 1;
+      if (
+        queue.length >= Math.max(6, w * h * 0.00015) &&
+        queue.length < w * h * 0.025 &&
+        rh >= rw * 1.15 &&
+        rh < h * 0.3 &&
+        top > h * 0.2 &&
+        bottom < h * 0.8
+      )
+        regions.push({ x: (left + right) / 2, y: (top + bottom) / 2 });
+    }
+    for (const a of regions)
+      for (const b of regions)
+        if (
+          a.x < w * 0.5 &&
+          b.x > w * 0.5 &&
+          b.x - a.x > w * 0.15 &&
+          b.x - a.x < w * 0.75 &&
+          Math.abs(a.y - b.y) < h * 0.12
+        )
+          return {
+            emotion: "cry",
+            reason:
+              "画素特徴：左右に小さな青系の縦長領域。涙の可能性（推測・要確認）",
+          };
+    return unknown;
+  }
   // Neutral daily phrases: assignment is by number, never by inferred emotion.
   function automatic(rows) {
     const pool = [
@@ -156,7 +228,7 @@
       .filter(([, slots]) => slots.length > 1)
       .map(([caption, slots]) => ({ caption, slots }));
   }
-  const api = { groups, candidates, choose, duplicates, automatic };
+  const api = { groups, candidates, choose, duplicates, automatic, analyze };
   root.StampSuggestions = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

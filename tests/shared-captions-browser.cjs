@@ -32,6 +32,9 @@ const assert = require("node:assert/strict");
             220,
           );
         }
+        x.fillStyle = "#28aaeb";
+        x.fillRect(400 + 150, 130, 12, 45);
+        x.fillRect(400 + 240, 130, 12, 45);
         return c.toDataURL().split(",")[1];
       });
       const idle = () =>
@@ -47,6 +50,23 @@ const assert = require("node:assert/strict");
       });
       await idle();
       await p.waitForSelector("#auto-captions");
+      const automatic = await p
+        .locator('.suggestion-card input[data-kind="caption"]')
+        .evaluateAll((inputs) => inputs.map((input) => input.value));
+      assert.equal(automatic.length, 10);
+      assert.ok(automatic.every(Boolean));
+      assert.equal(
+        await p.locator('.suggestion-card[data-slot="2"] select').inputValue(),
+        "cry",
+      );
+      assert.match(
+        await p.locator('.suggestion-card[data-slot="2"] .hint').textContent(),
+        /画素特徴/,
+      );
+      assert.match(
+        await p.locator('.suggestion-card[data-slot="1"] .hint').textContent(),
+        /汎用候補/,
+      );
       if (mode === "normal")
         await p.locator("#bulk-captions").evaluate((el) => {
           for (
@@ -62,6 +82,22 @@ const assert = require("node:assert/strict");
       );
       await p.click("#auto-captions");
       await idle();
+      assert.equal(
+        await p.locator('.suggestion-card input[data-kind="caption"]').count(),
+        10,
+      );
+      const proposed = await p
+        .locator('.suggestion-card input[data-kind="caption"]')
+        .evaluateAll((inputs) => inputs.map((input) => input.value));
+      assert.ok(proposed.every(Boolean));
+      assert.ok(
+        (await p.locator(".stamp-caption").allTextContents()).every(
+          (text) => text === "（セリフなし）",
+        ),
+      );
+      await p.check("#suggestion-ack");
+      await p.click("#approve-suggestions");
+      await idle();
       assert.equal(await p.locator(".stamp-card").count(), 10);
       let captions = await p.locator(".stamp-caption").allTextContents();
       assert.equal(new Set(captions).size, 10);
@@ -69,7 +105,7 @@ const assert = require("node:assert/strict");
       assert.equal(captions[0], "既存のセリフ");
       assert.match(
         await p.locator("#auto-caption-status").textContent(),
-        /表情未解析/,
+        /青い涙/,
       );
       const result = await p.evaluate(() =>
         Object.values(rendered).map((s) => ({

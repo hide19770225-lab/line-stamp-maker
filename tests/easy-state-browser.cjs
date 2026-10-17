@@ -52,12 +52,17 @@ const base = process.env.STAMP_TEST_URL || "http://127.0.0.1:4173";
       buffer: Buffer.from(bytes, "base64"),
     });
     await idle();
-    await p.click("#easy-review");
-    assert.match(
-      await p.locator("#easy-progress").textContent(),
-      /読み込み済み/,
-      "loaded source is not a missing upload",
+    assert.equal(await p.locator(".stamp-card").count(), 10);
+    assert.equal(
+      await p.locator('.suggestion-card input[data-kind="caption"]').count(),
+      10,
     );
+    assert.match(await p.locator("#easy-state").textContent(), /加工済み10/);
+    // Import now processes automatically. Change a source setting to exercise reprocessing failure.
+    await p.locator("#tolerance").evaluate((el) => {
+      el.value = "25";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     const captions = Array.from({ length: 10 }, (_, i) => `ありがとう${i + 1}`);
     await p.fill("#easy-captions", captions.join("\n"));
     await p.evaluate(() => {
