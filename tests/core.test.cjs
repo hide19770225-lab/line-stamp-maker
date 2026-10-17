@@ -143,3 +143,34 @@ test("eraser and restore map correctly through a scaled, translated layer", () =
   C.applyBrush(stamp, x, y, 10, "restore");
   assert.equal(mask[10 * 20 + 10], 255);
 });
+
+test("explicit white/custom flood preserves original partial-alpha shadows and decorations", () => {
+  for (const mode of ["white", "custom"]) {
+    const im = fixture(7, 7);
+    pixel(im, 3, 3, [250, 250, 250, 80]);
+    pixel(im, 3, 4, [255, 255, 255, 190]);
+    const mask = C.floodMask(im, mode, 24, "#ffffff");
+    assert.equal(mask[0], 0);
+    assert.equal(mask[24], 80);
+    assert.equal(mask[31], 190);
+  }
+});
+test("matte fringe proposal is alpha-only, opt-in, one-pixel and preserves interior whites/partial alpha", () => {
+  const im = fixture(9, 9);
+  for (let y = 2; y < 7; y++)
+    for (let x = 2; x < 7; x++) pixel(im, x, y, [20, 40, 20, 255]);
+  pixel(im, 2, 2, [210, 210, 210, 255]);
+  pixel(im, 4, 4, [255, 255, 255, 255]);
+  pixel(im, 1, 4, [250, 250, 250, 90]);
+  const mask = C.floodMask(im, "white", 24),
+    before = mask.slice(),
+    rgb = im.data.slice();
+  const p = C.proposeMatteCleanup(im, mask, "white", 24, "#ffffff");
+  assert(p.changed > 0);
+  assert(p.mask[2 * 9 + 2] > 0 && p.mask[2 * 9 + 2] < 255);
+  assert.equal(p.mask[4 * 9 + 4], 255);
+  assert.equal(p.mask[4 * 9 + 1], 90);
+  assert.deepEqual(mask, before);
+  assert.deepEqual(im.data, rgb);
+  assert.equal(C.proposeMatteCleanup(im, mask, "none", 24, "#fff").changed, 0);
+});

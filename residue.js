@@ -187,7 +187,18 @@
             c.width >= 5 &&
             c.height >= 5 &&
             c.area >= 25;
-          c.kind = thin ? "line" : "fragment";
+          c.boundaryDistance = Math.min(
+            c.x - rect.x,
+            c.y - rect.y,
+            xEnd - c.x - c.width,
+            yEnd - c.y - c.height,
+          );
+          c.nearBoundary =
+            c.boundaryDistance <=
+            Math.max(4, Math.round(Math.min(rect.width, rect.height) * 0.02));
+          // Short strokes near a silhouette may be motion marks, sweat or tears.
+          c.protected = c.protected || (thin && c.nearMain && !c.touchesEdge);
+          c.kind = c.nearBoundary ? "boundary" : thin ? "line" : "fragment";
           return (
             (outside || (c.exterior && !c.nearMain)) &&
             (thin || tiny || (c.touchesEdge && c.area <= main.area * 0.1)) &&

@@ -78,7 +78,10 @@
     function visit(i) {
       if (!seen[i]) {
         seen[i] = 1;
-        if (near(data, i * 4, color, tolerance)) {
+        if (
+          (data[i * 4 + 3] === 0 || data[i * 4 + 3] === 255) &&
+          near(data, i * 4, color, tolerance)
+        ) {
           queue[tail++] = i;
           mask[i] = 0;
         }
@@ -101,6 +104,52 @@
       if (i + width < mask.length) visit(i + width);
     }
     return mask;
+  }
+  // Preview-only proposal. Change alpha on one exposed opaque matte rim;
+  // never recolor artwork, flood further inward or modify existing partial alpha.
+  function proposeMatteCleanup(
+    image,
+    mask,
+    mode,
+    tolerance = 24,
+    custom = "#ffffff",
+  ) {
+    const { width, height, data } = image,
+      result = mask.slice();
+    if (
+      mode === "none" ||
+      (mode === "auto" &&
+        [0, width - 1, (height - 1) * width, width * height - 1].some(
+          (i) => data[i * 4 + 3] === 0,
+        ))
+    )
+      return { mask: result, changed: 0 };
+    const color =
+      mode === "white"
+        ? [255, 255, 255]
+        : mode === "custom"
+          ? [1, 3, 5].map((i) => parseInt(custom.slice(i, i + 2), 16))
+          : backgroundColor(data, width, height);
+    let changed = 0;
+    for (let y = 1; y < height - 1; y++)
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x;
+        if (data[i * 4 + 3] !== 255 || mask[i] !== 255) continue;
+        const exposed = [i - 1, i + 1, i - width, i + width].filter(
+          (n) => mask[n] === 0,
+        ).length;
+        if (exposed < 2) continue;
+        const distance = Math.max(
+          ...color.map((c, k) => Math.abs(data[i * 4 + k] - c)),
+        );
+        if (distance <= tolerance || distance >= tolerance + 32) continue;
+        result[i] = Math.max(
+          1,
+          Math.round((255 * (distance - tolerance)) / 32),
+        );
+        changed++;
+      }
+    return { mask: result, changed };
   }
   function alphaBounds(data, width, height) {
     let left = width,
@@ -616,6 +665,7 @@
     canvas,
     backgroundColor,
     floodMask,
+    proposeMatteCleanup,
     alphaBounds,
     createTile,
     isolateRect,

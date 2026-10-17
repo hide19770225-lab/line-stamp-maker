@@ -77,6 +77,10 @@
 
 [上25pxの49×1px・上10pxの16×1pxについての追加調査とテスト](docs/exterior-horizontal-residue-investigation.md)も参照してください。この段階では同じ座標・寸法の合成データで検証しました。後日添付された実PNGの確認と修正は最新報告を参照してください。
 
+「切り抜き境界付近」は線・番号が残った可能性を示す分類で、不要という断定ではありません。指定した周囲余白で隣コマの線を分割時に除外でき、不確実な成分は確認してから削除します。本体近くの細い動き線も保護します。一覧の「残留候補のあるスタンプを順番に確認」で画像ごとに確認できます。
+
+「輪郭の背景色にじみを確認する」では、完全不透明な縁の1層だけを薄くする案を比較できます。色は変更せず、元から半透明の影・装飾と内部の白は保護します。**比較だけでは適用しません。** 淡い輪郭も変わる場合があるため、確認してから適用してください。キャンセル・取り消しができ、適用したアルファ値はPNG・ZIPと既存JSONに反映されます。[変更内容・検証・限界](docs/matte-boundary-review.md)を参照してください。
+
 ## 出力と検査
 
 | ファイル                 | 寸法      | 備考                            |
@@ -130,10 +134,12 @@ NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/project-browser.cjs
 NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/typography-browser.cjs
 NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/residue-browser.cjs
 NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/exterior-residue-browser.cjs
+NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/matte-browser.cjs
 python3 tests/verify_zip.py /tmp/stamp-test-artifacts
 python3 tests/verify_typography_zip.py /tmp/stamp-test-artifacts
 python3 tests/verify_residue_zip.py /tmp/stamp-test-artifacts
 python3 tests/verify_exterior_zip.py /tmp/stamp-test-artifacts
+python3 tests/verify_matte_zip.py /tmp/stamp-test-artifacts
 ```
 
 既定の実行ブラウザは `/usr/bin/chromium`。`CHROMIUM_PATH`、`STAMP_TEST_URL`、`STAMP_TEST_ARTIFACTS` で変更できます。結果は `/tmp/stamp-test-artifacts` に保存します。
