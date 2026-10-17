@@ -23,14 +23,14 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=partial-captions-1" />
-    <script src="core.js?v=partial-captions-1" defer></script>
-    <script src="residue.js?v=partial-captions-1" defer></script>
+    <link rel="stylesheet" href="styles.css?v=easy-state-1" />
+    <script src="core.js?v=easy-state-1" defer></script>
+    <script src="residue.js?v=easy-state-1" defer></script>
     <script src="typography.js" defer></script>
-    <script src="project.js?v=partial-captions-1" defer></script>
-    <script src="audit.js?v=partial-captions-1" defer></script>
-    <script src="easy.js?v=partial-captions-1" defer></script>
-    <script src="app.js?v=partial-captions-1" defer></script>
+    <script src="project.js?v=easy-state-1" defer></script>
+    <script src="audit.js?v=easy-state-1" defer></script>
+    <script src="easy.js?v=easy-state-1" defer></script>
+    <script src="app.js?v=easy-state-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -118,6 +118,8 @@
             新規画像は2列×5段、最大4枚。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
           </p>
           <p id="easy-sources" class="hint"></p>
+          <p id="easy-state" class="hint" role="status" aria-live="polite"></p>
+          <p id="easy-failure" class="easy-failure" role="alert" hidden></p>
           <ul
             id="easy-warnings"
             class="validation-list"
