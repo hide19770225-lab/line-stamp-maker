@@ -67,6 +67,10 @@
 
 ## 上端の白線・孤立した線や点の確認
 
+**標準ONで、狭い条件に合う上端の半透明な1行を自動除去します。候補を選ばずに書き出しても適用されます。** 最新の実ZIPでは09の49px・10の18pxを自動除去し、他の全画素が変わらないことを検証しました。「自動除去の前後を比較する」で確認でき、画像ごとにOFFにすると元の配置・文字のまま復元します。設定JSONにもON/OFFを保存します。[最新の自動処理・実ZIP検証と限界](docs/automatic-residue-cleanup.md)を参照してください。
+
+番号・点・色付きの動き線・影など、自動判定が難しいものは自動で消しません。以下は、それらの確認候補を手動で修正する操作です。
+
 [実際に添付された09.png・10.pngの解析結果](docs/real-png-line-investigation.md)：座標・色・半透明画素を確認し、49画素／16画素だけを除去して他の全画素が不変であることを検証しました。元の一覧画像がないため、線が発生した工程は未確定です。
 
 編集画面の「孤立した線・点を拡大確認する」を開きます。完成PNGと同じ画像をグレー／黒／チェック柄、全体／2／4／8倍で確認でき、拡大時は指で上下左右にスクロールできます。候補横の「拡大」で該当部分へ移動します。枠・番号・確認用背景は出力しません。
@@ -121,7 +125,7 @@ python3 -m http.server 4173 --bind 127.0.0.1
 Node.js 18以上で、追加依存なしのアルゴリズム／設定管理テスト：
 
 ```sh
-node --test tests/core.test.cjs tests/project.test.cjs tests/typography.test.cjs tests/residue.test.cjs tests/real-line.test.cjs
+node --test tests/core.test.cjs tests/project.test.cjs tests/typography.test.cjs tests/residue.test.cjs tests/real-line.test.cjs tests/auto-cleanup.test.cjs
 ```
 
 ブラウザテスト（Playwrightは開発時のみ。実行アプリの依存ではありません）：

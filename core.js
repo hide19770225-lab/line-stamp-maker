@@ -389,6 +389,19 @@
     }
     return lines;
   }
+  function clearAutomaticLines(ctx, stamp) {
+    if (stamp.cleanupEnabled === false || !root.StampResidue?.automaticLines)
+      return [];
+    const lines = root.StampResidue.automaticLines(
+      ctx.getImageData(0, 0, WIDTH, HEIGHT),
+    );
+    for (const line of lines)
+      ctx.clearRect(line.x, line.y, line.width, line.height);
+    return lines;
+  }
+  function renderUncleaned(stamp, target = canvas(WIDTH, HEIGHT)) {
+    return renderStamp({ ...stamp, cleanupEnabled: false }, target);
+  }
   function renderStamp(stamp, target = canvas(WIDTH, HEIGHT)) {
     target.width = WIDTH;
     target.height = HEIGHT;
@@ -463,6 +476,7 @@
         }
       }
       ctx.drawImage(finalArt, 0, 0);
+      const autoRemoved = clearAutomaticLines(ctx, stamp);
       if (plan) T.paintPlan(ctx, plan);
       stamp.renderTextPlan = plan;
       const bounds = alphaBounds(
@@ -483,6 +497,7 @@
         effectiveFontSize: plan?.style.size || stamp.style.size,
         imagePlacement: placement,
         textPlan: plan,
+        autoRemoved,
       };
     }
     const p = baseImagePlacement(stamp),
@@ -505,6 +520,7 @@
     ctx.restore();
     if (croppedLayer !== layer) croppedLayer.width = croppedLayer.height = 1;
     layer.width = layer.height = 1;
+    const autoRemoved = clearAutomaticLines(ctx, stamp);
     let textClipped = false;
     if (stamp.caption.trim()) {
       const s = stamp.style,
@@ -555,7 +571,14 @@
     }
     const pixels = ctx.getImageData(0, 0, WIDTH, HEIGHT);
     const bounds = alphaBounds(pixels.data, WIDTH, HEIGHT);
-    return { canvas: target, textClipped, empty: !bounds, bounds };
+    return {
+      canvas: target,
+      textClipped,
+      empty: !bounds,
+      bounds,
+      autoRemoved,
+      imagePlacement: p,
+    };
   }
   function specialImage(stamp, width, height) {
     const rendered = renderStamp(stamp),
@@ -676,6 +699,7 @@
     applyBrush,
     renderBefore,
     renderStamp,
+    renderUncleaned,
     specialImage,
     pngBlob,
     crc32,

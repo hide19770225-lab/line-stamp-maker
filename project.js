@@ -9,6 +9,7 @@
   const lines = (count) =>
     Array.from({ length: count + 1 }, (_, i) => i / count);
   const blankSlot = () => ({
+    cleanupEnabled: true,
     caption: "",
     style: {
       font: "sans",
@@ -182,6 +183,8 @@
                   "angle",
                 ].includes(key),
             ))) ||
+        (slot.cleanupEnabled !== undefined &&
+          typeof slot.cleanupEnabled !== "boolean") ||
         !object(slot.layout) ||
         !number(slot.layout.scale, 20, 100) ||
         !number(slot.layout.x, 0, 100) ||
@@ -221,6 +224,7 @@
       }
       return {
         caption: slot.caption,
+        cleanupEnabled: slot.cleanupEnabled !== false,
         style: {
           font: slot.style.font,
           size: slot.style.size,

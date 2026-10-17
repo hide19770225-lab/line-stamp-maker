@@ -265,7 +265,75 @@
       protectedIds: [...protectedIds],
     };
   }
-  const api = { analyse, removeSelected, inspectFinal };
+  // Narrow, reversible automatic rule for a flat neutral scanline above artwork.
+  // Never a general "remove small components" operation. Ambiguous marks stay review-only.
+  function automaticLines(image) {
+    const { width, height, data } = image,
+      top = Math.min(height - 2, Math.floor(height * 0.16));
+    let possible = false;
+    for (let y = 1; y <= top && !possible; y++) {
+      let run = 0;
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4,
+          a = data[i + 3],
+          r = data[i],
+          g = data[i + 1],
+          b = data[i + 2];
+        if (
+          a > 0 &&
+          a < 255 &&
+          Math.min(r, g, b) >= 200 &&
+          Math.max(r, g, b) - Math.min(r, g, b) <= 24 &&
+          data[i - width * 4 + 3] === 0 &&
+          data[i + width * 4 + 3] === 0
+        )
+          run++;
+        else run = 0;
+        if (run >= 12) {
+          possible = true;
+          break;
+        }
+      }
+    }
+    if (!possible) return [];
+    const mask = Uint8ClampedArray.from(
+        { length: width * height },
+        (_, i) => data[i * 4 + 3],
+      ),
+      scan = analyse(image, mask, undefined, true),
+      main = scan.components.find((c) => c.id === scan.mainId);
+    if (!main || main.area < Math.max(2500, width * height * 0.04)) return [];
+    return scan.candidates.filter((c) => {
+      if (
+        c.protected ||
+        c.height !== 1 ||
+        c.area !== c.width ||
+        c.width < 12 ||
+        c.width > main.width * 0.35 ||
+        c.area > main.area * 0.005 ||
+        c.y > top ||
+        main.y - c.y - 1 < Math.max(12, height * 0.04) ||
+        Math.abs(c.x + c.width / 2 - (main.x + main.width / 2)) >
+          main.width * 0.15 ||
+        c.alphaMax === 255
+      )
+        return false;
+      const tones = new Set(),
+        alphas = new Map();
+      for (let x = c.x; x < c.x + c.width; x++) {
+        const i = (c.y * width + x) * 4,
+          rgb = [data[i], data[i + 1], data[i + 2]];
+        tones.add(rgb.join(","));
+        alphas.set(data[i + 3], (alphas.get(data[i + 3]) || 0) + 1);
+        if (Math.min(...rgb) < 200 || Math.max(...rgb) - Math.min(...rgb) > 24)
+          return false;
+      }
+      // Textured RGB with a flat alpha plateau is typical of a severed source row.
+      // Uniform pale motion marks remain review-only even if the geometry matches.
+      return tones.size >= 4 && Math.max(...alphas.values()) >= c.width * 0.8;
+    });
+  }
+  const api = { analyse, removeSelected, inspectFinal, automaticLines };
   root.StampResidue = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
