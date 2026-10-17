@@ -66,6 +66,7 @@ test("ten-image preview accepts partial sources but production still requires al
   assert.deepEqual(preview.errors, []);
   assert(preview.warnings.some((s) => s.includes("不足")));
   assert.equal(preview.missing.length, 30);
+  assert.match(preview.warnings.join(""), /不足30個.*テスト加工/);
   assert(E.plan(sources, 40).errors.some((s) => s.includes("不足")));
   assert.equal(JSON.stringify(sources), before);
 });

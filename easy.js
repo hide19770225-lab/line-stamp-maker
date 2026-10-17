@@ -34,10 +34,14 @@
     const missing = Array.from({ length: target }, (_, i) => i + 1).filter(
       (n) => !assigned.has(n),
     );
-    if (missing.length)
-      (allowPartial && assigned.size > 0 ? warnings : errors).push(
-        `画像・採用コマが不足しています。未割当の番号：${missing.join("、")}`,
-      );
+    if (missing.length) {
+      const message = `画像・採用コマが不足しています。未割当の番号：${missing.join("、")}`;
+      if (allowPartial && assigned.size > 0)
+        warnings.push(
+          `不足${missing.length}個でも、読み込み済み${assigned.size}個のテスト加工を続けます。申請用ZIPには全${target}個が必要です。未割当の番号：${missing.join("、")}`,
+        );
+      else errors.push(message);
+    }
     const unused = sources.reduce(
       (n, s) => n + s.assignments.filter((slot) => !slot).length,
       0,
@@ -54,7 +58,7 @@
       throw new Error("セリフは40行以内、各行120文字以内で入力してください");
     return lines;
   }
-  const api = { plan, captions };
+  const api = { plan, captions, version: "easy-state-1" };
   root.StampEasy = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

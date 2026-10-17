@@ -1919,3 +1919,12 @@ body.easy-mode:not(.easy-details-open) .workspace-grid {
   list-style: none;
   padding-left: 0;
 }
+
+.easy-failure {
+  color: #922f2f;
+  background: #fff0ee;
+  border: 1px solid #c88780;
+  border-radius: 10px;
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
