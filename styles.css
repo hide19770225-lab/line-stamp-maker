@@ -1576,3 +1576,130 @@ body.modal-open {
     box-shadow: 0 3px 14px #233d3222;
   }
 }
+
+.project-toolbar {
+  display: flex;
+  gap: 16px;
+}
+.project-toolbar > label {
+  flex: 1;
+  min-width: 0;
+}
+.project-toolbar select,
+.project-toolbar input {
+  margin-top: 8px;
+  margin-bottom: 6px;
+}
+.project-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.project-file {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  margin: 0;
+}
+.project-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.project-file:focus-within {
+  outline: 3px solid #68a88a;
+  outline-offset: 3px;
+}
+.caption-details summary,
+.cell-details summary {
+  min-height: 48px;
+  padding: 14px 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.caption-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 20px;
+  margin-top: 12px;
+}
+.caption-list label {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 11px;
+}
+.caption-list input {
+  min-width: 0;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 16px;
+  color: var(--ink);
+  background: #fcfdfa;
+}
+.source-layout-controls {
+  margin: 18px 0;
+}
+.cell-assignments {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.cell-assignments label {
+  font-size: 11px;
+  min-width: 0;
+}
+.cell-assignments select {
+  font-size: 14px;
+  margin: 5px 0;
+}
+.cell-details {
+  margin: 15px 0;
+}
+.source-card {
+  flex-wrap: wrap;
+}
+.source-card .project-file {
+  width: 100%;
+}
+.stamp-caption {
+  margin: 5px 2px;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+#process-all {
+  margin-top: 12px;
+}
+.busy input,
+.busy select,
+.busy textarea {
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  .project-toolbar {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .source-layout-controls .project-toolbar {
+    flex-direction: row;
+  }
+  .project-actions > * {
+    width: 100%;
+  }
+  .caption-list {
+    grid-template-columns: 1fr;
+  }
+  .cell-assignments select {
+    font-size: 16px;
+  }
+}

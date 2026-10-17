@@ -1,13 +1,16 @@
 (() => {
   "use strict";
-  const C = window.StampCore,
+  const P = window.StampProject,
+    C = window.StampCore,
     $ = (id) => document.getElementById(id);
   const state = {
     sources: [],
     selectedSource: 0,
     selectedStamp: -1,
-    main: 0,
-    tab: 0,
+    main: 1,
+    tab: 1,
+    target: 40,
+    slots: Array.from({ length: 40 }, P.blankSlot),
     busy: false,
     brush: "none",
     zipURL: null,
@@ -18,7 +21,34 @@
     lastPoint = null,
     dragLine = null,
     nextId = 1;
-  const stamps = () => state.sources.flatMap((source) => source.stamps || []);
+  const stamps = () =>
+    state.sources
+      .flatMap((source) =>
+        source.stamps.filter(
+          (stamp) =>
+            stamp.slot <= state.target &&
+            source.assignments[stamp.cell] === stamp.slot,
+        ),
+      )
+      .sort((a, b) => a.slot - b.slot);
+  function captureSlots(includeMasks = false) {
+    for (const stamp of stamps()) {
+      const slot = state.slots[stamp.slot - 1];
+      Object.assign(slot, {
+        caption: stamp.caption,
+        style: { ...stamp.style },
+        layout: { ...stamp.layout },
+        crop: { ...stamp.crop },
+      });
+      if (includeMasks)
+        slot.mask = {
+          key: stamp.maskKey,
+          width: stamp.original.width,
+          height: stamp.original.height,
+          runs: P.encodeMask(stamp.mask, stamp.autoMask),
+        };
+    }
+  }
   function notify(message, error = false, persistent = false) {
     clearTimeout(toastTimer);
     $("status").textContent = message;
@@ -30,6 +60,7 @@
       }, 6500);
   }
   function invalidate() {
+    captureSlots();
     state.dirty = true;
     if (state.zipURL) {
       URL.revokeObjectURL(state.zipURL);
@@ -41,9 +72,9 @@
     if (state.busy) return;
     state.busy = true;
     document.body.classList.add("busy");
-    const buttons = [...document.querySelectorAll("button")].filter(
-      (button) => !button.disabled,
-    );
+    const buttons = [
+      ...document.querySelectorAll("button, input, select, textarea"),
+    ].filter((button) => !button.disabled);
     buttons.forEach((button) => {
       button.disabled = true;
     });
@@ -76,21 +107,83 @@
       .forEach((step, i) => step.classList.toggle("current", i === index));
   }
   const signature = (s) =>
-    JSON.stringify([s.xs, s.ys, s.mode, s.tolerance, s.color, s.insets]);
-  function addSource(image, name) {
-    state.sources.push({
-      id: nextId++,
-      image,
-      name,
-      xs: [0, 0.5, 1],
-      ys: [0, 0.2, 0.4, 0.6, 0.8, 1],
-      insets: { left: 0, right: 0, top: 0, bottom: 0 },
-      stamps: [],
-      mode: "auto",
-      tolerance: 24,
-      color: "#ffffff",
-    });
-    state.selectedSource = state.sources.length - 1;
+    JSON.stringify([
+      s.columns,
+      s.rows,
+      s.xs,
+      s.ys,
+      s.mode,
+      s.tolerance,
+      s.color,
+      s.insets,
+      s.assignments,
+    ]);
+  function addSource(image, name, initialLayout = null) {
+    const totalPixels =
+      state.sources
+        .filter((source) => source.image)
+        .reduce((sum, source) => sum + source.width * source.height, 0) +
+      image.width * image.height;
+    if (totalPixels > 32_000_000)
+      throw new Error(
+        "端末のメモリ保護のため、元画像の合計画素数が上限を超えます。不要な元画像を削除してください。",
+      );
+    const pending = state.sources.find(
+      (source) => !source.image && source.fingerprint === image.fingerprint,
+    );
+    if (pending) {
+      if (pending.width !== image.width || pending.height !== image.height)
+        throw new Error(
+          "画像の向き・寸法が保存時と異なります。同じ環境で読み込むか、PNGで保存して制作してください。",
+        );
+      pending.image = image;
+      state.selectedSource = state.sources.indexOf(pending);
+    } else {
+      if (state.sources.some((source) => !source.image))
+        throw new Error(
+          "保存設定の元画像と一致しません。JSONに記録した同じ元画像を選び直してください。",
+        );
+      if (state.sources.length >= P.MAX_SOURCES)
+        throw new Error("元画像は最大40枚です。不要な画像を削除してください。");
+      const pixels =
+        state.sources.reduce(
+          (total, source) => total + source.width * source.height,
+          0,
+        ) +
+        image.width * image.height;
+      if (pixels > 32_000_000)
+        throw new Error(
+          "端末のメモリ保護のため、元画像の合計画素数の上限に達しました。画像を小さくするか、不要な元画像を削除してください。",
+        );
+      const [columns, rows] =
+        initialLayout || $("default-layout").value.split("x").map(Number);
+      const source = {
+        id: nextId++,
+        image,
+        name,
+        fingerprint: image.fingerprint,
+        width: image.width,
+        height: image.height,
+        columns,
+        rows,
+        xs: P.lines(columns),
+        ys: P.lines(rows),
+        insets: P.blankInsets(),
+        assignments: Array(columns * rows).fill(0),
+        stamps: [],
+        mode: "auto",
+        tolerance: 24,
+        color: "#ffffff",
+      };
+      P.dimensions(columns, rows);
+      if (columns * 2 > source.width || rows * 2 > source.height)
+        throw new Error(
+          "画像が小さすぎます。初期配置の列数・行数を減らしてください。",
+        );
+      state.sources.push(source);
+      P.fillFree(state, source);
+      state.selectedSource = state.sources.length - 1;
+    }
     invalidate();
     renderSources();
     renderSourceEditor();
@@ -136,29 +229,43 @@
     }
     const width = image.width || image.naturalWidth,
       height = image.height || image.naturalHeight;
-    if (width < 20 || height < 50) {
+    if (width < 20 || height < 20) {
       release?.();
-      throw new Error("画像が小さすぎます。2列×5段の画像を選んでください。");
+      throw new Error(
+        "画像が小さすぎます。縦横20px以上の画像を選んでください。",
+      );
     }
     // Bound retained memory on mobile. Original file is never retained or transmitted.
     const ratio = Math.min(1, 2560 / Math.max(width, height)),
       output = C.canvas(Math.round(width * ratio), Math.round(height * ratio));
     output.getContext("2d").drawImage(image, 0, 0, output.width, output.height);
     release?.();
+    if (!crypto.subtle)
+      throw new Error(
+        "画像照合のためHTTPS、またはローカルサーバーで開いてください。",
+      );
+    const hash = await crypto.subtle.digest(
+      "SHA-256",
+      await file.arrayBuffer(),
+    );
+    output.fingerprint = Array.from(new Uint8Array(hash), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
     return output;
   }
   async function importFiles(files) {
-    const remaining = 4 - state.sources.length;
+    const remaining =
+      P.MAX_SOURCES - state.sources.filter((source) => source.image).length;
     if (remaining <= 0) {
       notify(
-        "読み込める画像は最大4枚です。不要な画像を削除してください。",
+        "読み込める元画像は最大40枚です。不要な画像を削除してください。",
         true,
       );
       return;
     }
     const chosen = Array.from(files).slice(0, remaining);
     if (files.length > remaining)
-      notify(`最大4枚までのため、先頭の${remaining}枚を読み込みます。`);
+      notify(`最大40枚までのため、先頭の${remaining}枚を読み込みます。`);
     await task(async () => {
       let loaded = 0;
       for (const file of chosen) {
@@ -199,8 +306,11 @@
       if (type === "drop" && !state.busy) importFiles(e.dataTransfer.files);
     });
   $("sample-button").addEventListener("click", () => {
-    if (state.sources.length >= 4) {
-      notify("画像は最大4枚です。", true);
+    if (
+      state.sources.length >= P.MAX_SOURCES &&
+      !state.sources.some((source) => !source.image)
+    ) {
+      notify("元画像は最大40枚です。", true);
       return;
     }
     const image = C.canvas(800, 1600),
@@ -250,18 +360,30 @@
         ctx.fill();
         ctx.restore();
       }
-    addSource(image, `おためし・白うさぎ ${state.sources.length + 1}`);
+    image.fingerprint = "sample-v1";
+    try {
+      addSource(
+        image,
+        `おためし・白うさぎ ${state.sources.length + 1}`,
+        [2, 5],
+      );
+    } catch (error) {
+      notify(error.message, true);
+      return;
+    }
+    renderResults();
     notify("サンプルを追加しました。白い体を残した透過を試せます。");
   });
   function renderSources() {
-    $("source-count").textContent = `${state.sources.length} / 4 枚`;
+    $("source-count").textContent = `${state.sources.length} / 40 枚`;
     $("source-list").replaceChildren();
     $("source-select").replaceChildren();
     state.sources.forEach((source, index) => {
       const card = document.createElement("div");
       card.className = "source-card";
       const thumb = C.canvas(48, 60);
-      thumb.getContext("2d").drawImage(source.image, 0, 0, 48, 60);
+      if (source.image)
+        thumb.getContext("2d").drawImage(source.image, 0, 0, 48, 60);
       const img = document.createElement("img");
       img.src = thumb.toDataURL();
       img.alt = `元画像 ${index + 1}`;
@@ -269,7 +391,7 @@
       name.className = "source-name";
       name.textContent = source.name;
       const detail = document.createElement("small");
-      detail.textContent = `${source.image.width} × ${source.image.height} · ${source.stamps.length ? (source.processSignature === signature(source) ? "10個 加工済み" : "設定変更あり・再加工が必要") : "未加工"}`;
+      detail.textContent = `${source.columns}列×${source.rows}段 · ${source.assignments.filter(Boolean).length}個を採用 · ${!source.image ? "元画像を再選択" : source.stamps.length ? (source.processSignature === signature(source) ? "加工済み" : "再加工が必要") : "未加工"}`;
       name.append(detail);
       const edit = document.createElement("button");
       edit.textContent = "調整";
@@ -289,10 +411,13 @@
       remove.onclick = () => {
         if (
           state.busy ||
-          !confirm("この元画像と、対応する10個の編集内容を削除しますか？")
+          !confirm(
+            "この元画像と番号の割り当てを削除しますか？番号ごとのセリフ・加工設定は残ります。",
+          )
         )
           return;
-        source.image.width = source.image.height = 1;
+        captureSlots(true);
+        if (source.image) source.image.width = source.image.height = 1;
         state.sources.splice(index, 1);
         state.selectedSource = Math.min(
           state.selectedSource,
@@ -304,15 +429,55 @@
         renderResults();
       };
       card.append(img, name, edit, remove);
+      if (!source.image) {
+        const label = document.createElement("label"),
+          input = document.createElement("input");
+        label.className = "button secondary project-file";
+        label.textContent = "元画像を再選択";
+        input.type = "file";
+        input.accept = "image/png,image/jpeg,image/webp";
+        input.onchange = () => {
+          const file = input.files[0];
+          if (!file) return;
+          task(async () => {
+            const image = await decodeFile(file);
+            if (image.fingerprint !== source.fingerprint)
+              throw new Error(
+                "元画像が一致しません。保存時と同じファイルを選んでください。",
+              );
+            if (source.width !== image.width || source.height !== image.height)
+              throw new Error("画像の寸法が保存時と異なります。");
+            const total =
+              state.sources
+                .filter((s) => s.image)
+                .reduce((sum, s) => sum + s.width * s.height, 0) +
+              image.width * image.height;
+            if (total > 32_000_000)
+              throw new Error("元画像の合計画素数が上限を超えます。");
+            source.image = image;
+            state.selectedSource = index;
+            invalidate();
+            renderSources();
+            renderSourceEditor();
+            renderResults();
+            notify(
+              "元画像が一致しました。加工ボタンで仕上がりを再作成できます。",
+            );
+          });
+        };
+        label.append(input);
+        card.append(label);
+      }
       $("source-list").append(card);
       $("source-select").add(
         new Option(`${index + 1}. ${source.name}`, String(index)),
       );
     });
-    $("process-button").textContent =
-      state.sources.length > 1
-        ? "この画像を10個に分割・透過する →"
-        : "10個に分割して、透過を確認 →";
+    $("source-select").value = String(state.selectedSource);
+    const source = state.sources[state.selectedSource];
+    $("process-button").textContent = source
+      ? `この画像の${source.assignments.filter(Boolean).length}個を分割・透過する →`
+      : "分割・背景透過する →";
   }
   $("source-select").onchange = () => {
     state.selectedSource = Number($("source-select").value);
@@ -323,6 +488,18 @@
     $("split-section").hidden = !source;
     if (!source) return;
     $("source-select").value = String(state.selectedSource);
+    $("grid-columns").value = source.columns;
+    $("grid-rows").value = source.rows;
+    const preset = `${source.columns}x${source.rows}`;
+    $("layout-preset").value = [...$("layout-preset").options].some(
+      (option) => option.value === preset,
+    )
+      ? preset
+      : "custom";
+    $("source-ready").textContent = source.image
+      ? `元画像${state.selectedSource + 1}：${source.assignments.filter(Boolean).length}個を採用。番号とセリフを確認して加工してください。`
+      : "元画像はJSONに含まれません。上の元画像一覧から同じファイルを再選択してください。";
+    renderAssignments();
     $("background-mode").value = source.mode;
     $("background-color").value = source.color;
     $("tolerance").value = source.tolerance;
@@ -333,7 +510,70 @@
       drawSplit();
     });
     drawSplit();
+    renderSources();
   }
+  function renderAssignments() {
+    const source = state.sources[state.selectedSource];
+    $("cell-assignments").replaceChildren();
+    source.assignments.forEach((slot, cell) => {
+      const label = document.createElement("label");
+      label.textContent = `元コマ ${cell + 1}`;
+      const select = document.createElement("select");
+      select.dataset.cell = cell;
+      select.add(new Option("除外", "0"));
+      for (let n = 1; n <= state.target; n++)
+        select.add(
+          new Option(
+            `${String(n).padStart(2, "0")}.png · ${state.slots[n - 1].caption || "セリフなし"}`,
+            String(n),
+          ),
+        );
+      select.value = String(slot);
+      select.onchange = () => {
+        captureSlots(true);
+        P.assignSlot(state, source, cell, Number(select.value));
+        invalidate();
+        renderSourceEditor();
+        renderResults();
+      };
+      label.append(select);
+      $("cell-assignments").append(label);
+    });
+  }
+  function changeLayout(columns, rows) {
+    const source = state.sources[state.selectedSource];
+    try {
+      P.dimensions(columns, rows);
+      if (
+        source.stamps.length &&
+        !confirm(
+          "配置を変更します。セリフと加工設定は番号に残ります。コマの割り当てを確認し、再加工してください。",
+        )
+      )
+        return;
+      captureSlots(true);
+      P.setGrid(state, source, columns, rows);
+      invalidate();
+      renderSourceEditor();
+      renderResults();
+    } catch (error) {
+      notify(error.message, true);
+      renderSourceEditor();
+    }
+  }
+  $("layout-preset").onchange = () => {
+    if ($("layout-preset").value !== "custom")
+      changeLayout(...$("layout-preset").value.split("x").map(Number));
+  };
+  $("apply-layout").onclick = () =>
+    changeLayout(Number($("grid-columns").value), Number($("grid-rows").value));
+  $("assign-free").onclick = () => {
+    captureSlots(true);
+    P.fillFree(state, state.sources[state.selectedSource]);
+    invalidate();
+    renderSourceEditor();
+    renderResults();
+  };
   function insetControls(id, values, max, onChange) {
     $(id).replaceChildren();
     for (const [key, title] of [
@@ -394,10 +634,7 @@
     const s = state.sources[state.selectedSource],
       lines = s[axis];
     if (!Number.isFinite(value)) return;
-    const gap = Math.max(
-      0.004,
-      2 / (axis === "xs" ? s.image.width : s.image.height),
-    );
+    const gap = Math.max(0.004, 2 / (axis === "xs" ? s.width : s.height));
     lines[index] = Math.max(
       index ? lines[index - 1] + gap : 0,
       Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value),
@@ -407,28 +644,39 @@
   function drawSplit() {
     const source = state.sources[state.selectedSource];
     if (!source) return;
-    const c = $("split-canvas"),
-      ratio = Math.min(
-        1,
-        640 / Math.max(source.image.width, source.image.height),
-      );
+    const c = $("split-canvas");
+    if (!source.image) {
+      c.width = 300;
+      c.height = 140;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#edf5ee";
+      ctx.fillRect(0, 0, 300, 140);
+      ctx.fillStyle = "#217653";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("同じ元画像を再選択してください", 32, 75);
+      return;
+    }
+    const ratio = Math.min(
+      1,
+      640 / Math.max(source.image.width, source.image.height),
+    );
     c.width = Math.round(source.image.width * ratio);
     c.height = Math.round(source.image.height * ratio);
     const ctx = c.getContext("2d");
     ctx.drawImage(source.image, 0, 0, c.width, c.height);
     ctx.fillStyle = "#173b2a66";
     ctx.fillRect(0, 0, source.xs[0] * c.width, c.height);
-    ctx.fillRect(source.xs[2] * c.width, 0, c.width, c.height);
+    ctx.fillRect(source.xs[source.columns] * c.width, 0, c.width, c.height);
     ctx.fillRect(
       source.xs[0] * c.width,
       0,
-      (source.xs[2] - source.xs[0]) * c.width,
+      (source.xs[source.columns] - source.xs[0]) * c.width,
       source.ys[0] * c.height,
     );
     ctx.fillRect(
       source.xs[0] * c.width,
-      source.ys[5] * c.height,
-      (source.xs[2] - source.xs[0]) * c.width,
+      source.ys[source.rows] * c.height,
+      (source.xs[source.columns] - source.xs[0]) * c.width,
       c.height,
     );
     ctx.strokeStyle = "#21875c";
@@ -452,8 +700,8 @@
       ctx.strokeStyle = "#b87522";
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 3]);
-      for (let row = 0; row < 5; row++)
-        for (let col = 0; col < 2; col++) {
+      for (let row = 0; row < source.rows; row++)
+        for (let col = 0; col < source.columns; col++) {
           const rect = C.tileRect(source, col, row);
           ctx.strokeRect(
             rect.x * ratio,
@@ -464,9 +712,10 @@
         }
       ctx.restore();
     }
-    for (let r = 0; r < 5; r++)
-      for (let col = 0; col < 2; col++) {
-        ctx.fillStyle = "#217653";
+    for (let r = 0; r < source.rows; r++)
+      for (let col = 0; col < source.columns; col++) {
+        const slot = source.assignments[r * source.columns + col];
+        ctx.fillStyle = slot ? "#217653" : "#9c7565";
         ctx.fillRect(
           source.xs[col] * c.width + 5,
           source.ys[r] * c.height + 5,
@@ -476,14 +725,14 @@
         ctx.fillStyle = "white";
         ctx.font = "11px sans-serif";
         ctx.fillText(
-          String(r * 2 + col + 1).padStart(2, "0"),
+          slot ? String(slot).padStart(2, "0") : "×",
           source.xs[col] * c.width + 9,
           source.ys[r] * c.height + 19,
         );
       }
   }
   $("split-canvas").onpointerdown = (e) => {
-    if (state.busy) return;
+    if (state.busy || !state.sources[state.selectedSource]?.image) return;
     const rect = e.currentTarget.getBoundingClientRect(),
       source = state.sources[state.selectedSource];
     const x = (e.clientX - rect.left) / rect.width,
@@ -528,8 +777,8 @@
   $("split-canvas").onpointercancel = endGridDrag;
   $("reset-grid").onclick = () => {
     const source = state.sources[state.selectedSource];
-    source.xs = [0, 0.5, 1];
-    source.ys = [0, 0.2, 0.4, 0.6, 0.8, 1];
+    source.xs = P.lines(source.columns);
+    source.ys = P.lines(source.rows);
     invalidate();
     renderSourceEditor();
   };
@@ -543,87 +792,131 @@
       $("tolerance-value").textContent = source.tolerance;
       invalidate();
     });
-  $("process-button").onclick = () => {
-    const source = state.sources[state.selectedSource];
-    if (
-      source.stamps.length &&
-      !confirm(
-        "この元画像を分割し直します。対応する10個のセリフと透過修正をリセットしますか？",
-      )
-    )
-      return;
-    task(async () => {
-      const tiles = [];
-      for (let row = 0; row < 5; row++)
-        for (let column = 0; column < 2; column++) {
-          notify(`分割・背景透過中… ${row * 2 + column + 1} / 10`, false, true);
-          await frame();
-          tiles.push(
-            C.createTile(
-              source,
-              column,
-              row,
-              source.mode,
-              source.tolerance,
-              source.color,
-            ),
-          );
-        }
-      source.stamps = tiles;
-      source.processSignature = signature(source);
-      invalidate();
-      renderSources();
-      renderResults();
-      nextStep(2);
-      notify(
-        "10個を作成しました。画像をタップして、白い部分と透過を確認してください。",
+  async function processSource(source) {
+    if (!source.image)
+      throw new Error(`${source.name}の元画像を再選択してください。`);
+    captureSlots(true);
+    const tiles = [],
+      count = source.assignments.filter(Boolean).length;
+    if (!count)
+      throw new Error(
+        "採用するコマがありません。コマに番号を割り当ててください。",
       );
-      $("results-section").scrollIntoView({
-        block: "start",
-        behavior: "smooth",
+    for (let cell = 0; cell < source.assignments.length; cell++) {
+      const number = source.assignments[cell];
+      if (!number) continue;
+      notify(`分割・背景透過中… ${tiles.length + 1} / ${count}`, false, true);
+      await frame();
+      const stamp = C.createTile(
+        source,
+        cell % source.columns,
+        Math.floor(cell / source.columns),
+        source.mode,
+        source.tolerance,
+        source.color,
+      );
+      stamp.slot = number;
+      stamp.cell = cell;
+      stamp.maskKey = JSON.stringify([
+        source.fingerprint,
+        signature(source),
+        cell,
+        stamp.original.width,
+        stamp.original.height,
+      ]);
+      const settings = state.slots[number - 1];
+      Object.assign(stamp, {
+        caption: settings.caption,
+        style: { ...settings.style },
+        layout: { ...settings.layout },
+        crop: { ...settings.crop },
       });
+      if (
+        settings.mask?.key === stamp.maskKey &&
+        settings.mask.width === stamp.original.width &&
+        settings.mask.height === stamp.original.height
+      )
+        P.applyMask(stamp.mask, settings.mask.runs);
+      tiles.push(stamp);
+    }
+    source.stamps = tiles;
+    source.processSignature = signature(source);
+    invalidate();
+  }
+  function finishedProcessing() {
+    renderSources();
+    renderResults();
+    nextStep(2);
+    notify(
+      "加工しました。番号・セリフ・画像の対応と透過を一覧で確認してください。",
+    );
+    $("results-section").scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  $("process-button").onclick = () =>
+    task(async () => {
+      await processSource(state.sources[state.selectedSource]);
+      finishedProcessing();
     });
-  };
+  $("process-all").onclick = () =>
+    task(async () => {
+      for (const source of state.sources)
+        if (
+          source.assignments.some(Boolean) &&
+          (source.processSignature !== signature(source) ||
+            !source.stamps.length)
+        )
+          await processSource(source);
+      finishedProcessing();
+    });
   function renderResults() {
     const all = stamps();
     $("results-section").hidden = !all.length;
     $("export-section").hidden = !all.length;
-    $("stamp-count").textContent = `${all.length} / 40 個`;
+    $("stamp-count").textContent = `${all.length} / ${state.target} 個`;
     $("stamp-grid").replaceChildren();
     all.forEach((stamp, i) => {
       const button = document.createElement("button");
       button.className = `stamp-card${stamp.reviewed ? " reviewed" : ""}`;
-      button.setAttribute("aria-label", `スタンプ${i + 1}を編集・透過確認`);
+      button.setAttribute(
+        "aria-label",
+        `スタンプ${stamp.slot}を編集・透過確認`,
+      );
       const c = C.canvas(370, 320);
       c.className = "stamp-canvas";
       C.renderStamp(stamp, c);
       const footer = document.createElement("footer"),
         number = document.createElement("span"),
         review = document.createElement("span");
-      number.textContent = `${String(i + 1).padStart(2, "0")}.png`;
+      number.textContent = `${String(stamp.slot).padStart(2, "0")}.png`;
       review.className = "review-state";
       review.textContent = stamp.reviewed ? "✓ 確認済み" : "透過を確認";
       footer.append(number, review);
-      button.append(c, footer);
+      const caption = document.createElement("p");
+      caption.className = "stamp-caption";
+      caption.textContent = stamp.caption || "（セリフなし）";
+      button.append(c, footer, caption);
       button.onclick = () => {
         if (!state.busy) openEditor(i);
       };
       $("stamp-grid").append(button);
     });
-    state.main = Math.max(0, Math.min(state.main, all.length - 1));
-    state.tab = Math.max(0, Math.min(state.tab, all.length - 1));
     for (const id of ["main-select", "tab-select"]) {
       $(id).replaceChildren();
-      all.forEach((_, i) =>
+      for (let slot = 1; slot <= state.target; slot++)
         $(id).add(
-          new Option(`スタンプ ${String(i + 1).padStart(2, "0")}`, String(i)),
-        ),
-      );
+          new Option(
+            `スタンプ ${String(slot).padStart(2, "0")}${all.some((stamp) => stamp.slot === slot) ? "" : "（未加工）"}`,
+            String(slot),
+          ),
+        );
     }
     $("main-select").value = String(state.main);
     $("tab-select").value = String(state.tab);
     updateSpecial();
     updateValidation();
+    renderCaptionList();
+    $("overview-count-tag").textContent = `${state.target} STAMPS`;
+    $("overview-stamp-total").firstChild.nodeValue = String(state.target);
   }
   function copyCanvas(from, to) {
     to.width = from.width;
@@ -632,9 +925,15 @@
   }
   function updateSpecial() {
     const all = stamps();
-    if (!all.length) return;
-    copyCanvas(C.specialImage(all[state.main], 240, 240), $("main-preview"));
-    copyCanvas(C.specialImage(all[state.tab], 96, 74), $("tab-preview"));
+    for (const [slot, id, width, height] of [
+      [state.main, "main-preview", 240, 240],
+      [state.tab, "tab-preview", 96, 74],
+    ]) {
+      const stamp = all.find((stamp) => stamp.slot === slot),
+        canvas = $(id);
+      canvas.getContext("2d").clearRect(0, 0, width, height);
+      if (stamp) copyCanvas(C.specialImage(stamp, width, height), canvas);
+    }
   }
   for (const [id, key] of [
     ["main-select", "main"],
@@ -657,10 +956,16 @@
         return result;
       });
     const unreviewed = all.filter((s) => !s.reviewed).length,
-      empty = rendered.flatMap((r, i) => (r.empty ? [i + 1] : [])),
-      clipped = rendered.flatMap((r, i) => (r.textClipped ? [i + 1] : []));
+      empty = rendered.flatMap((r, i) => (r.empty ? [all[i].slot] : [])),
+      clipped = rendered.flatMap((r, i) =>
+        r.textClipped ? [all[i].slot] : [],
+      );
     const stale = state.sources.flatMap((s, i) =>
-      s.stamps.length && s.processSignature !== signature(s) ? [i + 1] : [],
+      s.assignments.some(Boolean) &&
+      s.stamps.length &&
+      s.processSignature !== signature(s)
+        ? [i + 1]
+        : [],
     );
     return {
       all,
@@ -670,9 +975,13 @@
       clipped,
       stale,
       complete:
-        all.length === 40 &&
-        state.sources.length === 4 &&
-        state.sources.every((s) => s.stamps.length === 10),
+        all.length === state.target &&
+        Array.from({ length: state.target }, (_, i) => i + 1).every((slot) =>
+          all.some((stamp) => stamp.slot === slot),
+        ),
+      missing: Array.from({ length: state.target }, (_, i) => i + 1).filter(
+        (slot) => !all.some((stamp) => stamp.slot === slot),
+      ),
     };
   }
   function updateValidation() {
@@ -687,8 +996,8 @@
     }
     item(
       v.complete
-        ? "40個のスタンプとメイン・タブの計42画像"
-        : `${v.all.length}個でテスト中。申請用には4枚すべてを加工して40個にしてください。`,
+        ? `選択した${state.target}個のスタンプとメイン・タブの計${state.target + 2}画像`
+        : `${v.all.length}個でテスト中。${state.target}個の申請用には未加工の番号 ${v.missing.join(", ")} を揃えてください。`,
       v.complete ? "" : "warning",
     );
     item("スタンプ 370 × 320px・PNG・偶数寸法");
@@ -718,8 +1027,40 @@
       : `${v.all.length}個のテストZIPを保存 ↓`;
     $("download-note").textContent = v.complete
       ? "iPhoneでは保存後「ファイル」アプリから確認できます。"
-      : "テスト用ZIPです。10・20・30個では、このツールの40個セットとして申請できません。";
+      : `テスト用ZIPです。申請用には01〜${String(state.target).padStart(2, "0")}番をすべて加工してください。番号は欠番を詰めずに保存します。`;
     return v;
+  }
+  function renderCaptionList() {
+    $("caption-list").replaceChildren();
+    for (let i = 0; i < state.target; i++) {
+      const label = document.createElement("label"),
+        input = document.createElement("input");
+      label.textContent = `${String(i + 1).padStart(2, "0")}.png`;
+      input.type = "text";
+      input.maxLength = 120;
+      input.value = state.slots[i].caption;
+      input.dataset.slot = i + 1;
+      input.oninput = () => {
+        state.slots[i].caption = input.value;
+        stamps()
+          .filter((stamp) => stamp.slot === i + 1)
+          .forEach((stamp) => {
+            stamp.caption = input.value;
+            stamp.reviewed = false;
+          });
+        invalidate();
+        $("bulk-captions").value = state.slots
+          .map((slot) => slot.caption)
+          .join("\n")
+          .replace(/\n+$/, "");
+      };
+      input.onchange = () => {
+        renderResults();
+        if (state.sources.length) renderSourceEditor();
+      };
+      label.append(input);
+      $("caption-list").append(label);
+    }
   }
   $("apply-captions").onclick = () => {
     if (state.busy) return;
@@ -731,12 +1072,17 @@
       notify("40行以内、各行120文字以内で入力してください。", true);
       return;
     }
-    stamps().forEach((stamp, i) => {
-      stamp.caption = lines[i] || "";
+    state.slots.forEach((slot, i) => {
+      slot.caption = lines[i] || "";
+    });
+    stamps().forEach((stamp) => {
+      stamp.caption = state.slots[stamp.slot - 1].caption;
+      stamp.reviewed = false;
     });
     invalidate();
     renderResults();
-    notify("セリフを一覧に反映しました。長いセリフは表示を確認してください。");
+    if (state.sources.length) renderSourceEditor();
+    notify("番号にセリフを登録しました。画像を作成する前でも保存できます。");
   };
   function selected() {
     return stamps()[state.selectedStamp];
@@ -750,7 +1096,7 @@
     insetControls("stamp-insets", stamp.crop, 40, changedImage);
     C.renderBefore(stamp, $("before-canvas"));
     $("dialog-title").textContent =
-      `スタンプ ${String(index + 1).padStart(2, "0")} を編集`;
+      `スタンプ ${String(stamp.slot).padStart(2, "0")} を編集`;
     $("caption-text").value = stamp.caption;
     $("font-family").value = stamp.style.font;
     $("text-color").value = stamp.style.color;
@@ -844,6 +1190,10 @@
     endPaint();
     document.body.classList.remove("modal-open");
     renderResults();
+    $("bulk-captions").value = state.slots
+      .map((slot) => slot.caption)
+      .join("\n")
+      .replace(/\n+$/, "");
   });
   $("edit-background").onchange = () => {
     $("edit-preview").className = `edit-preview ${$("edit-background").value}`;
@@ -1023,10 +1373,7 @@
         );
       const blob = await C.pngBlob(result.canvas),
         url = URL.createObjectURL(blob);
-      triggerDownload(
-        url,
-        `${String(state.selectedStamp + 1).padStart(2, "0")}.png`,
-      );
+      triggerDownload(url, `${String(stamp.slot).padStart(2, "0")}.png`);
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     });
   $("download-button").onclick = () =>
@@ -1044,6 +1391,13 @@
         throw new Error(
           `申請用ZIPを作る前に、あと${v.unreviewed}個の透過を編集画面で確認してください。`,
         );
+      if (
+        !v.all.some((stamp) => stamp.slot === state.main) ||
+        !v.all.some((stamp) => stamp.slot === state.tab)
+      )
+        throw new Error(
+          "メイン画像・タブ画像に、加工済みのスタンプ番号を選んでください。",
+        );
       nextStep(3);
       const files = [];
       for (let i = 0; i < v.all.length; i++) {
@@ -1053,8 +1407,11 @@
         const blob = await C.pngBlob(rendered.canvas);
         rendered.canvas.width = rendered.canvas.height = 1;
         if (blob.size > 1024 * 1024)
-          throw new Error(`${i + 1}番の画像が1MBを超えています。`);
-        files.push({ name: `${String(i + 1).padStart(2, "0")}.png`, blob });
+          throw new Error(`${v.all[i].slot}番の画像が1MBを超えています。`);
+        files.push({
+          name: `${String(v.all[i].slot).padStart(2, "0")}.png`,
+          blob,
+        });
       }
       for (const [name, canvas] of [
         ["main.png", $("main-preview")],
@@ -1073,7 +1430,7 @@
       if (state.zipURL) URL.revokeObjectURL(state.zipURL);
       state.zipURL = URL.createObjectURL(zip);
       const name = v.complete
-        ? "line-stamps-40.zip"
+        ? `line-stamps-${state.target}.zip`
         : `line-stamps-test-${v.all.length}.zip`;
       $("download-link").href = state.zipURL;
       $("download-link").download = name;
@@ -1087,8 +1444,165 @@
         `${files.length}画像のZIPを作成しました。保存が始まらない場合は「作成したZIPを保存する」をタップしてください。`,
       );
     });
+  $("target-count").onchange = () => {
+    const count = Number($("target-count").value);
+    if (
+      count < state.target &&
+      state.sources.some((source) =>
+        source.assignments.some((slot) => slot > count),
+      ) &&
+      !confirm(
+        `${count}個に変更し、範囲外のコマを除外します。番号ごとのセリフと加工設定は40番まで残します。よろしいですか？`,
+      )
+    ) {
+      $("target-count").value = state.target;
+      return;
+    }
+    captureSlots(true);
+    state.target = count;
+    for (const source of state.sources)
+      source.assignments = source.assignments.map((slot) =>
+        slot <= count ? slot : 0,
+      );
+    if (state.main > count) state.main = 1;
+    if (state.tab > count) state.tab = 1;
+    invalidate();
+    renderSources();
+    renderSourceEditor();
+    renderResults();
+  };
+  $("save-project").onclick = () => {
+    if (state.busy) return;
+    captureSlots(true);
+    const data = {
+      format: "stamp-atelier-project",
+      version: 1,
+      imageDataIncluded: false,
+      notice:
+        "元画像・色付きの画像は含みません。元画像を再選択して加工すると、同じ画像・分割条件の場合のみ透明度の修正差分を復元します。",
+      target: state.target,
+      main: state.main,
+      tab: state.tab,
+      slots: state.slots,
+      sources: state.sources.map((source) =>
+        Object.fromEntries(
+          [
+            "name",
+            "fingerprint",
+            "width",
+            "height",
+            "columns",
+            "rows",
+            "xs",
+            "ys",
+            "insets",
+            "assignments",
+            "mode",
+            "tolerance",
+            "color",
+          ].map((key) => [key, source[key]]),
+        ),
+      ),
+    };
+    // Run the same validator used for imported settings before writing the file.
+    try {
+      P.readProject(data);
+    } catch (error) {
+      notify(error.message, true);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    if (blob.size > 20 * 1024 * 1024) {
+      notify(
+        "設定JSONが20MBを超えています。消しゴム修正を減らすか、画像を小さくしてから加工してください。",
+        true,
+      );
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, "stamp-atelier-project.json");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    $("project-status").textContent =
+      "設定JSONを作成しました。元画像は含まれません。同じ元画像のファイルも手元で保管してください。";
+    notify("セリフと加工設定をJSON保存しました。元画像は含まれません。");
+  };
+  $("load-project").onchange = () => {
+    const file = $("load-project").files[0];
+    if (!file) return;
+    task(async () => {
+      if (file.size > 20 * 1024 * 1024)
+        throw new Error("設定JSONは20MB以下のファイルを選んでください。");
+      let raw;
+      try {
+        raw = JSON.parse(await file.text());
+      } catch {
+        throw new Error(
+          "JSONを読み込めません。STAMP atelierで保存した設定を選んでください。",
+        );
+      }
+      const data = P.readProject(raw);
+      if (
+        state.dirty &&
+        !confirm(
+          "現在のセリフ・加工設定を読み込んだJSONに置き換えます。保存していない変更は失われます。続けますか？",
+        )
+      )
+        return;
+      const used = new Set();
+      const sources = data.sources.map((settings) => {
+        const previous = state.sources.find(
+          (source) =>
+            !used.has(source) &&
+            source.image &&
+            source.fingerprint === settings.fingerprint &&
+            source.width === settings.width &&
+            source.height === settings.height,
+        );
+        if (previous) used.add(previous);
+        return {
+          ...settings,
+          id: nextId++,
+          image: previous?.image || null,
+          stamps: [],
+        };
+      });
+      for (const old of state.sources)
+        if (old.image && !used.has(old)) old.image.width = old.image.height = 1;
+      Object.assign(state, {
+        sources,
+        slots: data.slots,
+        target: data.target,
+        main: data.main,
+        tab: data.tab,
+        selectedSource: 0,
+        selectedStamp: -1,
+      });
+      $("target-count").value = state.target;
+      $("bulk-captions").value = state.slots
+        .map((slot) => slot.caption)
+        .join("\n")
+        .replace(/\n+$/, "");
+      invalidate();
+      renderSources();
+      renderSourceEditor();
+      renderResults();
+      const missing = state.sources.filter((source) => !source.image).length;
+      $("project-status").textContent =
+        `JSONを読み込みました。元画像${missing}枚を再選択し、加工ボタンで画像を作成してください。透過確認はやり直しになります。`;
+      notify(
+        missing
+          ? `設定を復元しました。元画像${missing}枚を選び直してください。`
+          : "設定を復元しました。加工ボタンで仕上がりを再作成してください。",
+      );
+    }).finally(() => {
+      $("load-project").value = "";
+    });
+  };
+  renderCaptionList();
   window.addEventListener("beforeunload", (e) => {
-    if (state.dirty && state.sources.length) {
+    if (state.dirty) {
       e.preventDefault();
       e.returnValue = "";
     }
