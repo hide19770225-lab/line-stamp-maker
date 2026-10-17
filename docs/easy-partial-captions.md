@@ -13,6 +13,7 @@
 - `index.html`：更新後のJSが一緒に読み込まれるようキャッシュ識別子を更新。
 - `README.md` / `docs/easy-batch-production.md`：部分制作と申請用出力の区別を追記。
 - `tests/easy.test.cjs` / `tests/easy-partial-browser.cjs` / `tests/verify_partial_zip.py`：今回の再発防止テスト。
+- `tests/bulk-review-browser.cjs`：個別編集を閉じる際、非同期のcloseイベントによる一覧更新を待ってから確認件数を検査するように修正。解除済みの編集画面と、更新前の一覧を比較していたテストの待機不足を解消。
 
 既存の描画・文字自動配置・背景透過・残留線除去・PNG／ZIP生成のアルゴリズムは変更していません。セリフ変更時は既存のセリフ登録が加工済みスタンプも更新し、確認状態を解除して描画し直します。画像の分割を再実行する必要はありません。
 

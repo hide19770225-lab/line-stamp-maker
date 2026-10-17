@@ -142,6 +142,12 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || "/tmp/stamp-bulk-results";
         await p.locator("#image-scale").fill("80");
         assert.equal(await p.locator("#reviewed-checkbox").isChecked(), false);
         await p.click("#close-dialog");
+        // dialog.close() queues a close event; wait for its gallery refresh.
+        await p.waitForFunction(
+          () =>
+            !document.querySelector("#stamp-dialog").open &&
+            document.querySelectorAll(".stamp-card.reviewed").length === 39,
+        );
         assert.equal(await p.locator(".stamp-card.reviewed").count(), 39);
         assert(await p.locator("#bulk-confirm").isDisabled());
         await p.click("#download-button");
