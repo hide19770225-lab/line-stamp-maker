@@ -963,6 +963,10 @@
       finishedProcessing();
     });
   function renderResults() {
+    if ($("auto-caption-panel"))
+      $("auto-caption-panel").hidden = !state.sources.some(
+        (source) => source.image,
+      );
     const all = stamps();
     $("results-section").hidden = !all.length;
     $("export-section").hidden = !all.length;
@@ -2651,6 +2655,88 @@
         );
       });
   }
+  if ($("auto-captions"))
+    $("auto-captions").onclick = () =>
+      task(async () => {
+        const plan = easyPlan();
+        if (plan.errors.length) throw new Error(plan.errors.join(" / "));
+        // Preserve typed, not-yet-applied captions too; do not silently discard input.
+        const easyMode = $("production-mode").value === "easy";
+        const input = $(easyMode ? "easy-captions" : "bulk-captions");
+        const saved = state.slots
+          .map((slot) => slot.caption)
+          .join("\n")
+          .replace(/\n+$/, "");
+        if (
+          easyMode
+            ? easyCaptionPending()
+            : input.value.trim() && input.value !== saved
+        ) {
+          const lines = input.value.replace(/\r/g, "").split("\n");
+          if (
+            lines.length > 40 ||
+            lines.some((line) => Array.from(line).length > 120)
+          )
+            throw new Error(
+              "セリフは40行以内、各行120文字以内で入力してください。",
+            );
+          captureSlots(true);
+          state.slots.forEach((slot, i) => {
+            slot.caption = lines[i] || "";
+          });
+          stamps().forEach((stamp) => {
+            stamp.caption = state.slots[stamp.slot - 1].caption;
+          });
+          easyCaptionDirty = false;
+        }
+        for (const source of state.sources) {
+          if (
+            source.assignments.some(Boolean) &&
+            (source.processSignature !== signature(source) ||
+              !source.stamps.length)
+          ) {
+            notify(`画像を加工中… ${source.name}`, false, true);
+            await processSource(source);
+          }
+        }
+        const all = stamps();
+        if (!all.length)
+          throw new Error("採用するコマと画像を確認してください。");
+        const rows = window.StampSuggestions.automatic(
+          all.map((stamp) => ({ slot: stamp.slot, caption: stamp.caption })),
+        );
+        let changed = 0;
+        rows.forEach((row, i) => {
+          const stamp = all[i];
+          if (stamp.caption !== row.caption) {
+            stamp.caption = row.caption;
+            stamp.style = { ...stamp.style, safeMargin: 20, autoPlace: true };
+            stamp.reviewed = false;
+            changed++;
+          }
+        });
+        invalidate();
+        $("bulk-captions").value = state.slots
+          .map((slot) => slot.caption)
+          .join("\n")
+          .replace(/\n+$/, "");
+        easyCaptionDirty = false;
+        const drafts = currentSuggestionDrafts();
+        drafts.forEach((row) => {
+          row.needsRender = true;
+        });
+        finishedProcessing();
+        drafts.forEach((row) => {
+          row.needsRender = false;
+        });
+        $("suggestion-panel").open = true;
+        renderSuggestionPanel();
+        $("auto-caption-status").textContent =
+          `表情未解析：${changed}件の汎用セリフを自動登録しました。既存のセリフは維持しています。${plan.warnings.join(" / ")} 全画像のセリフと文字配置を目視確認してください。`;
+        notify(
+          "汎用セリフを登録し、文字入り画像を生成しました。表情は解析していません。透過の目視確認は別途必要です。",
+        );
+      });
   function easyPlan() {
     if (window.StampEasy?.version !== EASY_VERSION)
       return {
