@@ -1,6 +1,7 @@
 (() => {
   "use strict";
-  const P = window.StampProject,
+  const T = window.StampTypography,
+    P = window.StampProject,
     C = window.StampCore,
     $ = (id) => document.getElementById(id);
   const state = {
@@ -20,6 +21,7 @@
     drawing = false,
     lastPoint = null,
     dragLine = null,
+    textDrag = null,
     nextId = 1;
   const stamps = () =>
     state.sources
@@ -957,6 +959,14 @@
       });
     const unreviewed = all.filter((s) => !s.reviewed).length,
       empty = rendered.flatMap((r, i) => (r.empty ? [all[i].slot] : [])),
+      overlaps = rendered.flatMap((r, i) =>
+        r.textOverlap ? [all[i].slot] : [],
+      ),
+      unsafe = rendered.flatMap((r, i) =>
+        r.textOverlap && T.resolve(all[i].caption, all[i].style).autoPlace
+          ? [all[i].slot]
+          : [],
+      ),
       clipped = rendered.flatMap((r, i) =>
         r.textClipped ? [all[i].slot] : [],
       );
@@ -973,6 +983,8 @@
       unreviewed,
       empty,
       clipped,
+      overlaps,
+      unsafe,
       stale,
       complete:
         all.length === state.target &&
@@ -1020,6 +1032,11 @@
       item(
         `文字が枠からはみ出します：${v.clipped.join(", ")}番（文字を小さくする・位置を調整）`,
         "error",
+      );
+    if (v.overlaps.length)
+      item(
+        `文字とキャラクターの重なり：${v.overlaps.join(", ")}番。自動配置または位置を調整してください。`,
+        v.unsafe.length ? "error" : "warning",
       );
     item("1画像1MB以下・ZIP 20MB以下を保存時に検査", "pending");
     $("download-button").textContent = v.complete
@@ -1098,17 +1115,7 @@
     $("dialog-title").textContent =
       `スタンプ ${String(stamp.slot).padStart(2, "0")} を編集`;
     $("caption-text").value = stamp.caption;
-    $("font-family").value = stamp.style.font;
-    $("text-color").value = stamp.style.color;
-    $("text-outline").checked = stamp.style.outline;
-    for (const [id, key] of [
-      ["font-size", "size"],
-      ["text-x", "x"],
-      ["text-y", "y"],
-    ]) {
-      $(id).value = stamp.style[key];
-      $(`${id}-value`).textContent = stamp.style[key];
-    }
+    syncCaptionControls();
     $("reviewed-checkbox").checked = stamp.reviewed;
     document
       .querySelectorAll("[data-brush]")
@@ -1123,7 +1130,15 @@
   }
   function drawEditor() {
     if (selected()) {
-      C.renderStamp(selected(), $("edit-canvas"));
+      const rendered = C.renderStamp(selected(), $("edit-canvas"));
+      const plan = rendered.textPlan;
+      $("text-placement-status").textContent = !plan
+        ? "セリフを入れるとデザインと配置をプレビューします。"
+        : rendered.textClipped
+          ? "文字が枠に収まりません。セリフを短くするか、文字を小さくしてください。"
+          : rendered.textOverlap
+            ? "キャラクターと文字が重なっています。自動配置をONにするか、位置を調整してください。"
+            : `${plan.style.autoPlace ? "重ならない場所に配置しました。" : "手動配置：重なりなし。"}${plan.autoScaled ? "キャラクターを縮小して余白を確保しました。" : ""}${plan.fontReduced ? `文字を${rendered.effectiveFontSize}pxに調整しました。` : ""}`;
       if ($("comparison-panel").open)
         C.renderStamp(selected(), $("after-canvas"));
       $("undo-brush").disabled = !selected().undo.length;
@@ -1199,44 +1214,139 @@
     $("edit-preview").className = `edit-preview ${$("edit-background").value}`;
     $("comparison-panel").dataset.background = $("edit-background").value;
   };
-  for (const id of [
-    "caption-text",
-    "font-family",
-    "font-size",
-    "text-x",
-    "text-y",
-    "text-color",
-    "text-outline",
-  ])
+  function syncCaptionControls() {
+    const stamp = selected(),
+      style = T.resolve(stamp.caption, stamp.style);
+    $("font-family").value = style.font;
+    $("text-color").value = style.color;
+    $("text-outline").checked = style.outline;
+    $("text-preset").value = stamp.style.preset || "manual";
+    $("text-auto-place").checked = style.autoPlace;
+    $("preset-suggestion").textContent =
+      `おすすめ：${T.PRESETS[T.suggest(stamp.caption)].label}（セリフの言葉から端末内で提案）`;
+    for (const [id, key] of [
+      ["font-size", "size"],
+      ["text-x", "x"],
+      ["text-y", "y"],
+      ["text-outline-width", "outlineWidth"],
+      ["text-shadow", "shadow"],
+      ["text-angle", "angle"],
+    ]) {
+      $(id).value = style[key];
+      $(`${id}-value`).textContent = style[key];
+    }
+  }
+  for (const [id, key] of [
+    ["font-family", "font"],
+    ["font-size", "size"],
+    ["text-x", "x"],
+    ["text-y", "y"],
+    ["text-color", "color"],
+    ["text-outline", "outline"],
+    ["text-outline-width", "outlineWidth"],
+    ["text-shadow", "shadow"],
+    ["text-angle", "angle"],
+  ]) {
     $(id).addEventListener("input", () => {
       const stamp = selected();
-      if (!stamp) return;
-      stamp.caption = $("caption-text").value;
+      const value =
+        key === "outline"
+          ? $(id).checked
+          : ["font", "color"].includes(key)
+            ? $(id).value
+            : Number($(id).value);
       stamp.style = {
-        font: $("font-family").value,
-        size: Number($("font-size").value),
-        x: Number($("text-x").value),
-        y: Number($("text-y").value),
-        color: $("text-color").value,
-        outline: $("text-outline").checked,
+        ...stamp.style,
+        [key]: value,
+        overrides: [
+          ...new Set([
+            ...(stamp.style.overrides || []),
+            ...(T.OVERRIDES.includes(key) ? [key] : []),
+          ]),
+        ],
       };
-      for (const name of ["font-size", "text-x", "text-y"])
-        $(`${name}-value`).textContent = $(name).value;
-      invalidate();
-      drawEditor();
+      syncCaptionControls();
+      changedImage();
     });
+  }
+  $("caption-text").oninput = () => {
+    selected().caption = $("caption-text").value;
+    syncCaptionControls();
+    changedImage();
+  };
+  $("text-preset").onchange = () => {
+    const stamp = selected(),
+      key = $("text-preset").value;
+    stamp.style =
+      key === "manual"
+        ? {
+            ...T.resolve(stamp.caption, stamp.style),
+            preset: "manual",
+            overrides: [],
+            autoPlace: false,
+          }
+        : T.presetStyle(key, stamp.caption);
+    syncCaptionControls();
+    changedImage();
+  };
+  $("text-auto-place").onchange = () => {
+    selected().style.autoPlace = $("text-auto-place").checked;
+    syncCaptionControls();
+    changedImage();
+  };
+  $("auto-place-text").onclick = () => {
+    selected().style = { ...selected().style, autoPlace: true };
+    syncCaptionControls();
+    changedImage();
+  };
+  $("apply-design-all").onclick = () => {
+    if (
+      !confirm(
+        "全40番号の文字デザインと配置を変更します。個別の文字調整は上書きします。よろしいですか？",
+      )
+    )
+      return;
+    const key = $("batch-design").value;
+    state.slots.forEach((slot) => {
+      slot.style = T.presetStyle(key, slot.caption);
+    });
+    stamps().forEach((stamp) => {
+      stamp.style = { ...state.slots[stamp.slot - 1].style };
+      stamp.reviewed = false;
+    });
+    invalidate();
+    renderResults();
+    notify(
+      "全番号にデザインと自動配置を適用しました。仕上がりを一覧で確認してください。",
+    );
+  };
   $("reviewed-checkbox").onchange = () => {
     selected().reviewed = $("reviewed-checkbox").checked;
     invalidate();
   };
   $("apply-style-all").onclick = () => {
+    if (
+      !confirm(
+        "全40番号にこの文字の見た目・位置を適用します。個別設定を上書きしてよろしいですか？",
+      )
+    )
+      return;
     const style = { ...selected().style };
-    stamps().forEach((stamp) => {
-      stamp.style = { ...style };
+    state.slots.forEach((slot) => {
+      slot.style = { ...style, overrides: style.overrides?.slice() || [] };
     });
+    stamps().forEach((stamp) => {
+      stamp.style = { ...style, overrides: style.overrides?.slice() || [] };
+      stamp.reviewed = false;
+    });
+    $("reviewed-checkbox").checked = false;
     invalidate();
     drawEditor();
-    notify("文字のフォント・サイズ・位置・色を全スタンプに適用しました。");
+    notify(
+      T.resolve(selected().caption, style).autoPlace
+        ? "全40番号に文字デザインを適用しました。セリフごとの配置は自動で調整します。"
+        : "全40番号に手動の文字設定を適用しました。位置と重なりを確認してください。",
+    );
   };
   $("save-edit").onclick = () => {
     if (!$("reviewed-checkbox").checked) {
@@ -1265,7 +1375,11 @@
         .querySelectorAll("[data-brush]")
         .forEach((b) => b.classList.toggle("selected", b === button));
       $("edit-canvas").style.cursor =
-        state.brush === "none" ? "default" : "crosshair";
+        state.brush === "none"
+          ? "default"
+          : state.brush === "text"
+            ? "grab"
+            : "crosshair";
     };
   $("brush-size").oninput = () => {
     $("brush-value").textContent = $("brush-size").value;
@@ -1292,7 +1406,31 @@
     );
   }
   $("edit-canvas").onpointerdown = (e) => {
-    if (state.brush === "none" || drawing || !e.isPrimary) return;
+    if (drawing || !e.isPrimary) return;
+    const point = brushPoint(e),
+      plan = selected().renderTextPlan;
+    const hitsText =
+      plan &&
+      point.x >= plan.x &&
+      point.x <= plan.x + plan.width &&
+      point.y >= plan.y &&
+      point.y <= plan.y + plan.height;
+    if (state.brush === "text" || (state.brush === "none" && hitsText)) {
+      if (!plan) return;
+      e.preventDefault();
+      drawing = true;
+      textDrag = {
+        start: point,
+        x: (plan.centerX / 370) * 100,
+        y: (plan.centerY / 320) * 100,
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      selected().reviewed = false;
+      $("reviewed-checkbox").checked = false;
+      invalidate();
+      return;
+    }
+    if (state.brush === "none") return;
     e.preventDefault();
     drawing = true;
     snapshot(selected());
@@ -1309,6 +1447,22 @@
   $("edit-canvas").onpointermove = (e) => {
     if (!drawing) return;
     e.preventDefault();
+    if (textDrag) {
+      const point = brushPoint(e),
+        stamp = selected();
+      stamp.style.x = Math.max(
+        10,
+        Math.min(90, textDrag.x + ((point.x - textDrag.start.x) / 370) * 100),
+      );
+      stamp.style.y = Math.max(
+        10,
+        Math.min(90, textDrag.y + ((point.y - textDrag.start.y) / 320) * 100),
+      );
+      syncCaptionControls();
+      invalidate();
+      drawEditor();
+      return;
+    }
     const p = brushPoint(e),
       dx = p.x - lastPoint.x,
       dy = p.y - lastPoint.y,
@@ -1321,6 +1475,7 @@
   function endPaint() {
     const wasDrawing = drawing;
     drawing = false;
+    textDrag = null;
     lastPoint = null;
     if (selected()) delete selected().activePlacement;
     if (wasDrawing) drawEditor();
@@ -1367,9 +1522,13 @@
     task(async () => {
       const stamp = selected(),
         result = C.renderStamp(stamp);
-      if (result.empty || result.textClipped)
+      if (
+        result.empty ||
+        result.textClipped ||
+        (result.textOverlap && T.resolve(stamp.caption, stamp.style).autoPlace)
+      )
         throw new Error(
-          "空の画像または文字のはみ出しがあります。調整してください。",
+          "空画像・文字のはみ出し・自動配置の重なりがあります。調整してください。",
         );
       const blob = await C.pngBlob(result.canvas),
         url = URL.createObjectURL(blob);
@@ -1383,9 +1542,9 @@
         throw new Error(
           `元画像${v.stale.join(", ")}の分割・透過設定が変更されています。分割し直してから保存してください。`,
         );
-      if (v.empty.length || v.clipped.length)
+      if (v.empty.length || v.clipped.length || v.unsafe.length)
         throw new Error(
-          "空の画像または文字のはみ出しがあります。申請前チェックの番号を修正してください。",
+          "空画像・文字のはみ出し・自動配置の重なりがあります。申請前チェックの番号を修正してください。",
         );
       if (v.complete && v.unreviewed)
         throw new Error(

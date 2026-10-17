@@ -340,7 +340,9 @@ const artifacts =
     await page.waitForFunction(() => !document.body.classList.contains("busy"));
     assert.match(await page.locator("#status").innerText(), /40個の透過/);
     await page.locator(".stamp-card").first().click();
-    // Oversized text must be detected and not silently exported with clipping.
+    // Manual oversized text must still be rejected; automatic layout may shrink valid text.
+    await page.uncheck("#text-auto-place");
+    await page.locator("#font-size").fill("64");
     await page.fill("#caption-text", "とても長いセリフ".repeat(12));
     await page.click("#close-dialog");
     await page.waitForFunction(() =>
@@ -354,6 +356,8 @@ const artifacts =
     );
     await page.locator(".stamp-card").first().click();
     await page.fill("#caption-text", "ありがとう");
+    await page.locator("#font-size").fill("32");
+    await page.check("#text-auto-place");
     await page.click("#apply-style-all");
     await page.click("#close-dialog");
     await page.locator(".stamp-card").nth(39).click();

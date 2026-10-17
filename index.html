@@ -22,6 +22,7 @@
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="core.js" defer></script>
+    <script src="typography.js" defer></script>
     <script src="project.js" defer></script>
     <script src="app.js" defer></script>
   </head>
@@ -123,6 +124,23 @@
             <summary>番号ごとのセリフを確認・修正</summary>
             <div id="caption-list" class="caption-list"></div>
           </details>
+          <div class="design-batch">
+            <label for="batch-design">文字デザインをまとめて作成</label
+            ><select id="batch-design">
+              <option value="auto">セリフから自動提案</option>
+              <option value="energetic">元気</option>
+              <option value="pop">ポップ</option>
+              <option value="cute">かわいい</option>
+              <option value="gentle">やさしい</option>
+              <option value="emphasis">強調</option>
+              <option value="simple">シンプル</option></select
+            ><button id="apply-design-all" class="button secondary wide">
+              全番号に文字デザイン・自動配置を適用
+            </button>
+            <p class="hint">
+              最大40個に対応。個別の文字調整は上書きします。文字のない番号には合成せず、後からセリフを登録できます。
+            </p>
+          </div>
           <div class="project-actions">
             <button id="save-project" class="button secondary">
               セリフ・加工設定をJSON保存 ↓</button
@@ -509,14 +527,16 @@
             </select></label
           >
           <fieldset>
-            <legend>透過の手動修正</legend>
+            <legend>透過の修正・文字の移動</legend>
             <div class="brush-modes">
               <button class="button secondary selected" data-brush="none">
                 見る</button
               ><button class="button secondary" data-brush="restore">
                 元の色を戻す</button
               ><button class="button secondary" data-brush="erase">
-                消しゴム
+                消しゴム</button
+              ><button class="button secondary" data-brush="text">
+                文字を移動
               </button>
             </div>
             <label for="brush-size"
@@ -581,8 +601,37 @@
             rows="2"
             maxlength="120"
             placeholder="例：ありがとう！"
-          ></textarea
-          ><label for="font-family">フォント</label
+          ></textarea>
+          <fieldset class="typography-controls">
+            <legend>文字デザイン自動作成</legend>
+            <label for="text-preset">デザインプリセット</label
+            ><select id="text-preset">
+              <option value="auto">セリフから自動提案</option>
+              <option value="energetic">元気</option>
+              <option value="pop">ポップ</option>
+              <option value="cute">かわいい</option>
+              <option value="gentle">やさしい</option>
+              <option value="emphasis">強調</option>
+              <option value="simple">シンプル</option>
+              <option value="manual">カスタム（従来の設定）</option>
+            </select>
+            <p class="hint" id="preset-suggestion"></p>
+            <label class="check-label"
+              ><input
+                type="checkbox"
+                id="text-auto-place"
+                checked
+              />キャラクターを避けて自動配置する</label
+            >
+            <button class="button secondary wide" id="auto-place-text">
+              重ならない場所に配置し直す
+            </button>
+            <p class="hint" id="text-placement-status" role="status"></p>
+            <p class="hint">
+              余白が足りない場合はキャラクターを自動縮小します。文字を直接ドラッグ、または「文字を移動」で移動できます。自動配置ONでは重なりを避けて補正します。
+            </p>
+          </fieldset>
+          <label for="font-family">フォント</label
           ><select id="font-family">
             <option value="sans">ゴシック</option>
             <option value="serif">明朝</option>
@@ -613,7 +662,25 @@
               id="text-outline"
               checked
             />白いふちを付ける</label
-          ><button class="button secondary wide" id="apply-style-all">
+          >
+          <label for="text-outline-width"
+            >白フチの太さ
+            <output id="text-outline-width-value">5</output> px</label
+          ><input
+            id="text-outline-width"
+            type="range"
+            min="0"
+            max="12"
+            step="0.5"
+            value="5"
+          />
+          <label for="text-shadow"
+            >影の強さ <output id="text-shadow-value">0</output></label
+          ><input id="text-shadow" type="range" min="0" max="12" value="0" />
+          <label for="text-angle"
+            >文字の角度 <output id="text-angle-value">0</output> °</label
+          ><input id="text-angle" type="range" min="-30" max="30" value="0" />
+          <button class="button secondary wide" id="apply-style-all">
             文字の見た目を全スタンプに適用
           </button>
           <div class="review-box">
