@@ -66,7 +66,28 @@
         $("status").hidden = true;
       }, 6500);
   }
+  let bulkAudit = null;
+  function syncBulkControls() {
+    const valid = bulkAudit && bulkAudit.complete && !bulkAudit.errors;
+    $("bulk-visual").disabled = !valid;
+    $("bulk-confirm").disabled = !valid || !$("bulk-visual").checked;
+  }
+  function resetBulkAudit() {
+    bulkAudit = null;
+    $("bulk-visual").checked = false;
+    $("bulk-visual").disabled = true;
+    $("bulk-confirm").disabled = true;
+    $("bulk-results")
+      .querySelectorAll("canvas")
+      .forEach((canvas) => {
+        canvas.width = canvas.height = 1;
+      });
+    $("bulk-results").replaceChildren();
+    $("bulk-summary").textContent =
+      "設定または画像が変更されました。一括検査を実行してください。";
+  }
   function invalidate() {
+    resetBulkAudit();
     captureSlots();
     state.dirty = true;
     if (state.zipURL) {
@@ -102,6 +123,7 @@
         button.disabled = false;
       });
       $("file-input").disabled = false;
+      syncBulkControls();
     }
   }
   const frame = () =>
@@ -954,6 +976,150 @@
     };
   $("preview-background").onchange = () => {
     $("stamp-grid").className = `stamp-grid ${$("preview-background").value}`;
+    $("bulk-results").className =
+      `bulk-results ${$("preview-background").value}`;
+  };
+  // Inspection is read-only and uses the exact final PNG renderer used by ZIP.
+  $("bulk-inspect").onclick = () =>
+    task(async () => {
+      resetBulkAudit();
+      const all = stamps(),
+        rows = [],
+        list = $("bulk-results");
+      for (const entry of [
+        ...Array.from({ length: state.target }, (_, i) => ({
+          stamp: all.find((stamp) => stamp.slot === i + 1),
+          name: `${String(i + 1).padStart(2, "0")}.png`,
+          width: 370,
+          height: 320,
+        })),
+        {
+          stamp: all.find((s) => s.slot === state.main),
+          name: "main.png",
+          width: 240,
+          height: 240,
+        },
+        {
+          stamp: all.find((s) => s.slot === state.tab),
+          name: "tab.png",
+          width: 96,
+          height: 74,
+        },
+      ]) {
+        await frame();
+        const { stamp, name, width, height } = entry;
+        const card = document.createElement("article");
+        card.className = "bulk-result";
+        card.dataset.name = name;
+        const heading = document.createElement("h4");
+        const reasons = document.createElement("p");
+        card.append(heading);
+        let report;
+        if (!stamp)
+          report = {
+            status: "エラー",
+            errors: ["対応するスタンプが未加工です"],
+            warnings: [],
+          };
+        else {
+          const rendered = C.renderStamp(stamp);
+          const finalScan = inspectFinal(rendered);
+          const output =
+            name === "main.png" || name === "tab.png"
+              ? C.specialImage(stamp, width, height)
+              : rendered.canvas;
+          const blob = await C.pngBlob(output);
+          const image = output
+            .getContext("2d")
+            .getImageData(0, 0, width, height);
+          const source = state.sources.find((source) =>
+            source.stamps.includes(stamp),
+          );
+          report = window.StampAudit.inspect(image, blob.size, width, height, {
+            residues:
+              output === rendered.canvas
+                ? finalScan.candidates.length
+                : R.inspectFinal(image).candidates.length,
+            stale: source.processSignature !== signature(source),
+            textClipped: rendered.textClipped,
+            textOverlap: rendered.textOverlap,
+            unsafe:
+              rendered.textOverlap &&
+              T.resolve(stamp.caption, stamp.style).autoPlace,
+          });
+          const preview = C.canvas(width, height);
+          preview.className = $("preview-background").value;
+          preview.getContext("2d").drawImage(output, 0, 0);
+          preview.setAttribute("aria-label", `${name} 完成PNG`);
+          card.append(preview);
+          const metrics = document.createElement("p");
+          metrics.textContent = `${width}×${height}px · PNG / RGBA · ${(blob.size / 1024).toFixed(1)}KB · 透明 ${report.transparent}px · 半透明 ${report.partial}px`;
+          card.append(metrics);
+          output.width = output.height = 1;
+          rendered.canvas.width = rendered.canvas.height = 1;
+        }
+        card.dataset.status = report.status;
+        heading.textContent = `${name}：${report.status}`;
+        reasons.textContent =
+          [...report.errors, ...report.warnings].join(" / ") ||
+          "サイズ・RGBA透過・余白・容量・残留候補の検査に合格（目視確認は別途必要です）";
+        card.append(reasons);
+        if (stamp) {
+          const edit = document.createElement("button");
+          edit.className = "button secondary wide";
+          edit.textContent = `${name}の元スタンプを個別編集`;
+          edit.onclick = () => {
+            if (!state.busy) openEditor(stamps().indexOf(stamp));
+          };
+          card.append(edit);
+        }
+        list.append(card);
+        rows.push({ ...entry, report });
+      }
+      const complete =
+        all.length === state.target &&
+        Array.from({ length: state.target }, (_, i) => i + 1).every((slot) =>
+          all.some((stamp) => stamp.slot === slot),
+        );
+      const errors = rows.filter(
+        (row) => row.report.status === "エラー",
+      ).length;
+      const warnings = rows.filter(
+        (row) => row.report.status === "要確認",
+      ).length;
+      bulkAudit = { rows, complete, errors };
+      $("bulk-summary").textContent =
+        `${rows.length}画像：正常 ${rows.length - errors - warnings}・要確認 ${warnings}・エラー ${errors}。` +
+        (complete
+          ? "一覧を目視確認してください。"
+          : `未加工の番号があります（${all.length}/${state.target}個）。全数を加工してから再検査してください。`);
+      syncBulkControls();
+    });
+  $("bulk-visual").onchange = () => {
+    $("bulk-confirm").disabled =
+      !$("bulk-visual").checked ||
+      !bulkAudit ||
+      !bulkAudit.complete ||
+      !!bulkAudit.errors;
+  };
+  $("bulk-confirm").onclick = () => {
+    if (
+      state.busy ||
+      !bulkAudit ||
+      !bulkAudit.complete ||
+      bulkAudit.errors ||
+      !$("bulk-visual").checked
+    )
+      return;
+    const all = stamps();
+    all.forEach((stamp) => {
+      stamp.reviewed = true;
+    });
+    invalidate();
+    renderResults();
+    $("bulk-summary").textContent =
+      `全${all.length}個とメイン・タブの目視確認を保存しました。既存のZIP保存ボタンを利用できます。`;
+    notify("すべて確認済みにしました。画像やセリフは変更していません。");
   };
   function validation() {
     const all = stamps(),
@@ -1889,7 +2055,7 @@
         );
       if (v.complete && v.unreviewed)
         throw new Error(
-          `申請用ZIPを作る前に、あと${v.unreviewed}個の透過を編集画面で確認してください。`,
+          `申請用ZIPを作る前に、あと${v.unreviewed}個の透過を個別または一覧で目視確認してください。`,
         );
       if (
         !v.all.some((stamp) => stamp.slot === state.main) ||

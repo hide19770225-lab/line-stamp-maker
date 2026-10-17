@@ -1815,3 +1815,58 @@ body.modal-open {
 .dialog-content.auto-cleanup-inspecting .edit-preview {
   position: static;
 }
+
+.bulk-review {
+  margin-top: 24px;
+}
+.bulk-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.bulk-result {
+  padding: 12px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 12px;
+  background: var(--paper, #fff);
+  color: #28382d;
+  overflow-wrap: anywhere;
+}
+.bulk-result canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.bulk-result .button {
+  min-height: 44px;
+}
+.bulk-result[data-status="エラー"] {
+  border-color: #b13838;
+}
+.bulk-result[data-status="要確認"] {
+  border-color: #9c721c;
+}
+.bulk-result p {
+  font-size: 14px;
+}
+.bulk-results.checker canvas {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #e8ece6 25%, transparent 25%),
+    linear-gradient(-45deg, #e8ece6 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e8ece6 75%),
+    linear-gradient(-45deg, transparent 75%, #e8ece6 75%);
+  background-size: 14px 14px;
+  background-position:
+    0 0,
+    0 7px,
+    7px -7px,
+    -7px 0;
+}
+.bulk-results.dark canvas {
+  background: #35463e;
+}
+.bulk-results.pink canvas {
+  background: #e9bdc6;
+}
