@@ -1195,9 +1195,9 @@
       mask: stamp.mask,
       key,
       revision,
-      count: scan.candidates.length,
+      count: scan.candidates.filter((c) => !c.protected).length,
     };
-    return scan.candidates.length;
+    return scan.candidates.filter((c) => !c.protected).length;
   }
   function updateResidueInspector(rendered) {
     const stamp = selected();
@@ -1230,13 +1230,14 @@
           checkbox = document.createElement("input"),
           button = document.createElement("button");
         checkbox.type = "checkbox";
+        checkbox.disabled = !!component.protected;
         checkbox.value = component.id;
         checkbox.dataset.residueId = component.id;
         checkbox.onchange = drawResidueOverlay;
         label.className = "check-label";
         label.append(
           checkbox,
-          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""}`,
+          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""} · 左${component.x}／上${component.y}px · 不透明度${component.alphaMin}〜${component.alphaMax}/255${component.protected ? "・装飾候補として保護" : ""}`,
         );
         button.className = "button secondary";
         button.textContent = "拡大";
@@ -1246,7 +1247,7 @@
         $("residue-candidates").append(row);
       });
       $("residue-status").textContent = scan.candidates.length
-        ? `${scan.candidates.length}件の候補。元の切り抜き画像に残っている前景です。輪郭から離れたものも確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
+        ? `${scan.candidates.filter((c) => !c.protected).length}件の削除候補、${scan.candidates.filter((c) => c.protected).length}件の装飾候補を保護。元の切り抜き画像に残っている前景です。輪郭から離れたものも確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
         : "孤立した線・点の候補は見つかりませんでした。検出で全ての不要部分を判断できるわけではありません。完成画像も目視で確認してください。";
     }
     if (!drawing) {
@@ -1284,7 +1285,11 @@
       const p = residuePlacement,
         x = p.offsetX + component.x * p.ratio,
         y = p.offsetY + component.y * p.ratio;
-      ctx.strokeStyle = selectedIds.has(component.id) ? "#f25454" : "#e7a32f";
+      ctx.strokeStyle = component.protected
+        ? "#588c72"
+        : selectedIds.has(component.id)
+          ? "#f25454"
+          : "#e7a32f";
       ctx.lineWidth = 1;
       ctx.strokeRect(
         x - 2,

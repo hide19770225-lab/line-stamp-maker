@@ -27,13 +27,17 @@
           right = x,
           top = y,
           bottom = y,
-          white = 0;
+          white = 0,
+          alphaMin = 255,
+          alphaMax = 0;
         queue[tail++] = index;
         visited[index] = id;
         while (head < tail) {
           const i = queue[head++],
             px = i % width,
             py = Math.floor(i / width);
+          alphaMin = Math.min(alphaMin, mask[i]);
+          alphaMax = Math.max(alphaMax, mask[i]);
           left = Math.min(left, px);
           right = Math.max(right, px);
           top = Math.min(top, py);
@@ -66,6 +70,8 @@
           width: right - left + 1,
           height: bottom - top + 1,
           whiteFraction: white / tail,
+          alphaMin,
+          alphaMax,
           touchesEdge:
             left === rect.x ||
             right === xEnd - 1 ||
@@ -173,6 +179,15 @@
               c.width <= Math.max(3, width * 0.015) &&
               c.height / c.width >= 4);
           const tiny = c.area <= Math.max(4, main.area * 0.015);
+          // Compact detached shapes can be hearts, leaves or baked-in glyphs.
+          // Keep them visible for inspection but prohibit component deletion.
+          c.protected =
+            !thin &&
+            !c.touchesEdge &&
+            c.width >= 5 &&
+            c.height >= 5 &&
+            c.area >= 25;
+          c.kind = thin ? "line" : "fragment";
           return (
             (outside || (c.exterior && !c.nearMain)) &&
             (thin || tiny || (c.touchesEdge && c.area <= main.area * 0.1)) &&
@@ -201,7 +216,9 @@
       throw new Error(
         "画像が変更されています。候補を再検出してから選択してください。",
       );
-    const allowed = new Set(scan.candidates.map((c) => c.id)),
+    const allowed = new Set(
+        scan.candidates.filter((c) => !c.protected).map((c) => c.id),
+      ),
       selected = new Set(ids);
     if ([...selected].some((id) => !allowed.has(id)))
       throw new Error("選択した削除候補が正しくありません。");
@@ -231,7 +248,9 @@
         if (protectedAlpha[i] && scan.labels[i])
           protectedIds.add(scan.labels[i]);
     return {
-      candidates: scan.candidates.filter((c) => !protectedIds.has(c.id)),
+      candidates: scan.candidates.filter(
+        (c) => !c.protected && !protectedIds.has(c.id),
+      ),
       protectedIds: [...protectedIds],
     };
   }
