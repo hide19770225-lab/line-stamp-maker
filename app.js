@@ -1,6 +1,7 @@
 (() => {
   "use strict";
-  const T = window.StampTypography,
+  const R = window.StampResidue,
+    T = window.StampTypography,
     P = window.StampProject,
     C = window.StampCore,
     $ = (id) => document.getElementById(id);
@@ -22,6 +23,8 @@
     lastPoint = null,
     dragLine = null,
     textDrag = null,
+    residueScan = null,
+    residuePlacement = null,
     nextId = 1;
   const stamps = () =>
     state.sources
@@ -967,6 +970,9 @@
           ? [all[i].slot]
           : [],
       ),
+      residueSlots = all.flatMap((stamp) =>
+        residueSummary(stamp) ? [stamp.slot] : [],
+      ),
       clipped = rendered.flatMap((r, i) =>
         r.textClipped ? [all[i].slot] : [],
       );
@@ -984,6 +990,7 @@
       empty,
       clipped,
       overlaps,
+      residueSlots,
       unsafe,
       stale,
       complete:
@@ -1037,6 +1044,11 @@
       item(
         `文字とキャラクターの重なり：${v.overlaps.join(", ")}番。自動配置または位置を調整してください。`,
         v.unsafe.length ? "error" : "warning",
+      );
+    if (v.residueSlots.length)
+      item(
+        `孤立した線・点の候補：${v.residueSlots.join(", ")}番。装飾の可能性もあるため、編集画面で拡大確認してください（自動削除しません）。`,
+        "warning",
       );
     item("1画像1MB以下・ZIP 20MB以下を保存時に検査", "pending");
     $("download-button").textContent = v.complete
@@ -1106,6 +1118,7 @@
   }
   function openEditor(index) {
     state.selectedStamp = index;
+    residueScan = null;
     const stamp = selected();
     state.brush = "none";
     $("edit-canvas").style.cursor = "default";
@@ -1141,10 +1154,174 @@
             : `${plan.style.autoPlace ? "重ならない場所に配置しました。" : "手動配置：重なりなし。"}${plan.autoScaled ? "キャラクターを縮小して余白を確保しました。" : ""}${plan.fontReduced ? `文字を${rendered.effectiveFontSize}pxに調整しました。` : ""}`;
       if ($("comparison-panel").open)
         C.renderStamp(selected(), $("after-canvas"));
+      if ($("residue-panel").open) updateResidueInspector(rendered);
       $("undo-brush").disabled = !selected().undo.length;
       $("redo-brush").disabled = !selected().redo.length;
     }
   }
+  function residueSummary(stamp) {
+    const key = JSON.stringify(C.stampCrop(stamp)),
+      revision = stamp.residueRevision || 0,
+      cache = stamp.residueSummary;
+    if (
+      cache &&
+      cache.mask === stamp.mask &&
+      cache.key === key &&
+      cache.revision === revision
+    )
+      return cache.count;
+    const scan = R.analyse(stamp.original, stamp.mask, C.stampCrop(stamp));
+    stamp.residueSummary = {
+      mask: stamp.mask,
+      key,
+      revision,
+      count: scan.candidates.length,
+    };
+    return scan.candidates.length;
+  }
+  function updateResidueInspector(rendered) {
+    const stamp = selected();
+    if (!stamp) return;
+    const preview = $("residue-preview");
+    preview.getContext("2d").clearRect(0, 0, 370, 320);
+    preview.getContext("2d").drawImage(rendered.canvas, 0, 0);
+    residuePlacement = rendered.imagePlacement || C.imagePlacement(stamp);
+    const key = JSON.stringify(C.stampCrop(stamp)),
+      revision = stamp.residueRevision || 0;
+    if (
+      !drawing &&
+      (!residueScan ||
+        residueScan.stamp !== stamp ||
+        residueScan.mask !== stamp.mask ||
+        residueScan.key !== key ||
+        residueScan.revision !== revision)
+    ) {
+      const scan = R.analyse(
+        stamp.original,
+        stamp.mask,
+        C.stampCrop(stamp),
+        true,
+      );
+      residueScan = { stamp, mask: stamp.mask, key, revision, scan };
+      $("residue-candidates").replaceChildren();
+      scan.candidates.slice(0, 50).forEach((component, index) => {
+        const row = document.createElement("div"),
+          label = document.createElement("label"),
+          checkbox = document.createElement("input"),
+          button = document.createElement("button");
+        checkbox.type = "checkbox";
+        checkbox.value = component.id;
+        checkbox.dataset.residueId = component.id;
+        checkbox.onchange = drawResidueOverlay;
+        label.className = "check-label";
+        label.append(
+          checkbox,
+          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""}`,
+        );
+        button.className = "button secondary";
+        button.textContent = "拡大";
+        button.setAttribute("aria-label", `候補${index + 1}を拡大`);
+        button.onclick = () => focusResidue(component);
+        row.append(label, button);
+        $("residue-candidates").append(row);
+      });
+      $("residue-status").textContent = scan.candidates.length
+        ? `${scan.candidates.length}件の候補。元の切り抜き画像に残っている前景です。必要な装飾か確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
+        : "孤立した線・点の候補は見つかりませんでした。検出で全ての不要部分を判断できるわけではありません。完成画像も目視で確認してください。";
+    }
+    resizeResidueView();
+    drawResidueOverlay();
+  }
+  function resizeResidueView() {
+    const scale =
+      Math.min(1, ($("residue-viewport").clientWidth || 370) / 370) *
+      Number($("residue-zoom").value);
+    $("residue-stage").style.width = `${370 * scale}px`;
+    $("residue-stage").style.height = `${320 * scale}px`;
+  }
+  function drawResidueOverlay() {
+    const canvas = $("residue-overlay"),
+      ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, 370, 320);
+    if (!residueScan || !residuePlacement) return;
+    const selectedIds = new Set(
+      [...$("residue-candidates").querySelectorAll("input:checked")].map(
+        (input) => Number(input.value),
+      ),
+    );
+    residueScan.scan.candidates.slice(0, 50).forEach((component, index) => {
+      const p = residuePlacement,
+        x = p.offsetX + component.x * p.ratio,
+        y = p.offsetY + component.y * p.ratio;
+      ctx.strokeStyle = selectedIds.has(component.id) ? "#f25454" : "#e7a32f";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(
+        x - 2,
+        y - 2,
+        component.width * p.ratio + 4,
+        component.height * p.ratio + 4,
+      );
+      ctx.font = "10px sans-serif";
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fillText(String(index + 1), Math.max(1, x), Math.max(10, y - 4));
+    });
+  }
+  function focusResidue(component) {
+    $("residue-zoom").value = "4";
+    resizeResidueView();
+    const p = residuePlacement,
+      scale = $("residue-stage").getBoundingClientRect().width / 370,
+      viewport = $("residue-viewport");
+    viewport.scrollLeft =
+      (p.offsetX + (component.x + component.width / 2) * p.ratio) * scale -
+      viewport.clientWidth / 2;
+    viewport.scrollTop =
+      (p.offsetY + (component.y + component.height / 2) * p.ratio) * scale -
+      viewport.clientHeight / 2;
+  }
+  $("residue-panel").ontoggle = () => {
+    $("residue-panel")
+      .closest(".dialog-content")
+      .classList.toggle("residue-inspecting", $("residue-panel").open);
+    if ($("residue-panel").open) drawEditor();
+  };
+  $("residue-zoom").onchange = resizeResidueView;
+  $("residue-background").onchange = () => {
+    $("residue-viewport").dataset.background = $("residue-background").value;
+  };
+  $("scan-residue").onclick = () => {
+    residueScan = null;
+    drawEditor();
+  };
+  $("remove-residue").onclick = () => {
+    const ids = [
+      ...$("residue-candidates").querySelectorAll("input:checked"),
+    ].map((input) => Number(input.value));
+    if (!ids.length) {
+      notify("不要だと確認した候補だけにチェックを入れてください。", true);
+      return;
+    }
+    if (
+      !confirm(
+        "選択した候補だけを消します。手足・葉っぱ・白い部分・装飾ではないことを確認しましたか？",
+      )
+    )
+      return;
+    try {
+      const result = R.removeSelected(selected().mask, residueScan.scan, ids);
+      snapshot(selected());
+      selected().mask = result.mask;
+      residueScan = null;
+      changedImage();
+      notify(
+        `${result.removed}個の元画像ピクセルを削除しました。「1つ戻す」で取り消せます。`,
+      );
+    } catch (error) {
+      notify(error.message, true);
+      residueScan = null;
+      drawEditor();
+    }
+  };
   function syncLayoutControls() {
     const stamp = selected();
     for (const [id, key] of [
@@ -1397,6 +1574,7 @@
     };
   }
   function paint(x, y) {
+    selected().residueRevision = (selected().residueRevision || 0) + 1;
     C.applyBrush(
       selected(),
       x,

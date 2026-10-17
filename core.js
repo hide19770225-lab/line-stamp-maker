@@ -58,7 +58,13 @@
     const { data, width, height } = imageData;
     const mask = new Uint8ClampedArray(width * height);
     for (let i = 0; i < mask.length; i++) mask[i] = data[i * 4 + 3];
-    if (mode === "none") return mask;
+    // A transparent corner is evidence of an already-transparent source, not a white background.
+    const corners = [0, width - 1, (height - 1) * width, width * height - 1];
+    if (
+      mode === "none" ||
+      (mode === "auto" && corners.some((i) => data[i * 4 + 3] === 0))
+    )
+      return mask;
     const color =
       mode === "white"
         ? [255, 255, 255]
@@ -142,6 +148,13 @@
       ),
     };
   }
+  function isolateRect(image, rect) {
+    // First copy integer pixels at 1:1. drawImage(source, sx, sy, sw, sh, ...) can
+    // sample neighbouring pixels outside that source rectangle when interpolating.
+    const isolated = canvas(rect.width, rect.height);
+    isolated.getContext("2d").drawImage(image, -rect.x, -rect.y);
+    return isolated;
+  }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
@@ -151,17 +164,9 @@
       Math.max(1, Math.round(rect.height * scale)),
     );
     const ctx = crop.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(
-      source.image,
-      rect.x,
-      rect.y,
-      rect.width,
-      rect.height,
-      0,
-      0,
-      crop.width,
-      crop.height,
-    );
+    const isolated = isolateRect(source.image, rect);
+    ctx.drawImage(isolated, 0, 0, crop.width, crop.height);
+    isolated.width = isolated.height = 1;
     const original = ctx.getImageData(0, 0, crop.width, crop.height);
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
@@ -349,6 +354,14 @@
       data.data[i * 4 + 3] = stamp.mask[i];
     const layer = canvas(width, height);
     layer.getContext("2d").putImageData(data, 0, 0);
+    const selectedCrop = stampCrop(stamp);
+    const croppedLayer =
+      selectedCrop.x ||
+      selectedCrop.y ||
+      selectedCrop.width !== width ||
+      selectedCrop.height !== height
+        ? isolateRect(layer, selectedCrop)
+        : layer;
     if (root.StampTypography) {
       const T = root.StampTypography,
         base = baseImagePlacement(stamp);
@@ -361,11 +374,11 @@
         context.rect(MARGIN, MARGIN, WIDTH - MARGIN * 2, HEIGHT - MARGIN * 2);
         context.clip();
         context.drawImage(
-          layer,
-          crop.x,
-          crop.y,
-          crop.width,
-          crop.height,
+          croppedLayer,
+          0,
+          0,
+          croppedLayer.width,
+          croppedLayer.height,
           p.offsetX + crop.x * p.ratio,
           p.offsetY + crop.y * p.ratio,
           crop.width * p.ratio,
@@ -408,6 +421,7 @@
         WIDTH,
         HEIGHT,
       );
+      if (croppedLayer !== layer) croppedLayer.width = croppedLayer.height = 1;
       layer.width = layer.height = art.width = art.height = 1;
       if (finalArt !== art) finalArt.width = finalArt.height = 1;
       return {
@@ -429,17 +443,18 @@
     ctx.rect(MARGIN, MARGIN, WIDTH - MARGIN * 2, HEIGHT - MARGIN * 2);
     ctx.clip();
     ctx.drawImage(
-      layer,
-      crop.x,
-      crop.y,
-      crop.width,
-      crop.height,
+      croppedLayer,
+      0,
+      0,
+      croppedLayer.width,
+      croppedLayer.height,
       p.offsetX + crop.x * p.ratio,
       p.offsetY + crop.y * p.ratio,
       crop.width * p.ratio,
       crop.height * p.ratio,
     );
     ctx.restore();
+    if (croppedLayer !== layer) croppedLayer.width = croppedLayer.height = 1;
     layer.width = layer.height = 1;
     let textClipped = false;
     if (stamp.caption.trim()) {
@@ -603,6 +618,7 @@
     floodMask,
     alphaBounds,
     createTile,
+    isolateRect,
     tileRect,
     stampCrop,
     maskBounds,

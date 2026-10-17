@@ -22,6 +22,7 @@
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="core.js" defer></script>
+    <script src="residue.js" defer></script>
     <script src="typography.js" defer></script>
     <script src="project.js" defer></script>
     <script src="app.js" defer></script>
@@ -503,6 +504,63 @@
               aria-label="透過・文字プレビュー。修正モードではドラッグで描けます。"
             ></canvas>
           </div>
+          <details id="residue-panel" class="residue-panel">
+            <summary>孤立した線・点を拡大確認する</summary>
+            <p class="hint">
+              候補には手足・葉っぱ・白い装飾が含まれることがあります。自動では削除しません。必要なものは選択せず残してください。検出は文字合成前の前景だけが対象です。
+            </p>
+            <div class="residue-toolbar">
+              <label
+                >背景<select id="residue-background">
+                  <option value="gray">グレー</option>
+                  <option value="black">黒</option>
+                  <option value="checker">チェック柄</option>
+                </select></label
+              ><label
+                >表示倍率<select id="residue-zoom">
+                  <option value="1">全体</option>
+                  <option value="2">2倍</option>
+                  <option value="4">4倍</option>
+                  <option value="8">8倍</option>
+                </select></label
+              >
+            </div>
+            <div
+              id="residue-viewport"
+              class="residue-viewport"
+              tabindex="0"
+              aria-label="完成PNG拡大ビュー。拡大時はスクロールできます。"
+            >
+              <div id="residue-stage" class="residue-stage">
+                <canvas
+                  id="residue-preview"
+                  width="370"
+                  height="320"
+                  aria-label="最終PNGと同じ完成画像"
+                ></canvas
+                ><canvas
+                  id="residue-overlay"
+                  width="370"
+                  height="320"
+                  aria-hidden="true"
+                ></canvas>
+              </div>
+            </div>
+            <p class="hint">
+              枠と番号は確認用です。PNGには出力しません。拡大後は指で上下左右へスクロールできます。
+            </p>
+            <p id="residue-status" class="hint" role="status"></p>
+            <div id="residue-candidates" class="residue-candidates"></div>
+            <button id="scan-residue" class="button secondary wide">
+              候補を再検出する
+            </button>
+            <button id="remove-residue" class="button secondary wide">
+              選択した候補だけ消す
+            </button>
+            <p class="hint">
+              取り消しは下の「1つ戻す」。候補がない場合も消しゴムで修正できます。表示した完成画像とZIPは同じ描画処理を使います。
+            </p>
+          </details>
           <details class="comparison" id="comparison-panel">
             <summary>編集前後を比較する</summary>
             <div class="comparison-grid">

@@ -1726,3 +1726,91 @@ body.modal-open {
 #text-placement-status {
   color: var(--green);
 }
+.residue-panel {
+  min-width: 0;
+  margin: 14px 0;
+  padding: 0 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f9fbf7;
+}
+.residue-panel summary {
+  min-height: 48px;
+  padding: 14px 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.residue-toolbar {
+  display: flex;
+  gap: 10px;
+}
+.residue-toolbar label {
+  flex: 1;
+  min-width: 0;
+}
+.residue-toolbar select {
+  margin: 5px 0 12px;
+}
+.residue-viewport {
+  width: 100%;
+  height: 260px;
+  overflow: auto;
+  background: #777;
+  border-radius: 8px;
+  border: 1px solid #aaa;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+.residue-viewport[data-background="black"] {
+  background: #000;
+}
+.residue-viewport[data-background="checker"] {
+  background: repeating-conic-gradient(#b5b5b5 0% 25%, #eee 0% 50%) 0 / 16px
+    16px;
+}
+.residue-stage {
+  position: relative;
+  width: 370px;
+  height: 320px;
+}
+.residue-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.residue-candidates > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.residue-candidates label {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+}
+.residue-candidates button {
+  flex-shrink: 0;
+  min-width: 60px;
+  padding: 8px;
+}
+#remove-residue {
+  margin-top: 10px;
+}
+@media (max-width: 600px) {
+  .residue-panel summary {
+    font-size: 13px;
+  }
+}
+
+/* Keep the dedicated magnifier visible instead of covering it with the sticky editor. */
+.dialog-content.residue-inspecting .edit-preview {
+  position: static;
+}
