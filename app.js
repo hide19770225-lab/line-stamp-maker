@@ -956,6 +956,7 @@
     const all = stamps(),
       rendered = all.map((stamp) => {
         const result = C.renderStamp(stamp);
+        result.finalResidueCount = inspectFinal(result).candidates.length;
         // Only keep inspection metadata; release temporary canvas memory on iPhone.
         result.canvas.width = result.canvas.height = 1;
         return result;
@@ -970,8 +971,10 @@
           ? [all[i].slot]
           : [],
       ),
-      residueSlots = all.flatMap((stamp) =>
-        residueSummary(stamp) ? [stamp.slot] : [],
+      residueSlots = all.flatMap((stamp, i) =>
+        residueSummary(stamp) || rendered[i].finalResidueCount
+          ? [stamp.slot]
+          : [],
       ),
       clipped = rendered.flatMap((r, i) =>
         r.textClipped ? [all[i].slot] : [],
@@ -1047,7 +1050,7 @@
       );
     if (v.residueSlots.length)
       item(
-        `孤立した線・点の候補：${v.residueSlots.join(", ")}番。装飾の可能性もあるため、編集画面で拡大確認してください（自動削除しません）。`,
+        `元画像／完成PNGの孤立した線・点の候補：${v.residueSlots.join(", ")}番。装飾の可能性もあるため、編集画面で拡大確認してください（自動削除しません）。`,
         "warning",
       );
     item("1画像1MB以下・ZIP 20MB以下を保存時に検査", "pending");
@@ -1159,6 +1162,23 @@
       $("redo-brush").disabled = !selected().redo.length;
     }
   }
+  function inspectFinal(rendered) {
+    const ctx = rendered.canvas.getContext("2d"),
+      image = ctx.getImageData(0, 0, 370, 320);
+    let coverage = null;
+    if (rendered.textPlan) {
+      const text = C.canvas(370, 320),
+        context = text.getContext("2d");
+      T.paintPlan(context, rendered.textPlan);
+      const rgba = context.getImageData(0, 0, 370, 320).data;
+      coverage = Uint8ClampedArray.from(
+        { length: 370 * 320 },
+        (_, i) => rgba[i * 4 + 3],
+      );
+      text.width = text.height = 1;
+    }
+    return R.inspectFinal(image, coverage);
+  }
   function residueSummary(stamp) {
     const key = JSON.stringify(C.stampCrop(stamp)),
       revision = stamp.residueRevision || 0,
@@ -1226,8 +1246,19 @@
         $("residue-candidates").append(row);
       });
       $("residue-status").textContent = scan.candidates.length
-        ? `${scan.candidates.length}件の候補。元の切り抜き画像に残っている前景です。必要な装飾か確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
+        ? `${scan.candidates.length}件の候補。元の切り抜き画像に残っている前景です。輪郭から離れたものも確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
         : "孤立した線・点の候補は見つかりませんでした。検出で全ての不要部分を判断できるわけではありません。完成画像も目視で確認してください。";
+    }
+    if (!drawing) {
+      const final = inspectFinal(rendered);
+      $("residue-output-status").textContent = final.candidates.length
+        ? `完成PNGの候補 ${final.candidates.length}件（文字・白フチ・影の成分は保護）。${final.candidates
+            .slice(0, 6)
+            .map((c) => `左${c.x}・上${c.y}px／${c.width}×${c.height}px`)
+            .join(
+              "、",
+            )}。下の元画像候補を選択して確認してください。一致する候補がない部分は消しゴムで修正できます。`
+        : "完成PNGの孤立候補は0件です（文字・白フチ・影の成分は保護）。検出は完全ではないため、拡大表示でも確認してください。";
     }
     resizeResidueView();
     drawResidueOverlay();
