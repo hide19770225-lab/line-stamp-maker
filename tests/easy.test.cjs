@@ -59,3 +59,22 @@ test("Japanese multiline captions preserve order and blank lines; limits validat
   assert.throws(() => E.captions("あ".repeat(121)));
   assert.equal(E.captions(Array(40).fill("ありがとう").join("\n")).length, 40);
 });
+test("ten-image preview accepts partial sources but production still requires all forty", () => {
+  const sources = [source(1, 1, 10)],
+    before = JSON.stringify(sources);
+  const preview = E.plan(sources, 40, { allowPartial: true });
+  assert.deepEqual(preview.errors, []);
+  assert(preview.warnings.some((s) => s.includes("不足")));
+  assert.equal(preview.missing.length, 30);
+  assert(E.plan(sources, 40).errors.some((s) => s.includes("不足")));
+  assert.equal(JSON.stringify(sources), before);
+});
+test("partial preview never accepts no sources, unavailable images, duplicates or invalid numbers", () => {
+  for (const sources of [
+    [],
+    [{ ...source(1, 1, 10), image: null }],
+    [source(1, 1, 10), source(1, 11, 10)],
+    [source(1, 1, 10), source(2, 1, 10)],
+  ])
+    assert(E.plan(sources, 40, { allowPartial: true }).errors.length > 0);
+});
