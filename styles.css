@@ -1928,3 +1928,30 @@ body.easy-mode:not(.easy-details-open) .workspace-grid {
   padding: 12px;
   overflow-wrap: anywhere;
 }
+
+.suggestion-panel {
+  margin: 18px 0;
+}
+.suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.suggestion-card {
+  min-width: 0;
+  border: 1px solid var(--line, #d8e2d6);
+  border-radius: 12px;
+  padding: 12px;
+}
+.suggestion-card canvas {
+  width: 100%;
+  height: auto;
+}
+.suggestion-card label {
+  display: block;
+  margin: 10px 0;
+}
+.suggestion-card .button {
+  min-height: 44px;
+}

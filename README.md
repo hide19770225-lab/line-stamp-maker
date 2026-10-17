@@ -220,3 +220,19 @@ python3 tests/verify_easy_zip.py /tmp/stamp-easy-results
 加工に失敗すると、工程・元画像名・PNG番号・具体的な原因を消えない欄へ表示します。③を押しても元のエラーは残ります。入力や元画像はそのまま②から再試行できます。古いJSの混在を検出した場合は、セリフのコピー・設定JSONの保存後に再読込してください。自動で入力を消すことはありません。詳細は [状態管理と実機確認の報告](docs/easy-processing-state.md) を参照してください。
 
 追加テスト：`NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/easy-state-browser.cjs`（ローカルサーバー起動後）。新規ブラウザテストはSafari互換のImage読込フォールバックと、意図的な分割・PNG検査エラーからの復旧も検証します。
+
+## 表情別のセリフ提案と20px自動レイアウト
+
+加工後の一覧で **表情を選んでセリフ提案・20px自動レイアウト** を開きます。画像ごとに表情を手動選択すると、短い日本語を端末内で提案します。画像からの感情判定は行わず、未分類は未分類のままです。個別の手入力・次の候補・重複警告に対応しています。
+
+一覧で内容を目視し、チェック後に **全セリフを承認し、変更した画像だけ生成** を押すと画像へ反映します。承認前は既存のセリフ・画像を変更しません。20px配置は初期選択で、文字・キャラクターの重なりを避け、長さに応じてサイズ・改行・位置を調整します。旧設定を勝手に20pxへ変更することはありません。個別編集にも20px設定を追加しています。
+
+承認後のセリフと20px設定はJSON保存できます。未承認の提案と表情選択は保存されません。セリフ承認と透過の目視確認は別操作です。10個でも試せますが、40個の申請用ZIPでは従来どおり全数の加工・目視確認が必要です。無料方式の比較、実装の制約、詳しい使用方法は [変更報告](docs/layout-caption-review.md) を参照してください。
+
+```sh
+node --test tests/*.test.cjs
+# ローカルサーバー起動後、既存のPlaywright設定で実行
+NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/suggestions-browser.cjs
+NODE_PATH=/tmp/stamp-browser-tests/node_modules node tests/safe-layout-browser.cjs
+python3 tests/verify_suggestions_zip.py /tmp/stamp-suggestion-results
+```
