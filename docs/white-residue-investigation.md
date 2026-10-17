@@ -1,5 +1,7 @@
 # 上端の白線：調査と回帰テスト
 
+この文書は実画像入手前の調査記録です。添付後の直接解析・修正結果は[実PNGの最新報告](real-png-line-investigation.md)を参照してください。
+
 続く検出漏れと49×1px／16×1pxの正確な再現については、[追加調査](exterior-horizontal-residue-investigation.md)を参照してください。
 
 ## 確認できた範囲
