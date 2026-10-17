@@ -1870,3 +1870,52 @@ body.modal-open {
 .bulk-results.pink canvas {
   background: #e9bdc6;
 }
+
+.mode-switch {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.easy-steps {
+  padding-left: 24px;
+  line-height: 2;
+}
+.easy-steps [aria-current="step"] {
+  color: var(--green);
+  font-weight: 700;
+}
+#easy-panel > label,
+#easy-panel > button,
+#easy-panel > textarea,
+#easy-panel > details {
+  margin-bottom: 14px;
+}
+.easy-style-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 0;
+}
+body.easy-mode .steps {
+  display: none;
+}
+body.easy-mode:not(.easy-details-open) .project-panel,
+body.easy-mode:not(.easy-details-open) .workspace-grid {
+  display: none;
+}
+#easy-progress.error {
+  color: #ac3434;
+}
+.mode-switch {
+  white-space: nowrap;
+}
+.mode-switch select {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.easy-steps {
+  list-style: none;
+  padding-left: 0;
+}

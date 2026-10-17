@@ -23,13 +23,14 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=bulk-review-1" />
-    <script src="core.js?v=bulk-review-1" defer></script>
-    <script src="residue.js?v=bulk-review-1" defer></script>
+    <link rel="stylesheet" href="styles.css?v=easy-batch-1" />
+    <script src="core.js?v=easy-batch-1" defer></script>
+    <script src="residue.js?v=easy-batch-1" defer></script>
     <script src="typography.js" defer></script>
-    <script src="project.js?v=bulk-review-1" defer></script>
-    <script src="audit.js?v=bulk-review-1" defer></script>
-    <script src="app.js?v=bulk-review-1" defer></script>
+    <script src="project.js?v=easy-batch-1" defer></script>
+    <script src="audit.js?v=easy-batch-1" defer></script>
+    <script src="easy.js?v=easy-batch-1" defer></script>
+    <script src="app.js?v=easy-batch-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -74,6 +75,149 @@
           </div>
           <span class="heading-art" aria-hidden="true">✳︎</span>
         </div>
+        <label class="mode-switch"
+          >制作モード<select id="production-mode">
+            <option value="normal">通常制作</option>
+            <option value="easy">かんたん一括制作</option>
+          </select></label
+        >
+        <section
+          id="easy-panel"
+          class="panel"
+          hidden
+          aria-labelledby="easy-title"
+        >
+          <h2 id="easy-title">かんたん一括制作</h2>
+          <ol
+            id="easy-steps"
+            class="easy-steps"
+            aria-label="かんたん制作の流れ"
+          >
+            <li aria-current="step">① 画像とセリフを読み込む</li>
+            <li>② 自動加工する</li>
+            <li>③ 一覧で確認・必要な箇所だけ修正</li>
+            <li>④ ZIPを保存する</li>
+          </ol>
+          <label
+            >制作枚数<select id="easy-target">
+              <option>8</option>
+              <option>16</option>
+              <option>24</option>
+              <option>32</option>
+              <option selected>40</option>
+            </select></label
+          >
+          <label class="button secondary wide project-file"
+            >10個入り画像をまとめて読み込む<input
+              id="easy-files"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+          /></label>
+          <p class="hint">
+            新規画像は2列×5段、最大4枚。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
+          </p>
+          <p id="easy-sources" class="hint"></p>
+          <ul
+            id="easy-warnings"
+            class="validation-list"
+            aria-live="polite"
+          ></ul>
+          <label for="easy-captions">セリフ（1行目＝01.png、最大40行）</label
+          ><textarea
+            id="easy-captions"
+            rows="6"
+            placeholder="ありがとう&#10;おはよう"
+          ></textarea>
+          <p class="hint">
+            入力を変更した場合だけ、自動加工時に全40番号へ登録します。空行はその番号のセリフを空にします。入力しない場合は既存のセリフを維持します。
+          </p>
+          <details>
+            <summary>文字の見た目を一括設定</summary>
+            <label class="check-label"
+              ><input
+                type="checkbox"
+                id="easy-style-enabled"
+              />次の自動加工で全番号の文字の見た目を上書きする</label
+            >
+            <div class="easy-style-fields">
+              <label
+                >フォント<select id="easy-font">
+                  <option value="sans">ゴシック</option>
+                  <option value="rounded">丸ゴシック</option>
+                  <option value="serif">明朝</option>
+                </select></label
+              >
+              <label
+                >文字サイズ<input
+                  id="easy-size"
+                  type="number"
+                  min="16"
+                  max="72"
+                  value="32"
+              /></label>
+              <label
+                >文字色<input id="easy-color" type="color" value="#293c33"
+              /></label>
+              <label class="check-label"
+                ><input
+                  id="easy-outline"
+                  type="checkbox"
+                  checked
+                />白フチ</label
+              >
+              <label class="check-label"
+                ><input
+                  id="easy-auto-place"
+                  type="checkbox"
+                  checked
+                />キャラクターを避けて自動配置</label
+              >
+              <label
+                >左右位置（%）<input
+                  id="easy-x"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value="50"
+              /></label>
+              <label
+                >上下位置（%）<input
+                  id="easy-y"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value="84"
+              /></label>
+            </div>
+            <p class="hint">
+              自動配置では指定位置を優先しながら安全な場所を探します。個別調整は一覧から行えます。
+            </p>
+          </details>
+          <button id="easy-process" class="button primary wide">
+            ② 自動加工して一括検査する
+          </button>
+          <p id="easy-progress" role="status" aria-live="polite">
+            画像を読み込んでください。自動加工では目視確認済みになりません。
+          </p>
+          <p class="hint">
+            ③
+            下の検査一覧を目視し、問題のある画像だけ個別編集してください。目視したチェックと「すべて確認済みにする」が必要です。
+          </p>
+          <button id="easy-review" class="button secondary wide">
+            ③ 一括確認の一覧へ
+          </button>
+          <button id="easy-export" class="button primary wide">
+            ④ 確認済みのZIPを保存する
+          </button>
+          <button
+            id="easy-details"
+            class="text-button wide"
+            aria-expanded="false"
+          >
+            画像ごとの分割・通常の詳細設定を表示
+          </button>
+        </section>
         <ol class="steps" aria-label="制作の流れ">
           <li class="current"><b>01</b><span>画像を読み込む</span></li>
           <li><b>02</b><span>分割・背景を調整</span></li>

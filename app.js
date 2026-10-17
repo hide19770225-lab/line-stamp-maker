@@ -59,6 +59,10 @@
   function notify(message, error = false, persistent = false) {
     clearTimeout(toastTimer);
     $("status").textContent = message;
+    if ($("production-mode").value === "easy") {
+      $("easy-progress").textContent = message;
+      $("easy-progress").classList.toggle("error", error);
+    }
     $("status").classList.toggle("error", error);
     $("status").hidden = false;
     if (!persistent)
@@ -282,7 +286,24 @@
     ).join("");
     return output;
   }
-  async function importFiles(files) {
+  async function importFiles(files, easy = false) {
+    if (state.busy) return;
+    const easyMessages = [];
+    if (
+      easy &&
+      state.sources.filter((source) => source.image).length + files.length > 4
+    ) {
+      easyWarnings([
+        "元画像は合計4枚までです。今回は読み込まず、既存画像を維持しました。",
+      ]);
+      $("easy-files").value = "";
+      notify(
+        "元画像は合計4枚までです。読み込み済み画像を確認してください。",
+        true,
+        true,
+      );
+      return;
+    }
     const remaining =
       P.MAX_SOURCES - state.sources.filter((source) => source.image).length;
     if (remaining <= 0) {
@@ -305,9 +326,24 @@
         );
         await frame();
         try {
-          addSource(await decodeFile(file), file.name);
+          const image = await decodeFile(file);
+          if (
+            easy &&
+            state.sources.some(
+              (source) =>
+                source.image && source.fingerprint === image.fingerprint,
+            )
+          ) {
+            image.width = image.height = 1;
+            easyMessages.push(
+              `${file.name}は同じ画像が重複しています。追加していません。`,
+            );
+            continue;
+          }
+          addSource(image, file.name, easy ? [2, 5] : null);
           loaded++;
         } catch (error) {
+          if (easy) easyMessages.push(`${file.name}：${error.message}`);
           notify(error.message, true);
         }
       }
@@ -319,6 +355,20 @@
       }
     });
     $("file-input").value = "";
+    if (easy) {
+      $("easy-files").value = "";
+      easyWarnings([
+        ...easyMessages,
+        ...window.StampEasy.plan(state.sources, state.target).errors,
+        ...window.StampEasy.plan(state.sources, state.target).warnings,
+      ]);
+      notify(
+        "画像の読み込みを終了しました。画像名と警告を確認し、自動加工に進んでください。",
+        false,
+        true,
+      );
+    }
+    syncEasySources();
   }
   $("file-input").addEventListener("change", (e) =>
     importFiles(e.target.files),
@@ -945,6 +995,12 @@
     updateSpecial();
     updateValidation();
     renderCaptionList();
+    if (!easyCaptionDirty)
+      $("easy-captions").value = state.slots
+        .map((slot) => slot.caption)
+        .join("\n")
+        .replace(/\n+$/, "");
+    syncEasySources();
     $("overview-count-tag").textContent = `${state.target} STAMPS`;
     $("overview-stamp-total").firstChild.nodeValue = String(state.target);
   }
@@ -980,121 +1036,123 @@
       `bulk-results ${$("preview-background").value}`;
   };
   // Inspection is read-only and uses the exact final PNG renderer used by ZIP.
-  $("bulk-inspect").onclick = () =>
-    task(async () => {
-      resetBulkAudit();
-      const all = stamps(),
-        rows = [],
-        list = $("bulk-results");
-      for (const entry of [
-        ...Array.from({ length: state.target }, (_, i) => ({
-          stamp: all.find((stamp) => stamp.slot === i + 1),
-          name: `${String(i + 1).padStart(2, "0")}.png`,
-          width: 370,
-          height: 320,
-        })),
-        {
-          stamp: all.find((s) => s.slot === state.main),
-          name: "main.png",
-          width: 240,
-          height: 240,
-        },
-        {
-          stamp: all.find((s) => s.slot === state.tab),
-          name: "tab.png",
-          width: 96,
-          height: 74,
-        },
-      ]) {
-        await frame();
-        const { stamp, name, width, height } = entry;
-        const card = document.createElement("article");
-        card.className = "bulk-result";
-        card.dataset.name = name;
-        const heading = document.createElement("h4");
-        const reasons = document.createElement("p");
-        card.append(heading);
-        let report;
-        if (!stamp)
-          report = {
-            status: "エラー",
-            errors: ["対応するスタンプが未加工です"],
-            warnings: [],
-          };
-        else {
-          const rendered = C.renderStamp(stamp);
-          const finalScan = inspectFinal(rendered);
-          const output =
-            name === "main.png" || name === "tab.png"
-              ? C.specialImage(stamp, width, height)
-              : rendered.canvas;
-          const blob = await C.pngBlob(output);
-          const image = output
-            .getContext("2d")
-            .getImageData(0, 0, width, height);
-          const source = state.sources.find((source) =>
-            source.stamps.includes(stamp),
-          );
-          report = window.StampAudit.inspect(image, blob.size, width, height, {
-            residues:
-              output === rendered.canvas
-                ? finalScan.candidates.length
-                : R.inspectFinal(image).candidates.length,
-            stale: source.processSignature !== signature(source),
-            textClipped: rendered.textClipped,
-            textOverlap: rendered.textOverlap,
-            unsafe:
-              rendered.textOverlap &&
-              T.resolve(stamp.caption, stamp.style).autoPlace,
-          });
-          const preview = C.canvas(width, height);
-          preview.className = $("preview-background").value;
-          preview.getContext("2d").drawImage(output, 0, 0);
-          preview.setAttribute("aria-label", `${name} 完成PNG`);
-          card.append(preview);
-          const metrics = document.createElement("p");
-          metrics.textContent = `${width}×${height}px · PNG / RGBA · ${(blob.size / 1024).toFixed(1)}KB · 透明 ${report.transparent}px · 半透明 ${report.partial}px`;
-          card.append(metrics);
-          output.width = output.height = 1;
-          rendered.canvas.width = rendered.canvas.height = 1;
-        }
-        card.dataset.status = report.status;
-        heading.textContent = `${name}：${report.status}`;
-        reasons.textContent =
-          [...report.errors, ...report.warnings].join(" / ") ||
-          "サイズ・RGBA透過・余白・容量・残留候補の検査に合格（目視確認は別途必要です）";
-        card.append(reasons);
-        if (stamp) {
-          const edit = document.createElement("button");
-          edit.className = "button secondary wide";
-          edit.textContent = `${name}の元スタンプを個別編集`;
-          edit.onclick = () => {
-            if (!state.busy) openEditor(stamps().indexOf(stamp));
-          };
-          card.append(edit);
-        }
-        list.append(card);
-        rows.push({ ...entry, report });
-      }
-      const complete =
-        all.length === state.target &&
-        Array.from({ length: state.target }, (_, i) => i + 1).every((slot) =>
-          all.some((stamp) => stamp.slot === slot),
+  async function inspectAll() {
+    resetBulkAudit();
+    const all = stamps(),
+      rows = [],
+      list = $("bulk-results");
+    for (const entry of [
+      ...Array.from({ length: state.target }, (_, i) => ({
+        stamp: all.find((stamp) => stamp.slot === i + 1),
+        name: `${String(i + 1).padStart(2, "0")}.png`,
+        width: 370,
+        height: 320,
+      })),
+      {
+        stamp: all.find((s) => s.slot === state.main),
+        name: "main.png",
+        width: 240,
+        height: 240,
+      },
+      {
+        stamp: all.find((s) => s.slot === state.tab),
+        name: "tab.png",
+        width: 96,
+        height: 74,
+      },
+    ]) {
+      if ($("production-mode").value === "easy")
+        notify(
+          `完成PNGを一括検査中… ${rows.length + 1} / ${state.target + 2}`,
+          false,
+          true,
         );
-      const errors = rows.filter(
-        (row) => row.report.status === "エラー",
-      ).length;
-      const warnings = rows.filter(
-        (row) => row.report.status === "要確認",
-      ).length;
-      bulkAudit = { rows, complete, errors };
-      $("bulk-summary").textContent =
-        `${rows.length}画像：正常 ${rows.length - errors - warnings}・要確認 ${warnings}・エラー ${errors}。` +
-        (complete
-          ? "一覧を目視確認してください。"
-          : `未加工の番号があります（${all.length}/${state.target}個）。全数を加工してから再検査してください。`);
-      syncBulkControls();
-    });
+      await frame();
+      const { stamp, name, width, height } = entry;
+      const card = document.createElement("article");
+      card.className = "bulk-result";
+      card.dataset.name = name;
+      const heading = document.createElement("h4");
+      const reasons = document.createElement("p");
+      card.append(heading);
+      let report;
+      if (!stamp)
+        report = {
+          status: "エラー",
+          errors: ["対応するスタンプが未加工です"],
+          warnings: [],
+        };
+      else {
+        const rendered = C.renderStamp(stamp);
+        const finalScan = inspectFinal(rendered);
+        const output =
+          name === "main.png" || name === "tab.png"
+            ? C.specialImage(stamp, width, height)
+            : rendered.canvas;
+        const blob = await C.pngBlob(output);
+        const image = output.getContext("2d").getImageData(0, 0, width, height);
+        const source = state.sources.find((source) =>
+          source.stamps.includes(stamp),
+        );
+        report = window.StampAudit.inspect(image, blob.size, width, height, {
+          residues:
+            output === rendered.canvas
+              ? finalScan.candidates.length
+              : R.inspectFinal(image).candidates.length,
+          stale: source.processSignature !== signature(source),
+          textClipped: rendered.textClipped,
+          textOverlap: rendered.textOverlap,
+          unsafe:
+            rendered.textOverlap &&
+            T.resolve(stamp.caption, stamp.style).autoPlace,
+        });
+        const preview = C.canvas(width, height);
+        preview.className = $("preview-background").value;
+        preview.getContext("2d").drawImage(output, 0, 0);
+        preview.setAttribute("aria-label", `${name} 完成PNG`);
+        card.append(preview);
+        const metrics = document.createElement("p");
+        metrics.textContent = `${width}×${height}px · PNG / RGBA · ${(blob.size / 1024).toFixed(1)}KB · 透明 ${report.transparent}px · 半透明 ${report.partial}px`;
+        card.append(metrics);
+        output.width = output.height = 1;
+        rendered.canvas.width = rendered.canvas.height = 1;
+      }
+      card.dataset.status = report.status;
+      heading.textContent = `${name}：${report.status}`;
+      reasons.textContent =
+        [...report.errors, ...report.warnings].join(" / ") ||
+        "サイズ・RGBA透過・余白・容量・残留候補の検査に合格（目視確認は別途必要です）";
+      card.append(reasons);
+      if (stamp) {
+        const edit = document.createElement("button");
+        edit.className = "button secondary wide";
+        edit.textContent = `${name}の元スタンプを個別編集`;
+        edit.onclick = () => {
+          if (!state.busy) openEditor(stamps().indexOf(stamp));
+        };
+        card.append(edit);
+      }
+      list.append(card);
+      rows.push({ ...entry, report });
+    }
+    const complete =
+      all.length === state.target &&
+      Array.from({ length: state.target }, (_, i) => i + 1).every((slot) =>
+        all.some((stamp) => stamp.slot === slot),
+      );
+    const errors = rows.filter((row) => row.report.status === "エラー").length;
+    const warnings = rows.filter(
+      (row) => row.report.status === "要確認",
+    ).length;
+    bulkAudit = { rows, complete, errors };
+    $("bulk-summary").textContent =
+      `${rows.length}画像：正常 ${rows.length - errors - warnings}・要確認 ${warnings}・エラー ${errors}。` +
+      (complete
+        ? "一覧を目視確認してください。"
+        : `未加工の番号があります（${all.length}/${state.target}個）。全数を加工してから再検査してください。`);
+    syncBulkControls();
+  }
+  $("bulk-inspect").onclick = () => task(inspectAll);
   $("bulk-visual").onchange = () => {
     $("bulk-confirm").disabled =
       !$("bulk-visual").checked ||
@@ -1120,6 +1178,7 @@
     $("bulk-summary").textContent =
       `全${all.length}個とメイン・タブの目視確認を保存しました。既存のZIP保存ボタンを利用できます。`;
     notify("すべて確認済みにしました。画像やセリフは変更していません。");
+    if ($("production-mode").value === "easy") easyStep(3);
   };
   function validation() {
     const all = stamps(),
@@ -1270,8 +1329,7 @@
       $("caption-list").append(label);
     }
   }
-  $("apply-captions").onclick = () => {
-    if (state.busy) return;
+  function applyCaptions() {
     const lines = $("bulk-captions").value.replace(/\r/g, "").split("\n");
     if (
       lines.length > 40 ||
@@ -1291,6 +1349,9 @@
     renderResults();
     if (state.sources.length) renderSourceEditor();
     notify("番号にセリフを登録しました。画像を作成する前でも保存できます。");
+  }
+  $("apply-captions").onclick = () => {
+    if (!state.busy) applyCaptions();
   };
   function selected() {
     return stamps()[state.selectedStamp];
@@ -2245,6 +2306,8 @@
         selectedSource: 0,
         selectedStamp: -1,
       });
+      easyCaptionDirty = false;
+      $("easy-style-enabled").checked = false;
       $("target-count").value = state.target;
       $("bulk-captions").value = state.slots
         .map((slot) => slot.caption)
@@ -2265,6 +2328,172 @@
     }).finally(() => {
       $("load-project").value = "";
     });
+  };
+  let easyCaptionDirty = false;
+  function easyStep(index) {
+    $("easy-steps")
+      .querySelectorAll("li")
+      .forEach((li, i) => {
+        if (i === index) li.setAttribute("aria-current", "step");
+        else li.removeAttribute("aria-current");
+      });
+  }
+  function easyWarnings(messages) {
+    $("easy-warnings").replaceChildren();
+    for (const message of messages) {
+      const li = document.createElement("li");
+      li.className = "warning";
+      li.textContent = message;
+      $("easy-warnings").append(li);
+    }
+  }
+  function syncEasySources() {
+    $("easy-sources").textContent =
+      state.sources
+        .map(
+          (s, i) =>
+            `${i + 1}. ${s.name}（${s.columns}列×${s.rows}段、${s.assignments.filter(Boolean).length}個）`,
+        )
+        .join(" / ") || "読み込み済み画像なし";
+    $("easy-target").value = String(state.target);
+  }
+  $("production-mode").onchange = () => {
+    const easy = $("production-mode").value === "easy";
+    document.body.classList.toggle("easy-mode", easy);
+    $("easy-panel").hidden = !easy;
+    if (easy) {
+      if (!easyCaptionDirty)
+        $("easy-captions").value = state.slots
+          .map((slot) => slot.caption)
+          .join("\n")
+          .replace(/\n+$/, "");
+      syncEasySources();
+      const plan = window.StampEasy.plan(state.sources, state.target);
+      easyWarnings([...plan.errors, ...plan.warnings]);
+    }
+  };
+  $("easy-details").onclick = () => {
+    const open = document.body.classList.toggle("easy-details-open");
+    $("easy-details").setAttribute("aria-expanded", String(open));
+    $("easy-details").textContent = open
+      ? "通常の詳細設定を隠す"
+      : "画像ごとの分割・通常の詳細設定を表示";
+  };
+  $("easy-files").onchange = (event) => importFiles(event.target.files, true);
+  $("easy-target").onchange = () => {
+    $("target-count").value = $("easy-target").value;
+    $("target-count").onchange();
+    syncEasySources();
+    const plan = window.StampEasy.plan(state.sources, state.target);
+    easyWarnings([...plan.errors, ...plan.warnings]);
+  };
+  $("easy-captions").oninput = () => {
+    easyCaptionDirty = true;
+  };
+  $("easy-process").onclick = () =>
+    task(async () => {
+      const plan = window.StampEasy.plan(state.sources, state.target);
+      easyWarnings([...plan.errors, ...plan.warnings]);
+      if (plan.errors.length) throw new Error(plan.errors.join(" / "));
+      if (easyCaptionDirty) window.StampEasy.captions($("easy-captions").value);
+      if ($("easy-style-enabled").checked) {
+        for (const id of ["easy-size", "easy-x", "easy-y"])
+          if (!$(id).checkValidity() || !$(id).value)
+            throw new Error(
+              "文字サイズは16〜72、位置は0〜100の数値を指定してください。",
+            );
+      }
+      if (easyCaptionDirty) {
+        $("bulk-captions").value = $("easy-captions").value;
+        applyCaptions();
+        easyCaptionDirty = false;
+      }
+      if ($("easy-style-enabled").checked) {
+        captureSlots();
+        const patch = {
+          font: $("easy-font").value,
+          size: Number($("easy-size").value),
+          color: $("easy-color").value,
+          outline: $("easy-outline").checked,
+          x: Number($("easy-x").value),
+          y: Number($("easy-y").value),
+          autoPlace: $("easy-auto-place").checked,
+        };
+        for (const slot of state.slots)
+          slot.style = {
+            ...slot.style,
+            ...patch,
+            overrides: [
+              ...new Set([
+                ...(slot.style.overrides || []),
+                ...Object.keys(patch).filter((key) =>
+                  T.OVERRIDES.includes(key),
+                ),
+              ]),
+            ],
+          };
+        for (const stamp of stamps()) {
+          stamp.style = { ...state.slots[stamp.slot - 1].style };
+          stamp.reviewed = false;
+        }
+        invalidate();
+        $("easy-style-enabled").checked = false;
+      }
+      easyStep(1);
+      for (let i = 0; i < state.sources.length; i++) {
+        const source = state.sources[i];
+        if (
+          source.assignments.some(Boolean) &&
+          (source.processSignature !== signature(source) ||
+            !source.stamps.length)
+        ) {
+          notify(
+            `元画像を自動加工中… ${i + 1} / ${state.sources.length}`,
+            false,
+            true,
+          );
+          await processSource(source);
+        }
+      }
+      finishedProcessing();
+      notify("完成PNGを一括検査中…", false, true);
+      await inspectAll();
+      easyStep(2);
+      notify(
+        "自動加工と検査が完了しました。下の一覧を目視し、必要な画像だけ編集してください。自動承認はしていません。",
+        false,
+        true,
+      );
+    });
+  $("easy-review").onclick = () => {
+    if (!stamps().length) {
+      notify("先に画像を読み込んで自動加工してください。", true);
+      return;
+    }
+    $("bulk-review-heading").scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
+    easyStep(2);
+  };
+  $("easy-export").onclick = () => {
+    if (easyCaptionDirty || $("easy-style-enabled").checked) {
+      notify(
+        "未反映のセリフ・文字設定があります。自動加工して一括検査してください。",
+        true,
+      );
+      return;
+    }
+    const v = validation();
+    if (!v.complete || v.unreviewed || v.stale.length) {
+      notify(
+        "全画像を加工し、一覧または個別画面で目視確認してからZIPを保存してください。",
+        true,
+      );
+      return;
+    }
+    easyStep(3);
+    $("download-button").onclick();
   };
   renderCaptionList();
   window.addEventListener("beforeunload", (e) => {
