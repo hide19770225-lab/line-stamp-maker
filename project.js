@@ -160,6 +160,8 @@
           ].includes(slot.style.preset)) ||
         (slot.style.autoPlace !== undefined &&
           typeof slot.style.autoPlace !== "boolean") ||
+        (slot.style.safeMargin !== undefined &&
+          ![10, 20].includes(slot.style.safeMargin)) ||
         (slot.style.outlineWidth !== undefined &&
           !number(slot.style.outlineWidth, 0, 12)) ||
         (slot.style.shadow !== undefined &&
@@ -236,6 +238,7 @@
             [
               "preset",
               "autoPlace",
+              "safeMargin",
               "outlineWidth",
               "shadow",
               "angle",

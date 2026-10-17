@@ -7,6 +7,8 @@
     $ = (id) => document.getElementById(id);
   const easyRun = { phase: "idle", stage: "", error: "" };
   const EASY_VERSION = "easy-state-1";
+  let lastValidation = null;
+  const suggestionDrafts = new Map();
   const state = {
     sources: [],
     selectedSource: 0,
@@ -93,6 +95,10 @@
       "設定または画像が変更されました。一括検査を実行してください。";
   }
   function invalidate() {
+    lastValidation = null;
+    const active = new Set(stamps());
+    for (const [slot, draft] of suggestionDrafts)
+      if (!active.has(draft.stamp)) suggestionDrafts.delete(slot);
     resetBulkAudit();
     captureSlots();
     state.dirty = true;
@@ -1009,6 +1015,7 @@
         .join("\n")
         .replace(/\n+$/, "");
     syncEasySources();
+    if ($("suggestion-panel")?.open) renderSuggestionPanel();
     $("overview-count-tag").textContent = `${state.target} STAMPS`;
     $("overview-stamp-total").firstChild.nodeValue = String(state.target);
   }
@@ -1017,12 +1024,13 @@
     to.height = from.height;
     to.getContext("2d").drawImage(from, 0, 0);
   }
-  function updateSpecial() {
+  function updateSpecial(changedSlots = null) {
     const all = stamps();
     for (const [slot, id, width, height] of [
       [state.main, "main-preview", 240, 240],
       [state.tab, "tab-preview", 96, 74],
     ]) {
+      if (changedSlots && !changedSlots.includes(slot)) continue;
       const stamp = all.find((stamp) => stamp.slot === slot),
         canvas = $(id);
       canvas.getContext("2d").clearRect(0, 0, width, height);
@@ -1103,6 +1111,10 @@
           source.stamps.includes(stamp),
         );
         report = window.StampAudit.inspect(image, blob.size, width, height, {
+          margin:
+            output === rendered.canvas && stamp.style.safeMargin === 20
+              ? 20
+              : 10,
           residues:
             output === rendered.canvas
               ? finalScan.candidates.length
@@ -1114,6 +1126,12 @@
             rendered.textOverlap &&
             T.resolve(stamp.caption, stamp.style).autoPlace,
         });
+        if (pendingSuggestion(stamp)) {
+          report.errors.push(
+            "承認後の画像生成が未完了です。セリフ一覧で再承認して生成してください。",
+          );
+          report.status = "エラー";
+        }
         const preview = C.canvas(width, height);
         preview.className = $("preview-background").value;
         preview.getContext("2d").drawImage(output, 0, 0);
@@ -1188,9 +1206,10 @@
     notify("すべて確認済みにしました。画像やセリフは変更していません。");
     if ($("production-mode").value === "easy") easyStep(3);
   };
-  function validation() {
+  function validation(reuse = null) {
     const all = stamps(),
       rendered = all.map((stamp) => {
+        if (reuse?.has(stamp)) return reuse.get(stamp);
         const result = C.renderStamp(stamp);
         result.finalResidueCount = inspectFinal(result).candidates.length;
         stamp.finalResidueCount = result.finalResidueCount;
@@ -1245,9 +1264,10 @@
       ),
     };
   }
-  function updateValidation() {
-    const v = validation(),
+  function updateValidation(reuse = null) {
+    const v = validation(reuse),
       list = $("validation-list");
+    lastValidation = v;
     list.replaceChildren();
     function item(message, type = "") {
       const li = document.createElement("li");
@@ -1790,6 +1810,8 @@
     $("comparison-panel").dataset.background = $("edit-background").value;
   };
   function syncCaptionControls() {
+    if ($("safe-layout"))
+      $("safe-layout").checked = selected().style.safeMargin === 20;
     const stamp = selected(),
       style = T.resolve(stamp.caption, stamp.style);
     $("font-family").value = style.font;
@@ -1811,6 +1833,17 @@
       $(`${id}-value`).textContent = style[key];
     }
   }
+  if ($("safe-layout"))
+    $("safe-layout").onchange = () => {
+      const stamp = selected();
+      stamp.style = {
+        ...stamp.style,
+        safeMargin: $("safe-layout").checked ? 20 : 10,
+        autoPlace: $("safe-layout").checked ? true : stamp.style.autoPlace,
+      };
+      syncCaptionControls();
+      changedImage();
+    };
   for (const [id, key] of [
     ["font-family", "font"],
     ["font-size", "size"],
@@ -1860,7 +1893,10 @@
             overrides: [],
             autoPlace: false,
           }
-        : T.presetStyle(key, stamp.caption);
+        : {
+            ...T.presetStyle(key, stamp.caption),
+            ...(stamp.style.safeMargin === 20 ? { safeMargin: 20 } : {}),
+          };
     syncCaptionControls();
     changedImage();
   };
@@ -1883,7 +1919,10 @@
       return;
     const key = $("batch-design").value;
     state.slots.forEach((slot) => {
-      slot.style = T.presetStyle(key, slot.caption);
+      slot.style = {
+        ...T.presetStyle(key, slot.caption),
+        ...(slot.style.safeMargin === 20 ? { safeMargin: 20 } : {}),
+      };
     });
     stamps().forEach((stamp) => {
       stamp.style = { ...state.slots[stamp.slot - 1].style };
@@ -2096,8 +2135,12 @@
   }
   $("download-single").onclick = () =>
     task(async () => {
-      const stamp = selected(),
-        result = C.renderStamp(stamp);
+      const stamp = selected();
+      if (pendingSuggestion(stamp))
+        throw new Error(
+          "承認後の画像生成が未完了です。セリフ一覧で再承認してください。",
+        );
+      const result = C.renderStamp(stamp);
       if (
         result.empty ||
         result.textClipped ||
@@ -2113,6 +2156,10 @@
     });
   $("download-button").onclick = () =>
     task(async () => {
+      if (stamps().some(pendingSuggestion))
+        throw new Error(
+          "承認後の画像生成が未完了です。セリフ一覧で再承認して生成してください。",
+        );
       const v = updateValidation();
       if (v.stale.length)
         throw new Error(
@@ -2355,6 +2402,254 @@
       li.textContent = message;
       $("easy-warnings").append(li);
     }
+  }
+  function pendingSuggestion(stamp) {
+    const draft = suggestionDrafts.get(stamp.slot);
+    return draft?.stamp === stamp && draft.needsRender;
+  }
+  function currentSuggestionDrafts() {
+    return stamps().map((stamp) => {
+      let draft = suggestionDrafts.get(stamp.slot);
+      if (
+        !draft ||
+        draft.stamp !== stamp ||
+        draft.baseCaption !== stamp.caption
+      ) {
+        draft = {
+          stamp,
+          slot: stamp.slot,
+          baseCaption: stamp.caption,
+          caption: stamp.caption,
+          emotion: "unknown",
+          approved: false,
+        };
+        suggestionDrafts.set(stamp.slot, draft);
+      }
+      return draft;
+    });
+  }
+  function suggestionSummary() {
+    const rows = currentSuggestionDrafts();
+    const duplicates = window.StampSuggestions.duplicates(rows);
+    $("suggestion-summary").textContent =
+      `${rows.length}画像 / 未分類${rows.filter((row) => row.emotion === "unknown").length} / 未入力${rows.filter((row) => !row.caption.trim()).length} / 承認済み${rows.filter((row) => row.approved).length}` +
+      (duplicates.length
+        ? "。重複警告：" +
+          duplicates
+            .map(
+              (group) =>
+                `${group.slots.map((slot) => String(slot).padStart(2, "0")).join("・")}番「${group.caption}」`,
+            )
+            .join(" / ")
+        : "。重複なし。");
+  }
+  function changedSuggestion(draft) {
+    draft.approved = false;
+    $("suggestion-ack").checked = false;
+    suggestionSummary();
+  }
+  function renderSuggestionPanel() {
+    const list = $("suggestion-grid");
+    list.replaceChildren();
+    for (const draft of currentSuggestionDrafts()) {
+      const card = document.createElement("article");
+      card.className = "suggestion-card";
+      card.dataset.slot = draft.slot;
+      const title = document.createElement("h4");
+      title.textContent = `${String(draft.slot).padStart(2, "0")}.png`;
+      const preview = C.canvas(185, 160);
+      preview.className = "stamp-canvas";
+      const index = stamps().indexOf(draft.stamp),
+        from = $("stamp-grid").querySelectorAll("canvas")[index];
+      if (from) preview.getContext("2d").drawImage(from, 0, 0, 185, 160);
+      const emotionLabel = document.createElement("label");
+      emotionLabel.textContent = "表情（手動選択）";
+      const emotion = document.createElement("select");
+      emotion.dataset.kind = "emotion";
+      for (const [key, group] of Object.entries(window.StampSuggestions.groups))
+        emotion.add(new Option(group.label, key));
+      emotion.value = draft.emotion;
+      emotionLabel.append(emotion);
+      const captionLabel = document.createElement("label");
+      captionLabel.textContent = "提案セリフ（編集可）";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 120;
+      input.value = draft.caption;
+      input.dataset.kind = "caption";
+      captionLabel.append(input);
+      const next = document.createElement("button");
+      next.className = "button secondary wide";
+      next.textContent = "次の候補";
+      const applyCandidate = () => {
+        input.value = draft.caption;
+        changedSuggestion(draft);
+      };
+      emotion.onchange = () => {
+        draft.emotion = emotion.value;
+        const used = currentSuggestionDrafts()
+          .filter((row) => row !== draft)
+          .map((row) => row.caption);
+        const value = window.StampSuggestions.choose(draft.emotion, used);
+        if (value !== null) draft.caption = value;
+        applyCandidate();
+      };
+      input.oninput = () => {
+        draft.caption = input.value;
+        changedSuggestion(draft);
+      };
+      next.onclick = () => {
+        const pool = window.StampSuggestions.candidates(draft.emotion);
+        if (!pool.length) {
+          notify(
+            "表情を手動で選ぶか、セリフを直接入力してください。自動判定は行いません。",
+            true,
+          );
+          return;
+        }
+        draft.caption = pool[(pool.indexOf(draft.caption) + 1) % pool.length];
+        applyCandidate();
+      };
+      const edit = document.createElement("button");
+      edit.className = "text-button wide";
+      edit.textContent = "画像・文字を個別編集";
+      edit.onclick = () => {
+        if (!state.busy) openEditor(stamps().indexOf(draft.stamp));
+      };
+      card.append(title, preview, emotionLabel, captionLabel, next, edit);
+      list.append(card);
+    }
+    suggestionSummary();
+  }
+  if ($("suggestion-panel")) {
+    $("suggestion-panel").ontoggle = () => {
+      if ($("suggestion-panel").open) renderSuggestionPanel();
+    };
+    $("suggest-safe-layout").onchange = () => {
+      $("suggestion-ack").checked = false;
+    };
+    $("suggest-all").onclick = () => {
+      const rows = currentSuggestionDrafts(),
+        used = rows
+          .filter((row) => row.emotion === "unknown")
+          .map((row) => row.caption);
+      for (const row of rows) {
+        const value = window.StampSuggestions.choose(row.emotion, used);
+        if (value !== null) {
+          row.caption = value;
+          row.approved = false;
+          used.push(value);
+        }
+      }
+      $("suggestion-ack").checked = false;
+      renderSuggestionPanel();
+      notify(
+        "選択した表情から候補を提案しました。未分類の画像は変更していません。まだ画像には反映していません。",
+      );
+    };
+    $("approve-suggestions").onclick = () =>
+      task(async () => {
+        const rows = currentSuggestionDrafts();
+        let restoredInput = false;
+        for (const row of rows) {
+          const input = $("suggestion-grid").querySelector(
+            `[data-slot="${row.slot}"] input[data-kind="caption"]`,
+          );
+          if (input && input.value !== row.caption) {
+            row.caption = input.value;
+            row.approved = false;
+            restoredInput = true;
+          }
+        }
+        if (restoredInput) {
+          $("suggestion-ack").checked = false;
+          suggestionSummary();
+          throw new Error(
+            "復元・変更された入力を読み取りました。セリフと重複警告を再確認して承認してください。",
+          );
+        }
+        if (!$("suggestion-ack").checked)
+          throw new Error(
+            "全画像・セリフと重複警告を目視し、チェックを入れてください。",
+          );
+        if (
+          !rows.length ||
+          rows.some(
+            (row) =>
+              !row.caption.trim() || Array.from(row.caption).length > 120,
+          )
+        )
+          throw new Error(
+            "未入力のセリフがあります。表情を選ぶか120文字以内で直接入力してください。",
+          );
+        const reuse = new Map(
+          lastValidation?.all.map((stamp, i) => [
+            stamp,
+            lastValidation.rendered[i],
+          ]) || [],
+        );
+        const changed = [];
+        for (const row of rows) {
+          const stamp = row.stamp,
+            safe = $("suggest-safe-layout").checked;
+          if (
+            row.needsRender ||
+            stamp.caption !== row.caption ||
+            (safe && (stamp.style.safeMargin !== 20 || !stamp.style.autoPlace))
+          ) {
+            stamp.caption = row.caption;
+            if (safe)
+              stamp.style = { ...stamp.style, safeMargin: 20, autoPlace: true };
+            stamp.reviewed = false;
+            changed.push(stamp.slot);
+            reuse.delete(stamp);
+            row.needsRender = true;
+          }
+          row.baseCaption = stamp.caption;
+          row.approved = !row.needsRender;
+        }
+        $("suggestion-ack").checked = false;
+        suggestionSummary();
+        if (changed.length) {
+          invalidate();
+          const all = stamps(),
+            cards = $("stamp-grid").querySelectorAll(".stamp-card");
+          for (const slot of changed) {
+            const i = all.findIndex((stamp) => stamp.slot === slot),
+              stamp = all[i],
+              card = cards[i];
+            await frame();
+            notify(`変更した画像を生成中… ${slot}番`, false, true);
+            card.classList.remove("reviewed");
+            card.querySelector(".review-state").textContent = "画像を生成中";
+            C.renderStamp(stamp, card.querySelector("canvas"));
+            card.querySelector(".review-state").textContent = "透過を確認";
+            card.querySelector(".stamp-caption").textContent =
+              stamp.caption || "（セリフなし）";
+          }
+          updateSpecial(changed);
+          updateValidation(reuse);
+          renderCaptionList();
+          $("bulk-captions").value = state.slots
+            .map((slot) => slot.caption)
+            .join("\n")
+            .replace(/\n+$/, "");
+          if (!easyCaptionDirty)
+            $("easy-captions").value = state.slots
+              .map((slot) => slot.caption)
+              .join("\n")
+              .replace(/\n+$/, "");
+        }
+        for (const row of rows) {
+          row.needsRender = false;
+          row.approved = true;
+        }
+        $("suggestion-ack").checked = false;
+        renderSuggestionPanel();
+        notify(
+          `セリフを承認し、変更した${changed.length}画像だけ生成しました。透過の目視確認は別途必要です。`,
+        );
+      });
   }
   function easyPlan() {
     if (window.StampEasy?.version !== EASY_VERSION)

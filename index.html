@@ -23,14 +23,15 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=easy-state-1" />
-    <script src="core.js?v=easy-state-1" defer></script>
-    <script src="residue.js?v=easy-state-1" defer></script>
-    <script src="typography.js" defer></script>
-    <script src="project.js?v=easy-state-1" defer></script>
-    <script src="audit.js?v=easy-state-1" defer></script>
-    <script src="easy.js?v=easy-state-1" defer></script>
-    <script src="app.js?v=easy-state-1" defer></script>
+    <link rel="stylesheet" href="styles.css?v=layout-review-1" />
+    <script src="core.js?v=layout-review-1" defer></script>
+    <script src="residue.js?v=layout-review-1" defer></script>
+    <script src="typography.js?v=layout-review-1" defer></script>
+    <script src="project.js?v=layout-review-1" defer></script>
+    <script src="audit.js?v=layout-review-1" defer></script>
+    <script src="easy.js?v=layout-review-1" defer></script>
+    <script src="suggestions.js?v=layout-review-1" defer></script>
+    <script src="app.js?v=layout-review-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -550,6 +551,36 @@
               </select></label
             >
           </div>
+          <details id="suggestion-panel" class="suggestion-panel">
+            <summary>表情を選んでセリフ提案・20px自動レイアウト</summary>
+            <p class="hint">
+              画像の表情は自動判定しません。各画像の表情を選ぶと候補を提案します。未分類はそのまま残します。承認するまでは既存のセリフ・画像を変更しません。未承認の提案と表情選択はJSONに保存されません。
+            </p>
+            <button id="suggest-all" class="button secondary wide">
+              選んだ表情から候補をまとめて提案
+            </button>
+            <label class="check-label"
+              ><input
+                id="suggest-safe-layout"
+                type="checkbox"
+                checked
+              />生成時に20px余白・文字の自動配置を適用する</label
+            >
+            <p id="suggestion-summary" role="status" aria-live="polite"></p>
+            <div id="suggestion-grid" class="suggestion-grid"></div>
+            <label class="check-label"
+              ><input
+                id="suggestion-ack"
+                type="checkbox"
+              />全画像とセリフ、重複警告を目視確認した</label
+            >
+            <button id="approve-suggestions" class="button primary wide">
+              全セリフを承認し、変更した画像だけ生成
+            </button>
+            <p class="hint">
+              セリフの承認と透過の目視確認は別です。生成後は既存の一覧で仕上がりを確認してください。配置が収まらない画像は個別編集が必要です。
+            </p>
+          </details>
           <button id="review-residues" class="button secondary wide">
             残留候補のあるスタンプを順番に確認
           </button>
@@ -985,6 +1016,12 @@
           <button class="button secondary wide" id="apply-style-all">
             文字の見た目を全スタンプに適用
           </button>
+          <label class="check-label"
+            ><input
+              type="checkbox"
+              id="safe-layout"
+            />20pxの安全余白と文字の自動配置（個別に再調整可）</label
+          >
           <div class="review-box">
             <label class="check-label"
               ><input

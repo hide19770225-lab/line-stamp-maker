@@ -4,7 +4,6 @@
   const C = root.StampCore,
     W = 370,
     H = 320,
-    M = 10,
     GAP = 5;
   const PRESETS = {
     energetic: {
@@ -106,6 +105,7 @@
       };
     const result = {
       ...PRESETS[key],
+      ...(style.safeMargin === 20 ? { safeMargin: 20 } : {}),
       preset: key,
       autoPlace: style.autoPlace ?? true,
       x: style.x ?? 50,
@@ -145,7 +145,7 @@
     const c = C.canvas(1, 1),
       ctx = c.getContext("2d");
     settings(ctx, style);
-    const lines = C.wrapText(ctx, text, 326),
+    const lines = C.wrapText(ctx, text, style.safeMargin === 20 ? 306 : 326),
       lineHeight = style.size * 1.25;
     let left = 0,
       right = 0,
@@ -290,6 +290,7 @@
     return count;
   }
   function candidates(ink, style) {
+    const M = style.safeMargin === 20 ? 20 : 10;
     const maxX = W - M - ink.width,
       maxY = H - M - ink.height;
     if (maxX < M || maxY < M) return [];
@@ -318,6 +319,7 @@
   }
   function compose(text, originalStyle, art, adjustedArt) {
     const style = resolve(text, originalStyle),
+      M = style.safeMargin === 20 ? 20 : 10,
       initialSize = style.size;
     let ink = bitmap(text, style);
     if (style.autoPlace) {
@@ -382,6 +384,27 @@
         testArt.width = testArt.height = 1;
       }
     }
+    // In safe-layout mode, fitting the canvas is insufficient: leave room for artwork too.
+    if (
+      !position &&
+      style.safeMargin === 20 &&
+      style.autoPlace &&
+      style.size > 14
+    ) {
+      if (ink.canvas) ink.canvas.width = ink.canvas.height = 1;
+      const reduced = compose(
+        text,
+        {
+          ...originalStyle,
+          size: Math.max(14, style.size - 2),
+          overrides: [...new Set([...(originalStyle.overrides || []), "size"])],
+        },
+        art,
+        adjustedArt,
+      );
+      reduced.plan.fontReduced = true;
+      return reduced;
+    }
     if (!position)
       position = {
         x: Math.round((W * style.x) / 100 - ink.width / 2),
@@ -413,6 +436,7 @@
     return { art: resultArt, transform, plan };
   }
   function paintPlan(ctx, plan) {
+    const M = plan.style.safeMargin === 20 ? 20 : 10;
     const ink = bitmap(plan.text, plan.style);
     ctx.save();
     ctx.beginPath();

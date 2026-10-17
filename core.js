@@ -277,6 +277,7 @@
   }
   function baseImagePlacement(stamp) {
     if (stamp.activePlacement) return stamp.activePlacement;
+    const margin = stamp.style?.safeMargin === 20 ? 20 : MARGIN;
     const crop = stampCrop(stamp);
     const bounds =
       maskBounds(
@@ -288,20 +289,20 @@
     const layout = stamp.layout || { scale: 90, x: 50, y: 50 };
     const ratio =
       (Math.min(
-        (WIDTH - MARGIN * 2) / bounds.width,
-        (HEIGHT - MARGIN * 2) / bounds.height,
+        (WIDTH - margin * 2) / bounds.width,
+        (HEIGHT - margin * 2) / bounds.height,
       ) *
         Math.max(20, Math.min(100, layout.scale))) /
       100;
     const width = bounds.width * ratio,
       height = bounds.height * ratio;
     const x =
-      MARGIN +
-      ((WIDTH - MARGIN * 2 - width) * Math.max(0, Math.min(100, layout.x))) /
+      margin +
+      ((WIDTH - margin * 2 - width) * Math.max(0, Math.min(100, layout.x))) /
         100;
     const y =
-      MARGIN +
-      ((HEIGHT - MARGIN * 2 - height) * Math.max(0, Math.min(100, layout.y))) /
+      margin +
+      ((HEIGHT - margin * 2 - height) * Math.max(0, Math.min(100, layout.y))) /
         100;
     return {
       crop,
@@ -403,6 +404,7 @@
     return renderStamp({ ...stamp, cleanupEnabled: false }, target);
   }
   function renderStamp(stamp, target = canvas(WIDTH, HEIGHT)) {
+    const margin = stamp.style?.safeMargin === 20 ? 20 : MARGIN;
     target.width = WIDTH;
     target.height = HEIGHT;
     const ctx = target.getContext("2d", { willReadFrequently: true });
@@ -433,7 +435,7 @@
           crop = p.crop;
         context.save();
         context.beginPath();
-        context.rect(MARGIN, MARGIN, WIDTH - MARGIN * 2, HEIGHT - MARGIN * 2);
+        context.rect(margin, margin, WIDTH - margin * 2, HEIGHT - margin * 2);
         context.clip();
         context.drawImage(
           croppedLayer,
