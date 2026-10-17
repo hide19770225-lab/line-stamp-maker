@@ -22,6 +22,7 @@
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="core.js" defer></script>
+    <script src="project.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -73,16 +74,80 @@
           <li><b>03</b><span>セリフを入れる</span></li>
           <li><b>04</b><span>確認・書き出し</span></li>
         </ol>
+        <section class="panel project-panel" aria-labelledby="project-title">
+          <div class="panel-heading">
+            <h2 id="project-title">制作セットとセリフ</h2>
+            <span class="tiny-tag">番号で管理</span>
+          </div>
+          <div class="project-toolbar">
+            <label
+              >申請するスタンプ数<select id="target-count">
+                <option>8</option>
+                <option>16</option>
+                <option>24</option>
+                <option>32</option>
+                <option selected>40</option>
+              </select></label
+            >
+            <label
+              >新しい画像の初期配置<select id="default-layout">
+                <option value="2x5">2列 × 5段（従来の10個）</option>
+                <option value="5x2">5列 × 2段</option>
+                <option value="4x2">4列 × 2段</option>
+                <option value="2x4">2列 × 4段</option>
+                <option value="4x3">4列 × 3段</option>
+                <option value="5x8">5列 × 8段</option>
+                <option value="1x1">1列 × 1段（個別画像）</option>
+              </select></label
+            >
+          </div>
+          <p class="hint">
+            セリフは番号に保存します。分割レイアウトや画像が変わっても、01.pngのセリフは01番のままです。各コマの番号は手動で入れ替え・除外できます。
+          </p>
+          <details class="bulk-text">
+            <summary>
+              セリフを先に登録・まとめて編集する <span>1行につき1個</span>
+            </summary>
+            <label for="bulk-captions"
+              >最大40行。1行目は01.png、2行目は02.pngに対応します。画像を読み込む前でも登録できます。</label
+            ><textarea
+              id="bulk-captions"
+              rows="8"
+              placeholder="ありがとう&#10;おはよう&#10;おつかれさま"
+            ></textarea
+            ><button class="button secondary" id="apply-captions">
+              セリフを登録する
+            </button>
+          </details>
+          <details class="caption-details">
+            <summary>番号ごとのセリフを確認・修正</summary>
+            <div id="caption-list" class="caption-list"></div>
+          </details>
+          <div class="project-actions">
+            <button id="save-project" class="button secondary">
+              セリフ・加工設定をJSON保存 ↓</button
+            ><label class="button secondary project-file"
+              >設定JSONを読み込む<input
+                id="load-project"
+                type="file"
+                accept="application/json,.json"
+            /></label>
+          </div>
+          <p class="hint">
+            JSONには元画像・色付きの画像を含みません。消しゴム修正は透明度の差分として保存します。再開時は同じ元画像を選び直して加工してください。画像が一致しない場合は設定を適用しません。
+          </p>
+          <p class="hint" id="project-status" role="status"></p>
+        </section>
         <div class="workspace-grid">
           <section class="panel upload-panel" aria-labelledby="upload-title">
             <div class="panel-heading">
               <h2 id="upload-title">
                 <span class="section-num">01</span>画像を読み込む
               </h2>
-              <span class="subtle" id="source-count">0 / 4 枚</span>
+              <span class="subtle" id="source-count">0 / 40 枚</span>
             </div>
             <p class="section-description">
-              2列 × 5段に並んだ、10個入りの画像を選んでください。
+              画像をまとめて読み込み、画像ごとに列数・行数を設定できます。
             </p>
             <label class="dropzone" id="dropzone" for="file-input"
               ><span class="upload-icon" aria-hidden="true"
@@ -111,7 +176,8 @@
                   /></svg></span
               ><strong>画像を選択する</strong
               ><span>タップ、またはここにドラッグ＆ドロップ</span
-              ><span class="file-types">PNG / JPEG / WebP · 最大4枚</span
+              ><span class="file-types"
+                >PNG / JPEG / WebP · 合計40個まで制作</span
               ><input
                 type="file"
                 id="file-input"
@@ -129,7 +195,7 @@
               <span>✦</span>
               <p>
                 <strong>1枚だけでもテストできます</strong
-                ><br />10個で加工を試してから、4枚・40個へ。途中で画像を追加できます。
+                ><br />従来の10個入り画像も対応。選択した8〜40個が揃う前でもテストZIPを保存できます。
               </p>
             </div>
           </section>
@@ -139,7 +205,7 @@
           >
             <div class="panel-heading">
               <h2 id="overview-title">できあがりのイメージ</h2>
-              <span class="tiny-tag">40 STAMPS</span>
+              <span class="tiny-tag" id="overview-count-tag">40 STAMPS</span>
             </div>
             <div class="overview-illustration" aria-hidden="true">
               <div class="mini-stamp">
@@ -157,7 +223,7 @@
             </div>
             <div class="overview-bottom">
               <div>
-                <strong>40<span>枚</span></strong
+                <strong id="overview-stamp-total">40<span>枚</span></strong
                 ><small>スタンプ画像</small>
               </div>
               <b>＋</b>
@@ -184,6 +250,44 @@
             <div>
               <label for="source-select">調整する元画像</label
               ><select id="source-select"></select>
+              <div class="source-layout-controls">
+                <label for="layout-preset">この画像の配置</label
+                ><select id="layout-preset">
+                  <option value="2x5">2列 × 5段</option>
+                  <option value="5x2">5列 × 2段</option>
+                  <option value="4x2">4列 × 2段</option>
+                  <option value="2x4">2列 × 4段</option>
+                  <option value="4x3">4列 × 3段</option>
+                  <option value="5x8">5列 × 8段</option>
+                  <option value="1x1">1列 × 1段</option>
+                  <option value="custom">列数・行数を手動指定</option>
+                </select>
+                <div class="project-toolbar">
+                  <label
+                    >列数<input
+                      id="grid-columns"
+                      type="number"
+                      inputmode="numeric"
+                      min="1"
+                      max="40"
+                      value="2" /></label
+                  ><label
+                    >行数<input
+                      id="grid-rows"
+                      type="number"
+                      inputmode="numeric"
+                      min="1"
+                      max="40"
+                      value="5"
+                  /></label>
+                </div>
+                <button class="button secondary wide" id="apply-layout">
+                  この列数・行数に変更
+                </button>
+                <p class="hint">
+                  左上から右、次に下の段へ分割。変更前のコマ番号を同じ順序で維持し、新しいコマには空き番号を割り当てます。余ったコマは除外されます。
+                </p>
+              </div>
               <div class="split-canvas-wrap">
                 <canvas
                   id="split-canvas"
@@ -194,6 +298,16 @@
                 緑の線をドラッグ、または下の数値で位置を調整。外周も動かせます。
               </p>
               <div id="grid-controls" class="grid-controls"></div>
+              <details class="cell-details">
+                <summary>コマの採用・番号を調整する</summary>
+                <p class="hint">
+                  「除外」は出力しません。使用中の番号を選ぶと、そのコマと番号を交換します。セリフは番号に残ります。欠番は他のコマに割り当てて埋めてください。
+                </p>
+                <div id="cell-assignments" class="cell-assignments"></div>
+                <button class="button secondary wide" id="assign-free">
+                  除外コマに空き番号を順に割り当てる
+                </button>
+              </details>
               <button class="button secondary" id="reset-grid">
                 分割位置をリセット
               </button>
@@ -202,10 +316,11 @@
               <fieldset class="crop-controls">
                 <legend>各コマの端を切り抜く</legend>
                 <p class="hint">
-                  隣のコマの線が入る場合に、四辺を内側へ。オレンジの枠が実際の切り抜き範囲です。この元画像の10個に適用します。
+                  隣のコマの線が入る場合に、四辺を内側へ。オレンジの枠が実際の切り抜き範囲です。この元画像のすべてのコマに適用します。
                 </p>
                 <div id="source-insets"></div>
               </fieldset>
+              <p class="hint" id="source-ready"></p>
               <h3>背景の取り除き方</h3>
               <p class="hint">
                 画像の端につながる背景だけを透過します。囲まれた白い部分は残します。白いキャラクターと背景がつながっている場合は、次の確認画面で修正してください。
@@ -238,8 +353,11 @@
               <button class="button primary wide" id="process-button">
                 10個に分割して、透過を確認 <span>→</span>
               </button>
+              <button class="button secondary wide" id="process-all">
+                読み込み済みの画像をまとめて加工
+              </button>
               <p class="hint">
-                分割し直すと、この元画像のセリフ・透過修正はリセットされます。ほかの元画像の編集は残ります。
+                再加工しても番号ごとのセリフ・文字・配置設定は維持します。消しゴム修正は元画像・分割条件が一致する場合だけ復元します。変更後は仕上がりを再確認してください。
               </p>
             </div>
           </div>
@@ -264,21 +382,6 @@
             >
           </div>
           <div class="stamp-grid" id="stamp-grid"></div>
-          <details class="bulk-text">
-            <summary>
-              セリフをまとめて入力する <span>1行につき1個</span>
-            </summary>
-            <label for="bulk-captions"
-              >最大40行。画像内にすでに文字がある場合は空欄でOKです。</label
-            ><textarea
-              id="bulk-captions"
-              rows="8"
-              placeholder="ありがとう&#10;おはよう&#10;おつかれさま"
-            ></textarea
-            ><button class="button secondary" id="apply-captions">
-              一覧に反映する
-            </button>
-          </details>
         </section>
         <section class="panel" id="export-section" hidden>
           <div class="panel-heading">
@@ -329,7 +432,7 @@
             <div>
               <b>01 / 読み込む</b>
               <p>
-                10個入り画像を1〜4枚選択。画像がずれていたら分割線を調整します。
+                制作枚数とセリフを登録。画像ごとに配置を選び、分割線と採用するコマを調整します。
               </p>
             </div>
             <div>
@@ -341,13 +444,13 @@
             <div>
               <b>03 / 持ち出す</b>
               <p>
-                全40枚とメイン・タブを確認してZIP保存。LINE Creators
+                選択した枚数とメイン・タブを確認してZIP保存。LINE Creators
                 Marketへ申請します。
               </p>
             </div>
           </div>
           <p class="guide-note">
-            作品とセリフは自動保存されません。再読み込み・タブを閉じる前にZIPを保存してください。<br />このツールはLINEヤフー株式会社の公式サービスではありません。<a
+            作品は自動保存されません。セリフ・加工設定はJSONで保存でき、完成画像はZIPで保存できます。<br />このツールはLINEヤフー株式会社の公式サービスではありません。<a
               href="https://creator.line.me/ja/guideline/sticker/"
               target="_blank"
               rel="noopener noreferrer"

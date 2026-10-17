@@ -326,7 +326,7 @@ const artifacts =
       );
     }
     await page.click("#sample-button");
-    assert.equal(await page.locator(".source-card").count(), 4);
+    assert.equal(await page.locator(".source-card").count(), 5);
     await page.locator(".bulk-text summary").click();
     await page.fill(
       "#bulk-captions",

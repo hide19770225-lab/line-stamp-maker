@@ -1,4 +1,5 @@
 """Validate downloaded ZIPs and decode RGBA PNGs using only the Python standard library."""
+import json
 import struct
 import sys
 import zipfile
@@ -49,9 +50,9 @@ def decode_png(data):
     return width, height, pixels
 
 
-def verify(path, count):
+def verify(path, count, indices=None):
     with zipfile.ZipFile(path) as archive:
-        expected = [f'{i:02}.png' for i in range(1, count + 1)] + ['main.png', 'tab.png']
+        expected = [f'{i:02}.png' for i in (indices or range(1, count + 1))] + ['main.png', 'tab.png']
         assert archive.namelist() == expected
         assert archive.testzip() is None, 'ZIP CRC check'
         for name in expected:
@@ -74,3 +75,21 @@ if __name__ == '__main__':
     directory = Path(sys.argv[1] if len(sys.argv) > 1 else '/tmp/stamp-test-artifacts')
     verify(directory / 'test-10.zip', 10)
     verify(directory / 'full-40.zip', 40)
+
+    for count in [8, 16, 24, 32, 40]:
+        candidate = directory / f'count-{count}.zip'
+        if candidate.exists():
+            verify(candidate, count)
+    if (directory / 'mixed-24.zip').exists():
+        verify(directory / 'mixed-24.zip', 24)
+    if (directory / 'partial-gaps.zip').exists():
+        verify(directory / 'partial-gaps.zip', 17, [2] + list(range(9, 25)))
+    color_file = directory / 'expected-colors.json'
+    if color_file.exists():
+        for filename, colors in json.loads(color_file.read_text()).items():
+            with zipfile.ZipFile(directory / filename) as archive:
+                for number, color in enumerate(colors, 1):
+                    width, height, pixels = decode_png(archive.read(f'{number:02}.png'))
+                    offset = (160 * width + 185) * 4
+                    assert list(pixels[offset:offset + 3]) == color, f'{filename}: {number:02}.png image order mismatch'
+            print(f'PASS: {filename}: actual exported image colors match numbered cell assignments')
