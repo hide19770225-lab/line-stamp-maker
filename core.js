@@ -221,7 +221,7 @@
       ? null
       : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
   }
-  function imagePlacement(stamp) {
+  function baseImagePlacement(stamp) {
     if (stamp.activePlacement) return stamp.activePlacement;
     const crop = stampCrop(stamp);
     const bounds =
@@ -256,6 +256,19 @@
       offsetX: x - bounds.x * ratio,
       offsetY: y - bounds.y * ratio,
     };
+  }
+  function imagePlacement(stamp) {
+    if (stamp.activePlacement) return stamp.activePlacement;
+    if (
+      root.StampTypography &&
+      stamp.caption?.trim() &&
+      root.StampTypography.resolve(stamp.caption, stamp.style).autoPlace
+    ) {
+      const result = renderStamp(stamp);
+      result.canvas.width = result.canvas.height = 1;
+      return result.imagePlacement;
+    }
+    return baseImagePlacement(stamp);
   }
   function applyBrush(stamp, x, y, radius, mode) {
     const p = imagePlacement(stamp),
@@ -336,7 +349,80 @@
       data.data[i * 4 + 3] = stamp.mask[i];
     const layer = canvas(width, height);
     layer.getContext("2d").putImageData(data, 0, 0);
-    const p = imagePlacement(stamp),
+    if (root.StampTypography) {
+      const T = root.StampTypography,
+        base = baseImagePlacement(stamp);
+      function drawArt(p) {
+        const art = canvas(WIDTH, HEIGHT),
+          context = art.getContext("2d"),
+          crop = p.crop;
+        context.save();
+        context.beginPath();
+        context.rect(MARGIN, MARGIN, WIDTH - MARGIN * 2, HEIGHT - MARGIN * 2);
+        context.clip();
+        context.drawImage(
+          layer,
+          crop.x,
+          crop.y,
+          crop.width,
+          crop.height,
+          p.offsetX + crop.x * p.ratio,
+          p.offsetY + crop.y * p.ratio,
+          crop.width * p.ratio,
+          crop.height * p.ratio,
+        );
+        context.restore();
+        return art;
+      }
+      const art = drawArt(base);
+      let finalArt = art,
+        plan = null,
+        placement = base;
+      if (stamp.caption.trim()) {
+        if (stamp.activePlacement && stamp.renderTextPlan)
+          plan = stamp.renderTextPlan;
+        else {
+          const result = T.compose(stamp.caption, stamp.style, art, (t) =>
+            drawArt({
+              ...base,
+              ratio: base.ratio * t.scale,
+              offsetX: base.offsetX * t.scale + t.x,
+              offsetY: base.offsetY * t.scale + t.y,
+            }),
+          );
+          finalArt = result.art;
+          plan = result.plan;
+          placement = {
+            ...base,
+            ratio: base.ratio * result.transform.scale,
+            offsetX: base.offsetX * result.transform.scale + result.transform.x,
+            offsetY: base.offsetY * result.transform.scale + result.transform.y,
+          };
+        }
+      }
+      ctx.drawImage(finalArt, 0, 0);
+      if (plan) T.paintPlan(ctx, plan);
+      stamp.renderTextPlan = plan;
+      const bounds = alphaBounds(
+        ctx.getImageData(0, 0, WIDTH, HEIGHT).data,
+        WIDTH,
+        HEIGHT,
+      );
+      layer.width = layer.height = art.width = art.height = 1;
+      if (finalArt !== art) finalArt.width = finalArt.height = 1;
+      return {
+        canvas: target,
+        bounds,
+        empty: !bounds,
+        textClipped: plan?.clipped || false,
+        textOverlap: plan?.overlapPixels || 0,
+        textAutoScaled: plan?.autoScaled || false,
+        effectiveFontSize: plan?.style.size || stamp.style.size,
+        imagePlacement: placement,
+        textPlan: plan,
+      };
+    }
+    const p = baseImagePlacement(stamp),
       crop = p.crop;
     ctx.save();
     ctx.beginPath();

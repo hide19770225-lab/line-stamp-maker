@@ -17,6 +17,12 @@
       y: 84,
       color: "#293c33",
       outline: true,
+      preset: "auto",
+      overrides: [],
+      autoPlace: true,
+      outlineWidth: 5,
+      shadow: 0,
+      angle: 0,
     },
     layout: { scale: 90, x: 50, y: 50 },
     crop: blankInsets(),
@@ -140,6 +146,42 @@
         !number(slot.style.y, 10, 90) ||
         !color(slot.style.color) ||
         typeof slot.style.outline !== "boolean" ||
+        (slot.style.preset !== undefined &&
+          ![
+            "auto",
+            "manual",
+            "energetic",
+            "pop",
+            "cute",
+            "gentle",
+            "emphasis",
+            "simple",
+          ].includes(slot.style.preset)) ||
+        (slot.style.autoPlace !== undefined &&
+          typeof slot.style.autoPlace !== "boolean") ||
+        (slot.style.outlineWidth !== undefined &&
+          !number(slot.style.outlineWidth, 0, 12)) ||
+        (slot.style.shadow !== undefined &&
+          !number(slot.style.shadow, 0, 12)) ||
+        (slot.style.angle !== undefined &&
+          !number(slot.style.angle, -30, 30)) ||
+        (slot.style.overrides !== undefined &&
+          (!Array.isArray(slot.style.overrides) ||
+            slot.style.overrides.length > 7 ||
+            new Set(slot.style.overrides).size !==
+              slot.style.overrides.length ||
+            slot.style.overrides.some(
+              (key) =>
+                ![
+                  "font",
+                  "size",
+                  "color",
+                  "outline",
+                  "outlineWidth",
+                  "shadow",
+                  "angle",
+                ].includes(key),
+            ))) ||
         !object(slot.layout) ||
         !number(slot.layout.scale, 20, 100) ||
         !number(slot.layout.x, 0, 100) ||
@@ -186,6 +228,21 @@
           y: slot.style.y,
           color: slot.style.color,
           outline: slot.style.outline,
+          ...Object.fromEntries(
+            [
+              "preset",
+              "autoPlace",
+              "outlineWidth",
+              "shadow",
+              "angle",
+              "overrides",
+            ]
+              .filter((key) => slot.style[key] !== undefined)
+              .map((key) => [
+                key,
+                key === "overrides" ? slot.style[key].slice() : slot.style[key],
+              ]),
+          ),
         },
         layout: {
           scale: slot.layout.scale,

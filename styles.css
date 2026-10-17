@@ -1703,3 +1703,26 @@ body.modal-open {
     font-size: 16px;
   }
 }
+.typography-controls {
+  margin: 18px 0;
+  background: #f8fbf5;
+}
+.typography-controls .hint {
+  margin: 10px 0;
+}
+.design-batch {
+  margin: 18px 0 8px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbf5;
+}
+.caption-settings input[type="range"] {
+  min-height: 44px;
+}
+.brush-modes [data-brush="text"] {
+  flex-basis: 100%;
+}
+#text-placement-status {
+  color: var(--green);
+}
