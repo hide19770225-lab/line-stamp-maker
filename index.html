@@ -23,15 +23,17 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=visual-cues-1" />
-    <script src="core.js?v=visual-cues-1" defer></script>
-    <script src="residue.js?v=visual-cues-1" defer></script>
-    <script src="typography.js?v=visual-cues-1" defer></script>
-    <script src="project.js?v=visual-cues-1" defer></script>
-    <script src="audit.js?v=visual-cues-1" defer></script>
-    <script src="easy.js?v=visual-cues-1" defer></script>
-    <script src="suggestions.js?v=visual-cues-1" defer></script>
-    <script src="app.js?v=visual-cues-1" defer></script>
+    <link rel="stylesheet" href="styles.css?v=reference-match-1" />
+    <script src="core.js?v=reference-match-1" defer></script>
+    <script src="residue.js?v=reference-match-1" defer></script>
+    <script src="typography.js?v=reference-match-1" defer></script>
+    <script src="project.js?v=reference-match-1" defer></script>
+    <script src="audit.js?v=reference-match-1" defer></script>
+    <script src="easy.js?v=reference-match-1" defer></script>
+    <script src="caption-references.js?v=reference-match-1" defer></script>
+    <script src="caption-vision.js?v=reference-match-1" defer></script>
+    <script src="suggestions.js?v=reference-match-1" defer></script>
+    <script src="app.js?v=reference-match-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -85,8 +87,14 @@
         <section id="auto-caption-panel" class="panel" hidden>
           <h2>セリフを自動提案（両モード共通）</h2>
           <p class="hint">
-            読み込み後に番号別の候補を自動登録します。青い涙の画素特徴のみ検査し、推測の根拠を表示します。その他の表情・ポーズは判定できず、汎用候補を表示します。確認・承認後に20px余白の文字入り画像を生成します。既存のセリフは維持します。
+            読み込み後に番号別の候補を自動登録します。確認済みキャラクター10枚の画素見本と照合し、近い表情・ポーズの候補を表示します。一致しない画像は判定できず・汎用候補と表示します。汎用的な表情認識AIではありません。確認・承認後に20px余白の文字入り画像を生成します。既存のセリフは維持します。
           </p>
+          <label class="check-label"
+            ><input
+              type="checkbox"
+              id="resuggest-existing"
+            />登録済みセリフも再提案する（承認前は画像を変更しません）</label
+          >
           <button id="auto-captions" class="button primary wide">
             セリフ候補を再確認
           </button>
@@ -571,7 +579,7 @@
           <details id="suggestion-panel" class="suggestion-panel">
             <summary>表情を選んでセリフ提案・20px自動レイアウト</summary>
             <p class="hint">
-              自動提案は青い涙の画素特徴に限定した推測です。任意の表情・ポーズの分類は未実装です。根拠と画像を確認し、必要なら表情を手動選択してください。承認するまでは既存のセリフ・画像を変更しません。未承認の提案と表情選択はJSONに保存されません。
+              自動提案は確認済みの画素見本との照合、または青い涙の限定的な特徴による推測です。別キャラクターなど任意の表情・ポーズの分類は未実装です。根拠と画像を確認し、必要なら表情を手動選択してください。承認するまでは既存のセリフ・画像を変更しません。未承認の提案と表情選択はJSONに保存されません。
             </p>
             <button id="suggest-all" class="button secondary wide">
               選んだ表情から候補をまとめて提案

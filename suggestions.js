@@ -2,7 +2,7 @@
 (function (root) {
   "use strict";
   const groups = {
-    unknown: { label: "未分類（自動判定しません）", phrases: [] },
+    unknown: { label: "判定できず／未分類", phrases: [] },
     smile: {
       label: "笑顔・うれしい",
       phrases: [
@@ -109,19 +109,95 @@
       ],
     },
   };
+  Object.assign(groups, {
+    wave: {
+      label: "手を振る（見本照合）",
+      phrases: [
+        "やっほー！",
+        "またね！",
+        "はーい！",
+        "おーい！",
+        "こんにちは！",
+        "よろしくね！",
+      ],
+    },
+    bow: {
+      label: "お辞儀（見本照合）",
+      phrases: [
+        "ありがとう",
+        "よろしくお願いします",
+        "感謝です",
+        "お世話になります",
+        "ありがとうございます",
+        "どうもです",
+      ],
+    },
+    approve: {
+      label: "親指を立てる（見本照合）",
+      phrases: [
+        "いいね！",
+        "OKです！",
+        "ばっちり！",
+        "了解です！",
+        "まかせて！",
+        "その調子！",
+      ],
+    },
+    worried: {
+      label: "困る（見本照合）",
+      phrases: [
+        "どうしよう…",
+        "困ったな",
+        "大丈夫かな",
+        "うーん…",
+        "助けて〜",
+        "むずかしい…",
+      ],
+    },
+    joy: {
+      label: "喜ぶ（見本照合）",
+      phrases: [
+        "やったー！",
+        "うれしい！",
+        "わーい！",
+        "最高！",
+        "楽しみ！",
+        "ばんざーい！",
+      ],
+    },
+    love: {
+      label: "ハート（見本照合）",
+      phrases: [
+        "大好き",
+        "ありがとう♡",
+        "だいすき！",
+        "愛をこめて",
+        "きゅん♡",
+        "感謝の気持ち",
+      ],
+    },
+  });
   function candidates(emotion) {
     return (groups[emotion] || groups.unknown).phrases.slice();
   }
   function choose(emotion, used = [], offset = 0) {
     const pool = candidates(emotion);
     if (!pool.length) return null;
-    const free = pool.filter((text) => !used.includes(text));
+    const occupied = new Set(used.map((text) => text.normalize("NFKC").trim()));
+    const free = pool.filter(
+      (text) => !occupied.has(text.normalize("NFKC").trim()),
+    );
     const values = free.length ? free : pool;
     return values[((offset % values.length) + values.length) % values.length];
   }
   // Conservative visual cues, not a general expression/pose classifier.
   // Source pixels and the transparency mask are read only; no generated text is sampled.
   function analyze(image, mask) {
+    const vision =
+      root.StampCaptionVision ||
+      (typeof module !== "undefined" ? require("./caption-vision.js") : null);
+    const matched = vision?.match(image, mask);
+    if (matched && matched.emotion !== "unknown") return matched;
     const { width: w, height: h, data } = image;
     const unknown = {
       emotion: "unknown",
@@ -191,26 +267,70 @@
           };
     return unknown;
   }
-  // Neutral daily phrases: assignment is by number, never by inferred emotion.
+  // Explicit neutral fallback. When pixels are supplied, a stable pixel fingerprint selects the starting candidate.
   function automatic(rows) {
     const pool = [
-      ...groups.greeting.phrases,
-      ...groups.smile.phrases,
-      ...groups.support.phrases,
-      ...groups.sleepy.phrases,
-      "ありがとうね",
-      "また連絡するね",
-      "よろしくです",
+      "了解です",
+      "ありがとう",
       "確認します",
+      "そうなんだ",
+      "なるほど",
+      "わかりました",
+      "見ました",
+      "助かります",
+      "感謝です",
+      "承知しました",
+      "ありがとうね",
+      "連絡ありがとう",
+      "確認しました",
+      "了解だよ",
+      "そうですね",
+      "なるほどね",
+      "いつもありがとう",
+      "助かるよ",
+      "見てみます",
+      "確認するね",
+      "お知らせありがとう",
+      "承知です",
+      "わかったよ",
+      "ありがとうございます",
+      "なるほどです",
+      "確認中です",
+      "ありがとうです",
+      "了解しました",
+      "そうなんですね",
+      "連絡感謝です",
+      "受け取りました",
+      "チェックします",
+      "確認してみるね",
+      "わかりました！",
+      "感謝してます",
+      "ありがとね",
+      "見ておきます",
+      "承知したよ",
+      "連絡見ました",
+      "受け取ったよ",
+      "確認するよ",
+      "どうもです",
+      "見たよ",
+      "お知らせ感謝です",
     ];
     const used = new Set(
       rows.map((row) => row.caption.normalize("NFKC").trim()).filter(Boolean),
     );
     return rows.map((row) => {
       if (row.caption.trim()) return { ...row };
-      const caption = pool.find(
-        (text) => !used.has(text.normalize("NFKC").trim()),
-      );
+      const vision =
+        root.StampCaptionVision ||
+        (typeof module !== "undefined" ? require("./caption-vision.js") : null);
+      const offset =
+        row.image && row.mask
+          ? vision.fingerprint(row.image, row.mask) % pool.length
+          : 0;
+      const ordered = [...pool.slice(offset), ...pool.slice(0, offset)];
+      const caption =
+        ordered.find((text) => !used.has(text.normalize("NFKC").trim())) ||
+        ordered[0];
       if (!caption) throw new Error("重複しない候補が不足しています。");
       used.add(caption.normalize("NFKC").trim());
       return { ...row, caption };
