@@ -2668,7 +2668,7 @@
         );
       });
   }
-  async function proposeLoadedImages() {
+  async function proposeLoadedImages(replace = false) {
     const field = $(
       $("production-mode").value === "easy" ? "easy-captions" : "bulk-captions",
     );
@@ -2699,14 +2699,12 @@
       }
     }
     const rows = currentSuggestionDrafts();
-    if (pending)
+    if (replace) for (const row of rows) row.caption = "";
+    if (pending && !replace)
       for (const row of rows) {
         if (pending[row.slot - 1] !== undefined)
           row.caption = pending[row.slot - 1];
       }
-    const fallback = window.StampSuggestions.automatic(
-      rows.map((row) => ({ slot: row.slot, caption: row.caption })),
-    );
     const used = rows
       .filter((row) => row.caption.trim())
       .map((row) => row.caption);
@@ -2722,7 +2720,10 @@
       row.analysisReason = result.reason;
       row.caption =
         result.emotion === "unknown"
-          ? fallback[i].caption
+          ? window.StampSuggestions.automatic([
+              ...used.map((caption) => ({ caption })),
+              { caption: "", image: row.stamp.original, mask: row.stamp.mask },
+            ]).at(-1).caption
           : window.StampSuggestions.choose(result.emotion, used);
       if (result.emotion === "unknown")
         row.analysisReason += "。汎用候補（画像に合う保証なし）";
@@ -2736,12 +2737,12 @@
     $("suggestion-ack").checked = false;
     renderSuggestionPanel();
     $("auto-caption-status").textContent =
-      `${rows.length}個の番号別入力欄に提案を登録しました。青い涙の限定的な画素特徴のみ検査。その他は判定できず・汎用候補です。一覧を修正・承認すると文字入りPNGを生成します。`;
+      `${rows.length}個の番号別入力欄に提案を登録しました。確認済み見本との画素照合と限定的な涙特徴検査を使用。一致しない画像は判定できず・汎用候補です。一覧を修正・承認すると文字入りPNGを生成します。`;
   }
   if ($("auto-captions"))
     $("auto-captions").onclick = () =>
       task(async () => {
-        await proposeLoadedImages();
+        await proposeLoadedImages($("resuggest-existing")?.checked || false);
         $("suggestion-panel").scrollIntoView({
           block: "start",
           behavior: "smooth",

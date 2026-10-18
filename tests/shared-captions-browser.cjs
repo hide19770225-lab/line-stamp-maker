@@ -105,7 +105,7 @@ const assert = require("node:assert/strict");
       assert.equal(captions[0], "既存のセリフ");
       assert.match(
         await p.locator("#auto-caption-status").textContent(),
-        /青い涙/,
+        /画素照合/,
       );
       const result = await p.evaluate(() =>
         Object.values(rendered).map((s) => ({
