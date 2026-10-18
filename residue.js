@@ -229,6 +229,42 @@
           );
         })
       : [];
+    // A disconnected pair of strokes may be an anger/motion mark. Protect
+    // nearby non-boundary fragments as uncertain decoration, never as a defect.
+    const gapLimit = Math.max(3, Math.round(Math.min(width, height) * 0.02));
+    // Bound pairwise work on noisy sheets for mobile devices. Other components
+    // remain unchanged review candidates; never assume an unexamined mark is safe.
+    const fragments = candidates
+      .filter(
+        (c) =>
+          !c.nearBoundary &&
+          !c.touchesEdge &&
+          c.area >= 2 &&
+          Math.max(c.width, c.height) <= Math.min(width, height) * 0.12,
+      )
+      .slice(0, 2000);
+    for (let i = 0; i < fragments.length; i++)
+      for (let j = i + 1; j < fragments.length; j++) {
+        const a = fragments[i],
+          b = fragments[j];
+        const dx = Math.max(0, a.x - b.x - b.width, b.x - a.x - a.width),
+          dy = Math.max(0, a.y - b.y - b.height, b.y - a.y - a.height);
+        if (
+          dx <= gapLimit &&
+          dy <= gapLimit &&
+          Math.max(a.x + a.width, b.x + b.width) - Math.min(a.x, b.x) <=
+            Math.min(width, height) * 0.18 &&
+          Math.max(a.y + a.height, b.y + b.height) - Math.min(a.y, b.y) <=
+            Math.min(width, height) * 0.18
+        ) {
+          for (const c of [a, b]) {
+            c.protected = true;
+            c.decorationLike = true;
+            c.classification = "decoration-or-detail";
+            c.groupedDecoration = true;
+          }
+        }
+      }
     return {
       width,
       height,

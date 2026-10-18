@@ -63,6 +63,57 @@
     const { width: w, height: h, data } = image;
     if (!w || !h || data.length !== w * h * 4 || mask.length !== w * h)
       return null;
+    // Match the existing export rule for known upper scanline remnants. Ignore
+    // only those verified components while computing features; never edit inputs.
+    let alpha = mask,
+      possible = false;
+    for (
+      let y = 1;
+      y <= Math.min(h - 2, Math.floor(h * 0.16)) && !possible;
+      y++
+    ) {
+      let run = 0;
+      for (let x = 0; x < w; x++) {
+        const n = y * w + x,
+          j = n * 4;
+        if (
+          mask[n] > 0 &&
+          mask[n] < 255 &&
+          mask[n - w] === 0 &&
+          mask[n + w] === 0 &&
+          Math.min(data[j], data[j + 1], data[j + 2]) >= 200 &&
+          Math.max(data[j], data[j + 1], data[j + 2]) -
+            Math.min(data[j], data[j + 1], data[j + 2]) <=
+            24
+        )
+          run++;
+        else run = 0;
+        if (run >= 12) {
+          possible = true;
+          break;
+        }
+      }
+    }
+    if (possible) {
+      const residue =
+        root.StampResidue ||
+        (typeof module !== "undefined" ? require("./residue.js") : null);
+      if (residue) {
+        const effective = data.slice();
+        for (let i = 0; i < mask.length; i++) effective[i * 4 + 3] = mask[i];
+        const lines = residue.automaticLines({
+          width: w,
+          height: h,
+          data: effective,
+        });
+        if (lines.length) {
+          alpha = mask.slice();
+          for (const c of lines)
+            for (let y = c.y; y < c.y + c.height; y++)
+              for (let x = c.x; x < c.x + c.width; x++) alpha[y * w + x] = 0;
+        }
+      }
+    }
     let left = w,
       top = h,
       right = -1,
@@ -71,7 +122,7 @@
       for (let x = 0; x < w; x++) {
         const i = y * w + x,
           j = i * 4;
-        if (mask[i] < 64 || Math.min(data[j], data[j + 1], data[j + 2]) > 225)
+        if (alpha[i] < 64 || Math.min(data[j], data[j + 1], data[j + 2]) > 225)
           continue;
         left = Math.min(left, x);
         right = Math.max(right, x);
@@ -92,7 +143,7 @@
               sy = Math.floor(cy + ((y + oy) / SIDE - 0.5) * span);
             const inside = sx >= 0 && sx < w && sy >= 0 && sy < h,
               i = sy * w + sx,
-              a = inside ? mask[i] / 255 : 0;
+              a = inside ? alpha[i] / 255 : 0;
             for (let c = 0; c < 3; c++)
               sum[c] += inside ? (data[i * 4 + c] / 255) * a + 1 - a : 1;
             sum[3] += a;
@@ -109,19 +160,35 @@
       reason: "見本との一致が不十分：判定できず",
     };
     if (!vector) return unknown;
+    const personal = learned();
+    const corrected = new Set(personal.map((r) => r.features));
     const references = [
-      ...(root.StampCaptionReferences ||
+      ...(
+        root.StampCaptionReferences ||
         (typeof module !== "undefined"
           ? require("./caption-references.js")
-          : [])),
-      ...learned(),
+          : [])
+      ).filter((r) => !corrected.has(r.features)),
+      ...personal,
     ];
     const scores = references
       .map((ref) => {
-        let sum = 0;
-        for (let i = 0; i < vector.length; i++)
-          sum += Math.abs(vector[i] - parseInt(ref.features[i], 16));
-        return { ref, distance: sum / vector.length / 15 };
+        let normal = 0,
+          flipped = 0;
+        for (let y = 0; y < SIDE; y++)
+          for (let x = 0; x < SIDE; x++)
+            for (let c = 0; c < 4; c++) {
+              const i = (y * SIDE + x) * 4 + c,
+                mirror = (y * SIDE + SIDE - 1 - x) * 4 + c;
+              const target = parseInt(ref.features[i], 16);
+              normal += Math.abs(vector[i] - target);
+              flipped += Math.abs(vector[mirror] - target);
+            }
+        return {
+          ref,
+          distance: Math.min(normal, flipped) / vector.length / 15,
+          mirrored: flipped < normal,
+        };
       })
       .sort((a, b) => a.distance - b.distance);
     if (!scores.length) return unknown;
@@ -144,7 +211,8 @@
       method: "reference",
       distance: best.distance,
       gap,
-      reason: `画素見本照合：${best.ref.label}に近い画像（推測・要確認）。見本との差 ${(best.distance * 100).toFixed(1)}%。汎用的な表情認識ではありません。`,
+      mirrored: best.mirrored,
+      reason: `画素見本照合${best.mirrored ? "（左右反転）" : ""}：${best.ref.label}に近い画像（推測・要確認）。見本との差 ${(best.distance * 100).toFixed(1)}%。汎用的な表情認識ではありません。`,
     };
   }
   function fingerprint(image, mask) {

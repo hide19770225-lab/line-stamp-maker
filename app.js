@@ -2513,6 +2513,8 @@
       const input = document.createElement("input");
       input.type = "text";
       input.maxLength = 120;
+      input.placeholder =
+        "判定できない場合は表情を選ぶか、直接入力してください";
       input.value = draft.caption;
       input.dataset.kind = "caption";
       captionLabel.append(input);
@@ -2771,15 +2773,24 @@
       );
       row.emotion = result.emotion;
       row.analysisReason = result.reason;
+      const generic = $("allow-generic-captions")?.checked || false;
       row.caption =
         result.emotion === "unknown"
-          ? window.StampSuggestions.automatic([
-              ...used.map((caption) => ({ caption })),
-              { caption: "", image: row.stamp.original, mask: row.stamp.mask },
-            ]).at(-1).caption
+          ? generic
+            ? window.StampSuggestions.automatic([
+                ...used.map((caption) => ({ caption })),
+                {
+                  caption: "",
+                  image: row.stamp.original,
+                  mask: row.stamp.mask,
+                },
+              ]).at(-1).caption
+            : ""
           : window.StampSuggestions.choose(result.emotion, used);
       if (result.emotion === "unknown")
-        row.analysisReason += "。汎用候補（画像に合う保証なし）";
+        row.analysisReason += generic
+          ? "。汎用候補（画像に合う保証なし）"
+          : "。セリフは自動入力していません。表情を選ぶと候補が入ります。";
       used.push(row.caption);
       row.approved = false;
     }
@@ -2790,7 +2801,7 @@
     $("suggestion-ack").checked = false;
     renderSuggestionPanel();
     $("auto-caption-status").textContent =
-      `${rows.length}個の番号別入力欄に提案を登録しました。確認済み見本との画素照合と限定的な涙特徴検査を使用。一致しない画像は判定できず・汎用候補です。一覧を修正・承認すると文字入りPNGを生成します。`;
+      `${rows.length}個を確認し、セリフ未入力は${rows.filter((row) => !row.caption.trim()).length}個です。確認済み見本との画素照合と限定的な涙特徴検査を使用。一致しない画像は判定できずとして扱い、汎用候補は希望した場合だけ入力します。一覧を修正・承認すると文字入りPNGを生成します。`;
   }
   if ($("clear-pose-references"))
     $("clear-pose-references").onclick = () => {

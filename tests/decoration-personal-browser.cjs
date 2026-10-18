@@ -57,6 +57,7 @@ const base = process.env.STAMP_TEST_URL || "http://127.0.0.1:4673";
       await row.locator(".hint").textContent(),
       /利用者が表情を指定/,
     );
+    await p.check("#allow-generic-captions");
     await p.check("#resuggest-existing");
     await p.click("#auto-captions");
     await idle();
