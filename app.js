@@ -358,9 +358,10 @@
         }
       }
       if (loaded) {
+        await proposeLoadedImages();
         renderResults();
         notify(
-          `${loaded}枚を読み込みました。分割線を確認して加工してください。`,
+          `${loaded}枚を読み込みました。番号別の提案セリフを確認・承認してください。`,
         );
       }
     });
@@ -373,7 +374,7 @@
         ...easyPlan().warnings,
       ]);
       notify(
-        "画像の読み込みを終了しました。画像名と警告を確認し、自動加工に進んでください。",
+        "画像を読み込み済みです。提案一覧で画像とセリフを確認・承認してください。",
         false,
         true,
       );
@@ -2462,10 +2463,14 @@
       const title = document.createElement("h4");
       title.textContent = `${String(draft.slot).padStart(2, "0")}.png`;
       const preview = C.canvas(185, 160);
-      preview.className = "stamp-canvas";
+      preview.className = "suggestion-preview checker";
       const index = stamps().indexOf(draft.stamp),
         from = $("stamp-grid").querySelectorAll("canvas")[index];
       if (from) preview.getContext("2d").drawImage(from, 0, 0, 185, 160);
+      const evidence = document.createElement("p");
+      evidence.className = "hint";
+      evidence.textContent =
+        draft.analysisReason || "画像解析は未実施。表情は手動選択できます。";
       const emotionLabel = document.createElement("label");
       emotionLabel.textContent = "表情（手動選択）";
       const emotion = document.createElement("select");
@@ -2520,7 +2525,15 @@
       edit.onclick = () => {
         if (!state.busy) openEditor(stamps().indexOf(draft.stamp));
       };
-      card.append(title, preview, emotionLabel, captionLabel, next, edit);
+      card.append(
+        title,
+        preview,
+        evidence,
+        emotionLabel,
+        captionLabel,
+        next,
+        edit,
+      );
       list.append(card);
     }
     suggestionSummary();
@@ -2655,86 +2668,86 @@
         );
       });
   }
+  async function proposeLoadedImages() {
+    const field = $(
+      $("production-mode").value === "easy" ? "easy-captions" : "bulk-captions",
+    );
+    const saved = state.slots
+      .map((slot) => slot.caption)
+      .join("\n")
+      .replace(/\n+$/, "");
+    const pending =
+      field.value.trim() && field.value !== saved
+        ? field.value.replace(/\r/g, "").split("\n")
+        : null;
+    if (
+      pending &&
+      (pending.length > 40 ||
+        pending.some((line) => Array.from(line).length > 120))
+    )
+      throw new Error("セリフは40行以内、各行120文字以内で入力してください。");
+    const plan = easyPlan();
+    if (plan.errors.length) throw new Error(plan.errors.join(" / "));
+    for (const source of state.sources) {
+      if (
+        source.image &&
+        source.assignments.some(Boolean) &&
+        (source.processSignature !== signature(source) || !source.stamps.length)
+      ) {
+        notify(`提案用に分割・透過中… ${source.name}`, false, true);
+        await processSource(source);
+      }
+    }
+    const rows = currentSuggestionDrafts();
+    if (pending)
+      for (const row of rows) {
+        if (pending[row.slot - 1] !== undefined)
+          row.caption = pending[row.slot - 1];
+      }
+    const fallback = window.StampSuggestions.automatic(
+      rows.map((row) => ({ slot: row.slot, caption: row.caption })),
+    );
+    const used = rows
+      .filter((row) => row.caption.trim())
+      .map((row) => row.caption);
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.caption.trim()) continue; // Existing captions and user corrections win.
+      await frame();
+      const result = window.StampSuggestions.analyze(
+        row.stamp.original,
+        row.stamp.mask,
+      );
+      row.emotion = result.emotion;
+      row.analysisReason = result.reason;
+      row.caption =
+        result.emotion === "unknown"
+          ? fallback[i].caption
+          : window.StampSuggestions.choose(result.emotion, used);
+      if (result.emotion === "unknown")
+        row.analysisReason += "。汎用候補（画像に合う保証なし）";
+      used.push(row.caption);
+      row.approved = false;
+    }
+    easyCaptionDirty = false;
+    $("bulk-captions").value = saved;
+    renderResults();
+    $("suggestion-panel").open = true;
+    $("suggestion-ack").checked = false;
+    renderSuggestionPanel();
+    $("auto-caption-status").textContent =
+      `${rows.length}個の番号別入力欄に提案を登録しました。青い涙の限定的な画素特徴のみ検査。その他は判定できず・汎用候補です。一覧を修正・承認すると文字入りPNGを生成します。`;
+  }
   if ($("auto-captions"))
     $("auto-captions").onclick = () =>
       task(async () => {
-        const plan = easyPlan();
-        if (plan.errors.length) throw new Error(plan.errors.join(" / "));
-        // Preserve typed, not-yet-applied captions too; do not silently discard input.
-        const easyMode = $("production-mode").value === "easy";
-        const input = $(easyMode ? "easy-captions" : "bulk-captions");
-        const saved = state.slots
-          .map((slot) => slot.caption)
-          .join("\n")
-          .replace(/\n+$/, "");
-        if (
-          easyMode
-            ? easyCaptionPending()
-            : input.value.trim() && input.value !== saved
-        ) {
-          const lines = input.value.replace(/\r/g, "").split("\n");
-          if (
-            lines.length > 40 ||
-            lines.some((line) => Array.from(line).length > 120)
-          )
-            throw new Error(
-              "セリフは40行以内、各行120文字以内で入力してください。",
-            );
-          captureSlots(true);
-          state.slots.forEach((slot, i) => {
-            slot.caption = lines[i] || "";
-          });
-          stamps().forEach((stamp) => {
-            stamp.caption = state.slots[stamp.slot - 1].caption;
-          });
-          easyCaptionDirty = false;
-        }
-        for (const source of state.sources) {
-          if (
-            source.assignments.some(Boolean) &&
-            (source.processSignature !== signature(source) ||
-              !source.stamps.length)
-          ) {
-            notify(`画像を加工中… ${source.name}`, false, true);
-            await processSource(source);
-          }
-        }
-        const all = stamps();
-        if (!all.length)
-          throw new Error("採用するコマと画像を確認してください。");
-        const rows = window.StampSuggestions.automatic(
-          all.map((stamp) => ({ slot: stamp.slot, caption: stamp.caption })),
-        );
-        let changed = 0;
-        rows.forEach((row, i) => {
-          const stamp = all[i];
-          if (stamp.caption !== row.caption) {
-            stamp.caption = row.caption;
-            stamp.style = { ...stamp.style, safeMargin: 20, autoPlace: true };
-            stamp.reviewed = false;
-            changed++;
-          }
+        await proposeLoadedImages();
+        $("suggestion-panel").scrollIntoView({
+          block: "start",
+          behavior: "smooth",
         });
-        invalidate();
-        $("bulk-captions").value = state.slots
-          .map((slot) => slot.caption)
-          .join("\n")
-          .replace(/\n+$/, "");
-        easyCaptionDirty = false;
-        const drafts = currentSuggestionDrafts();
-        drafts.forEach((row) => {
-          row.needsRender = true;
-        });
-        finishedProcessing();
-        drafts.forEach((row) => {
-          row.needsRender = false;
-        });
-        $("suggestion-panel").open = true;
-        renderSuggestionPanel();
-        $("auto-caption-status").textContent =
-          `表情未解析：${changed}件の汎用セリフを自動登録しました。既存のセリフは維持しています。${plan.warnings.join(" / ")} 全画像のセリフと文字配置を目視確認してください。`;
         notify(
-          "汎用セリフを登録し、文字入り画像を生成しました。表情は解析していません。透過の目視確認は別途必要です。",
+          "番号別の提案を確認・承認してください。画像の表情・ポーズを確定する機能ではありません。",
         );
       });
   function easyPlan() {

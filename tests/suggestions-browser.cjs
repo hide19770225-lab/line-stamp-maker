@@ -96,7 +96,9 @@ const base = process.env.STAMP_TEST_URL || "http://127.0.0.1:4173",
           return result;
         });
       const before = await native();
-      await p.locator("#suggestion-panel summary").click();
+      await p.locator("#suggestion-panel").evaluate((el) => {
+        el.open = true;
+      });
       await p.waitForFunction(
         (n) => document.querySelectorAll(".suggestion-card").length === n,
         count,
