@@ -1955,3 +1955,17 @@ body.easy-mode:not(.easy-details-open) .workspace-grid {
 .suggestion-card .button {
   min-height: 44px;
 }
+
+.audit-preview-stage {
+  position: relative;
+}
+.audit-preview-stage .audit-component-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.audit-component-overlay[hidden] {
+  display: none;
+}

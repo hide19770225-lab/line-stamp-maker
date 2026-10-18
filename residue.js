@@ -28,6 +28,7 @@
           top = y,
           bottom = y,
           white = 0,
+          colored = 0,
           alphaMin = 255,
           alphaMax = 0;
         queue[tail++] = index;
@@ -48,6 +49,12 @@
             data[i * 4 + 2] >= 235
           )
             white++;
+          if (
+            Math.max(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) -
+              Math.min(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) >=
+            35
+          )
+            colored++;
           for (let dy = -1; dy <= 1; dy++)
             for (let dx = -1; dx <= 1; dx++) {
               if (!dx && !dy) continue;
@@ -70,6 +77,7 @@
           width: right - left + 1,
           height: bottom - top + 1,
           whiteFraction: white / tail,
+          colorFraction: colored / tail,
           alphaMin,
           alphaMax,
           touchesEdge:
@@ -198,6 +206,21 @@
             Math.max(4, Math.round(Math.min(rect.width, rect.height) * 0.02));
           // Short strokes near a silhouette may be motion marks, sweat or tears.
           c.protected = c.protected || (thin && c.nearMain && !c.touchesEdge);
+          // Colored and compact detached marks can be hearts, stars, sweat or anger
+          // symbols. Their meaning is uncertain, so protect them instead of calling
+          // them defects. Edge/boundary marks remain reviewable; never auto delete.
+          c.decorationLike =
+            !c.touchesEdge &&
+            !c.nearBoundary &&
+            ((c.colorFraction >= 0.25 &&
+              c.width >= 2 &&
+              c.height >= 2 &&
+              c.area >= 3) ||
+              (!thin && c.width >= 3 && c.height >= 3 && c.area >= 6));
+          c.protected = c.protected || c.decorationLike;
+          c.classification = c.protected
+            ? "decoration-or-detail"
+            : "uncertain-residue";
           c.kind = c.nearBoundary ? "boundary" : thin ? "line" : "fragment";
           return (
             (outside || (c.exterior && !c.nearMain)) &&
@@ -261,6 +284,9 @@
     return {
       candidates: scan.candidates.filter(
         (c) => !c.protected && !protectedIds.has(c.id),
+      ),
+      decorations: scan.candidates.filter(
+        (c) => c.protected && !protectedIds.has(c.id),
       ),
       protectedIds: [...protectedIds],
     };

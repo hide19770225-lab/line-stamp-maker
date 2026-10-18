@@ -49,12 +49,13 @@
       errors.push("文字の自動配置がキャラクターに重なっています");
     if (options.residues)
       warnings.push(
-        `不要な残留線・点の候補 ${options.residues}件（装飾の可能性あり）`,
+        `孤立成分の要確認 ${options.residues}件（異常は未確定・装飾の可能性あり）`,
       );
     return {
       status: errors.length ? "エラー" : warnings.length ? "要確認" : "正常",
       errors,
       warnings,
+      decorations: options.decorations || 0,
       bytes,
       transparent,
       partial,
