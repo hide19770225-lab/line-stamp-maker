@@ -204,6 +204,103 @@
     isolated.getContext("2d").drawImage(image, -rect.x, -rect.y);
     return isolated;
   }
+  // Locate nearly blank gutters close to the expected grid positions.
+  // Only return strong suggestions; uncertain sheets keep their manual grid.
+  function suggestGridLines(image, columns, rows) {
+    const width = image.width, height = image.height;
+    if (!columns || !rows || width < columns * 20 || height < rows * 20)
+      return null;
+    const sample = canvas(width, height);
+    const ctx = sample.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    sample.width = sample.height = 1;
+    const cornerIndices = [0, width - 1, (height - 1) * width, width * height - 1];
+    const corners = cornerIndices.map((i) => Array.from(pixels.slice(i * 4, i * 4 + 3)));
+    const background = corners[0];
+    // A nonuniform border cannot safely establish the background color.
+    if (corners.some((c) => c.some((v, i) => Math.abs(v - background[i]) > 18)))
+      return null;
+    const isInk = (x, y) => {
+      const i = (y * width + x) * 4;
+      if (pixels[i + 3] < 16) return false;
+      return Math.max(
+        Math.abs(pixels[i] - background[0]),
+        Math.abs(pixels[i + 1] - background[1]),
+        Math.abs(pixels[i + 2] - background[2]),
+      ) > 30;
+    };
+    function line(axis, index, total, count) {
+      const nominal = Math.round((index * total) / count);
+      const radius = Math.max(2, Math.round((total / count) * 0.16));
+      const cross = axis === "x" ? height : width;
+      const step = Math.max(1, Math.floor(cross / 600));
+      const start = Math.max(1, nominal - radius);
+      const end = Math.min(total - 2, nominal + radius);
+      const blank = [];
+      for (let pos = start; pos <= end; pos++) {
+        let ink = 0, samples = 0;
+        for (let other = 0; other < cross; other += step) {
+          const x = axis === "x" ? pos : other;
+          const y = axis === "x" ? other : pos;
+          if (isInk(x, y)) ink++;
+          samples++;
+        }
+        blank.push(ink / samples <= 0.003);
+      }
+      // Choose the center of a blank corridor, not its edge. This preserves
+      // nearby ears, paws and decorations and avoids spurious boundary alerts.
+      let best = null;
+      for (let i = 0; i < blank.length;) {
+        if (!blank[i]) { i++; continue; }
+        let j = i;
+        while (j + 1 < blank.length && blank[j + 1]) j++;
+        const center = Math.round((i + j) / 2) + start;
+        const candidate = { center, length: j - i + 1 };
+        if (!best || candidate.length > best.length ||
+          (candidate.length === best.length &&
+            Math.abs(center - nominal) < Math.abs(best.center - nominal)))
+          best = candidate;
+        i = j + 1;
+      }
+      const minCorridor = Math.max(3, Math.round(total / count * 0.015));
+      return best && best.length >= minCorridor ? best.center / total : null;
+    }
+    const xs = [0], ys = [0];
+    for (let i = 1; i < columns; i++) {
+      const x = line("x", i, width, columns);
+      if (x === null) return null;
+      xs.push(x);
+    }
+    for (let i = 1; i < rows; i++) {
+      const y = line("y", i, height, rows);
+      if (y === null) return null;
+      ys.push(y);
+    }
+    xs.push(1); ys.push(1);
+    return { xs, ys };
+  }
+  // A source-grid cut through visible artwork needs a human ownership check.
+  // This is diagnostic only: never erase thin antennae, lettering or decorations.
+  function tileBoundaryReview(mask, width, height) {
+    const band = Math.max(2, Math.ceil(Math.min(width, height) * 0.015));
+    const edges = [];
+    const count = (side) => {
+      let pixels = 0;
+      for (let y = 0; y < height; y++)
+        for (let x = 0; x < width; x++) {
+          if (side === "left" && x >= band) continue;
+          if (side === "right" && x < width - band) continue;
+          if (side === "top" && y >= band) continue;
+          if (side === "bottom" && y < height - band) continue;
+          if (mask[y * width + x] > 0) pixels++;
+        }
+      return pixels;
+    };
+    for (const side of ["left", "right", "top", "bottom"])
+      if (count(side) >= 2) edges.push(side);
+    return { needsReview: edges.length > 0, edges };
+  }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
@@ -219,7 +316,9 @@
     const original = ctx.getImageData(0, 0, crop.width, crop.height);
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
+    const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
     return {
+      boundaryReview,
       original,
       mask,
       autoMask: mask.slice(),
@@ -695,6 +794,8 @@
     createTile,
     isolateRect,
     tileRect,
+    suggestGridLines,
+    tileBoundaryReview,
     stampCrop,
     maskBounds,
     imagePlacement,
