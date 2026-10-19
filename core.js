@@ -390,9 +390,19 @@
       const selected = states[0].cuts.slice();
       for (let i = 1; i < selected.length; i++) {
         let lo = selected[i], hi = selected[i];
-        while (lo > 0 && density[lo - 1] <= 0.008) lo--;
-        while (hi < height - 1 && density[hi + 1] <= 0.008) hi++;
-        selected[i] = Math.round((lo + hi) / 2);
+        // Bound the corridor to the expected row junction. Otherwise a very
+        // large empty margin could shift a cut into an adjacent sticker.
+        const nominal = i * cell;
+        const minY = Math.max(1, Math.ceil(nominal - cell * 0.43));
+        const maxY = Math.min(height - 2, Math.floor(nominal + cell * 0.43));
+        while (lo > minY && density[lo - 1] <= 0.008) lo--;
+        while (hi < maxY && density[hi + 1] <= 0.008) hi++;
+        const centered = Math.round((lo + hi) / 2);
+        // Preserve the joint optimizer's minimum row height after centering.
+        const previous = selected[i - 1];
+        const next = i + 1 < selected.length ? states[0].cuts[i + 1] : height;
+        selected[i] = centered - previous >= cell * 0.56 &&
+          next - centered >= cell * 0.56 ? centered : states[0].cuts[i];
       }
       result.push([...selected.map(y=>y/height),1]);
     }
