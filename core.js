@@ -235,8 +235,10 @@
       const radius = Math.max(2, Math.round((total / count) * 0.16));
       const cross = axis === "x" ? height : width;
       const step = Math.max(1, Math.floor(cross / 600));
-      let best = null;
-      for (let pos = Math.max(1, nominal - radius); pos <= Math.min(total - 2, nominal + radius); pos++) {
+      const start = Math.max(1, nominal - radius);
+      const end = Math.min(total - 2, nominal + radius);
+      const blank = [];
+      for (let pos = start; pos <= end; pos++) {
         let ink = 0, samples = 0;
         for (let other = 0; other < cross; other += step) {
           const x = axis === "x" ? pos : other;
@@ -244,14 +246,25 @@
           if (isInk(x, y)) ink++;
           samples++;
         }
-        const fraction = ink / samples;
-        const candidate = { pos, fraction, displacement: Math.abs(pos - nominal) };
-        if (!best || fraction < best.fraction ||
-          (fraction === best.fraction && candidate.displacement < best.displacement))
-          best = candidate;
+        blank.push(ink / samples <= 0.003);
       }
-      // Require an almost empty line, not merely a locally sparse artwork row.
-      return best && best.fraction <= 0.003 ? best.pos / total : null;
+      // Choose the center of a blank corridor, not its edge. This preserves
+      // nearby ears, paws and decorations and avoids spurious boundary alerts.
+      let best = null;
+      for (let i = 0; i < blank.length;) {
+        if (!blank[i]) { i++; continue; }
+        let j = i;
+        while (j + 1 < blank.length && blank[j + 1]) j++;
+        const center = Math.round((i + j) / 2) + start;
+        const candidate = { center, length: j - i + 1 };
+        if (!best || candidate.length > best.length ||
+          (candidate.length === best.length &&
+            Math.abs(center - nominal) < Math.abs(best.center - nominal)))
+          best = candidate;
+        i = j + 1;
+      }
+      const minCorridor = Math.max(3, Math.round(total / count * 0.015));
+      return best && best.length >= minCorridor ? best.center / total : null;
     }
     const xs = [0], ys = [0];
     for (let i = 1; i < columns; i++) {
