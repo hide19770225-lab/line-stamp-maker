@@ -412,8 +412,13 @@
           if (corridor < 2) continue;
           // A long clear run near the expected boundary is preferred.
           // The two-sided ink check above excludes blank image margins.
+          // The last 2x5 boundary often sits above its equal-height
+          // position. Penalize a late cut there: it can import the first
+          // pixels of row five into row four (07/08 contamination).
+          const lateFinalRow = rows === 5 && row === rows - 1 &&
+            y > nominal - cell * 0.05 ? 0.20 : 0;
           const score = Math.abs(y - nominal) / cell * 0.13 +
-            0.7 / (corridor + 3) + smooth[y] * 0.08;
+            0.7 / (corridor + 3) + smooth[y] * 0.08 + lateFinalRow;
           options.push({y,score});
         }
         options.sort((a,b)=>a.score-b.score);
