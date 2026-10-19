@@ -332,11 +332,28 @@
           const right=Math.min(height-1,y+Math.round(cell*0.12));
           const surrounding=Math.max(smooth[left],smooth[right]);
           // A good gutter is pale and lies between two populated rows.
-          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
-              +Math.max(0,0.025-surrounding)*2;
+          // The cut must lie in a sustained empty corridor, not merely a
+          // pale stripe inside a caption or at the top of the next sticker.
+          const guard = Math.max(3, Math.round(cell * 0.035));
+          let nearbyInk = 0, peakInk = 0;
+          for (let k = Math.max(0,y-guard); k <= Math.min(height-1,y+guard); k++) {
+            nearbyInk += density[k];
+            peakInk = Math.max(peakInk,density[k]);
+          }
+          const averageInk = nearbyInk /
+            (Math.min(height-1,y+guard)-Math.max(0,y-guard)+1);
+          // A few isolated anti-aliased pixels are tolerable, but an actual
+          // drawing stroke anywhere in the guard band is not a safe cut.
+          if (peakInk > 0.025 || averageInk > 0.006) continue;
+          const score = averageInk*18 + smooth[y]*9 +
+              Math.abs(y-nominal)/cell*0.10 +
+              Math.max(0,0.025-surrounding)*2;
           options.push({y,score});
         }
         options.sort((a,b)=>a.score-b.score);
+        // An uncertain boundary must be reviewed, never guessed from an
+        // equal-height split that can include a neighbour's artwork.
+        if (!options.length) return null;
         candidates.push(options.slice(0,35));
       }
       let states=[{cuts:[0],score:0}];
