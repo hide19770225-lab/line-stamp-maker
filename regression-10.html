@@ -22,7 +22,7 @@ const C=window.StampCore;if(!C)throw Error("core.jsが読み込めません");
 const xs=[0,.5,1],ys=[0,.2,.4,.6,.8,1];
 const proposed=C.suggestColumnRowLines(img,xs,5);
 const source={image:img,xs,ys,columnYs:proposed||undefined,insets:{left:0,right:0,top:0,bottom:0}};
-let flagged=0;
+let flagged=0; const usedFallback = !proposed;
 for(let row=0;row<5;row++)for(let col=0;col<2;col++){
 const n=row*2+col+1;
 const tile=C.createTile(source,col,row,$("mode").value,Number($("tol").value),"#ffffff");
@@ -37,7 +37,7 @@ if(tile.boundaryReview.needsReview){h.className="warn";flagged++}
 const d=document.createElement("small");d.textContent="切り抜き位置 "+JSON.stringify(tile.sourceRect)+" / "+tile.boundaryReview.edges.join(",");
 cell.append(h,d,c);$("out").append(cell)
 }
-$("status").textContent="10枚表示完了。自動要確認 "+flagged+"枚。各画像の文字・装飾・白い顔・隣接混入を目視してください。";
+$("status").textContent="10枚表示完了。"+(usedFallback?"【注意】分割線の自動検出に失敗し、均等5分割に戻しました。":"分割線の自動検出を使用。")+" 自動要確認 "+flagged+"枚。自動判定で問題がなくても、文字・装飾・白い顔・隣接混入を目視してください。";
 }catch(e){$("status").textContent="検査エラー: "+e.message}finally{URL.revokeObjectURL(url)}
 };
 });
