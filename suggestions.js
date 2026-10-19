@@ -201,7 +201,9 @@
     const { width: w, height: h, data } = image;
     const unknown = {
       emotion: "unknown",
-      reason: "判定できず（表情・ポーズの汎用解析は未実装）",
+      reason:
+        matched?.reason ||
+        "判定できず：利用できる画素見本がありません。汎用的な表情・ポーズ解析モデルは未実装です。",
     };
     if (!w || !h || data.length !== w * h * 4 || mask.length !== w * h)
       return unknown;

@@ -54,7 +54,7 @@ const assert = require("node:assert/strict");
         .locator('.suggestion-card input[data-kind="caption"]')
         .evaluateAll((inputs) => inputs.map((input) => input.value));
       assert.equal(automatic.length, 10);
-      assert.ok(automatic.every(Boolean));
+      assert.equal(automatic.filter(Boolean).length, 1);
       assert.equal(
         await p.locator('.suggestion-card[data-slot="2"] select').inputValue(),
         "cry",
@@ -65,8 +65,17 @@ const assert = require("node:assert/strict");
       );
       assert.match(
         await p.locator('.suggestion-card[data-slot="1"] .hint').textContent(),
-        /汎用候補/,
+        /自動入力していません/,
       );
+      await p.check("#suggestion-ack");
+      await p.click("#approve-suggestions");
+      await idle();
+      assert.ok(
+        (await p.locator(".stamp-caption").allTextContents()).every(
+          (s) => s === "（セリフなし）",
+        ),
+      );
+      await p.check("#allow-generic-captions");
       if (mode === "normal")
         await p.locator("#bulk-captions").evaluate((el) => {
           for (

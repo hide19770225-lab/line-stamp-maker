@@ -1115,15 +1115,15 @@
         const source = state.sources.find((source) =>
           source.stamps.includes(stamp),
         );
+        const outputScan =
+          output === rendered.canvas ? finalScan : R.inspectFinal(image);
         report = window.StampAudit.inspect(image, blob.size, width, height, {
           margin:
             output === rendered.canvas && stamp.style.safeMargin === 20
               ? 20
               : 10,
-          residues:
-            output === rendered.canvas
-              ? finalScan.candidates.length
-              : R.inspectFinal(image).candidates.length,
+          residues: outputScan.candidates.length,
+          decorations: outputScan.decorations.length,
           stale: source.processSignature !== signature(source),
           textClipped: rendered.textClipped,
           textOverlap: rendered.textOverlap,
@@ -1141,7 +1141,36 @@
         preview.className = $("preview-background").value;
         preview.getContext("2d").drawImage(output, 0, 0);
         preview.setAttribute("aria-label", `${name} 完成PNG`);
-        card.append(preview);
+        const stage = document.createElement("div");
+        stage.className = "audit-preview-stage";
+        stage.append(preview);
+        card.append(stage);
+        if (outputScan.candidates.length || outputScan.decorations.length) {
+          const overlay = C.canvas(width, height);
+          overlay.className = "audit-component-overlay";
+          overlay.hidden = true;
+          overlay.setAttribute("aria-hidden", "true");
+          const ctx = overlay.getContext("2d");
+          ctx.lineWidth = 2;
+          for (const [list, color] of [
+            [outputScan.candidates, "#ce7a17"],
+            [outputScan.decorations, "#25815a"],
+          ])
+            for (const c of list) {
+              ctx.strokeStyle = color;
+              ctx.strokeRect(c.x - 2, c.y - 2, c.width + 4, c.height + 4);
+            }
+          stage.append(overlay);
+          const toggle = document.createElement("button");
+          toggle.className = "button secondary wide";
+          toggle.textContent = `検出位置を表示（橙：要確認${outputScan.candidates.length}／緑：装飾・詳細候補${outputScan.decorations.length}）`;
+          toggle.setAttribute("aria-pressed", "false");
+          toggle.onclick = () => {
+            overlay.hidden = !overlay.hidden;
+            toggle.setAttribute("aria-pressed", String(!overlay.hidden));
+          };
+          card.append(toggle);
+        }
         const metrics = document.createElement("p");
         metrics.textContent = `${width}×${height}px · PNG / RGBA · ${(blob.size / 1024).toFixed(1)}KB · 透明 ${report.transparent}px · 半透明 ${report.partial}px`;
         card.append(metrics);
@@ -1634,7 +1663,7 @@
         $("residue-candidates").append(row);
       });
       $("residue-status").textContent = scan.candidates.length
-        ? `${scan.candidates.filter((c) => !c.protected && !c.automatic).length}件の削除候補、${scan.candidates.filter((c) => c.protected).length}件の装飾候補を保護。自動除去済みの線は完成PNGには残りません。元の切り抜き画像に残っている前景です。輪郭から離れたものも確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
+        ? `${scan.candidates.filter((c) => !c.protected && !c.automatic).length}件の要確認候補（不要物とは未確定）、${scan.candidates.filter((c) => c.protected).length}件の装飾候補を保護。自動除去済みの線は完成PNGには残りません。元の切り抜き画像に残っている前景です。輪郭から離れたものも確認し、不要なものだけ選択してください。${scan.candidates.length > 50 ? "先頭50件を表示。処理後に再検出できます。" : ""}`
         : "孤立した線・点の候補は見つかりませんでした。検出で全ての不要部分を判断できるわけではありません。完成画像も目視で確認してください。";
     }
     if (!drawing) {
@@ -2484,6 +2513,8 @@
       const input = document.createElement("input");
       input.type = "text";
       input.maxLength = 120;
+      input.placeholder =
+        "判定できない場合は表情を選ぶか、直接入力してください";
       input.value = draft.caption;
       input.dataset.kind = "caption";
       captionLabel.append(input);
@@ -2525,6 +2556,29 @@
       edit.onclick = () => {
         if (!state.busy) openEditor(stamps().indexOf(draft.stamp));
       };
+      const remember = document.createElement("button");
+      remember.className = "button secondary wide";
+      remember.dataset.action = "remember-pose";
+      remember.textContent = "選んだ表情をこの端末の見本に記憶";
+      remember.onclick = () => {
+        if (state.busy) return;
+        try {
+          window.StampCaptionVision.remember(
+            draft.stamp.original,
+            draft.stamp.mask,
+            draft.emotion,
+            window.StampSuggestions.groups[draft.emotion]?.label,
+          );
+          draft.analysisReason =
+            "利用者が表情を指定した見本です。AIによる自動判定ではありません。近い画像の再提案に使用します。";
+          renderSuggestionPanel();
+          notify(
+            "画素見本をこのブラウザ内だけに保存しました。他の画像は再提案ボタンで確認してください。",
+          );
+        } catch (error) {
+          notify(error.message, true);
+        }
+      };
       card.append(
         title,
         preview,
@@ -2532,6 +2586,7 @@
         emotionLabel,
         captionLabel,
         next,
+        remember,
         edit,
       );
       list.append(card);
@@ -2718,15 +2773,24 @@
       );
       row.emotion = result.emotion;
       row.analysisReason = result.reason;
+      const generic = $("allow-generic-captions")?.checked || false;
       row.caption =
         result.emotion === "unknown"
-          ? window.StampSuggestions.automatic([
-              ...used.map((caption) => ({ caption })),
-              { caption: "", image: row.stamp.original, mask: row.stamp.mask },
-            ]).at(-1).caption
+          ? generic
+            ? window.StampSuggestions.automatic([
+                ...used.map((caption) => ({ caption })),
+                {
+                  caption: "",
+                  image: row.stamp.original,
+                  mask: row.stamp.mask,
+                },
+              ]).at(-1).caption
+            : ""
           : window.StampSuggestions.choose(result.emotion, used);
       if (result.emotion === "unknown")
-        row.analysisReason += "。汎用候補（画像に合う保証なし）";
+        row.analysisReason += generic
+          ? "。汎用候補（画像に合う保証なし）"
+          : "。セリフは自動入力していません。表情を選ぶと候補が入ります。";
       used.push(row.caption);
       row.approved = false;
     }
@@ -2737,8 +2801,16 @@
     $("suggestion-ack").checked = false;
     renderSuggestionPanel();
     $("auto-caption-status").textContent =
-      `${rows.length}個の番号別入力欄に提案を登録しました。確認済み見本との画素照合と限定的な涙特徴検査を使用。一致しない画像は判定できず・汎用候補です。一覧を修正・承認すると文字入りPNGを生成します。`;
+      `${rows.length}個を確認し、セリフ未入力は${rows.filter((row) => !row.caption.trim()).length}個です。確認済み見本との画素照合と限定的な涙特徴検査を使用。一致しない画像は判定できずとして扱い、汎用候補は希望した場合だけ入力します。一覧を修正・承認すると文字入りPNGを生成します。`;
   }
+  if ($("clear-pose-references"))
+    $("clear-pose-references").onclick = () => {
+      if (state.busy) return;
+      window.StampCaptionVision.clearLearned();
+      notify(
+        "このブラウザで記憶した画素見本を解除しました。画像・セリフは変更していません。",
+      );
+    };
   if ($("auto-captions"))
     $("auto-captions").onclick = () =>
       task(async () => {

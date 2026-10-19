@@ -23,17 +23,17 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=reference-match-1" />
-    <script src="core.js?v=reference-match-1" defer></script>
-    <script src="residue.js?v=reference-match-1" defer></script>
-    <script src="typography.js?v=reference-match-1" defer></script>
-    <script src="project.js?v=reference-match-1" defer></script>
-    <script src="audit.js?v=reference-match-1" defer></script>
-    <script src="easy.js?v=reference-match-1" defer></script>
-    <script src="caption-references.js?v=reference-match-1" defer></script>
-    <script src="caption-vision.js?v=reference-match-1" defer></script>
-    <script src="suggestions.js?v=reference-match-1" defer></script>
-    <script src="app.js?v=reference-match-1" defer></script>
+    <link rel="stylesheet" href="styles.css?v=pose-confidence-1" />
+    <script src="core.js?v=pose-confidence-1" defer></script>
+    <script src="residue.js?v=pose-confidence-1" defer></script>
+    <script src="typography.js?v=pose-confidence-1" defer></script>
+    <script src="project.js?v=pose-confidence-1" defer></script>
+    <script src="audit.js?v=pose-confidence-1" defer></script>
+    <script src="easy.js?v=pose-confidence-1" defer></script>
+    <script src="caption-references.js?v=pose-confidence-1" defer></script>
+    <script src="caption-vision.js?v=pose-confidence-1" defer></script>
+    <script src="suggestions.js?v=pose-confidence-1" defer></script>
+    <script src="app.js?v=pose-confidence-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -87,7 +87,7 @@
         <section id="auto-caption-panel" class="panel" hidden>
           <h2>セリフを自動提案（両モード共通）</h2>
           <p class="hint">
-            読み込み後に番号別の候補を自動登録します。確認済みキャラクター10枚の画素見本と照合し、近い表情・ポーズの候補を表示します。一致しない画像は判定できず・汎用候補と表示します。汎用的な表情認識AIではありません。確認・承認後に20px余白の文字入り画像を生成します。既存のセリフは維持します。
+            読み込み後に番号別の候補を自動登録します。確認済みキャラクター10枚の画素見本と照合し、近い表情・ポーズの候補を表示します。一致しない画像は判定できずとして空欄を残します。汎用候補は希望した場合だけ入力します。汎用的な表情認識AIではありません。確認・承認後に20px余白の文字入り画像を生成します。既存のセリフは維持します。
           </p>
           <label class="check-label"
             ><input
@@ -95,6 +95,18 @@
               id="resuggest-existing"
             />登録済みセリフも再提案する（承認前は画像を変更しません）</label
           >
+          <label class="check-label"
+            ><input
+              type="checkbox"
+              id="allow-generic-captions"
+            />判定できない画像にも汎用候補を入れる（表情とは無関係）</label
+          >
+          <p class="hint">
+            別のキャラクターが判定できない場合は、一覧で表情を手動選択して「この端末の見本に記憶」を押せます。次の再提案から近い画像を照合します。AI学習ではなく画素見本の記憶です。最大40件・このブラウザ内のみ。JSONや別端末には引き継がれず、Safariの保存データ削除などで失われます。
+          </p>
+          <button id="clear-pose-references" class="text-button wide">
+            このブラウザで記憶した見本を解除
+          </button>
           <button id="auto-captions" class="button primary wide">
             セリフ候補を再確認
           </button>
@@ -104,7 +116,7 @@
             role="status"
             aria-live="polite"
           >
-            画像読み込み後に候補を表示します。未判定の画像には汎用候補と明示します。
+            画像読み込み後に候補を表示します。未判定の画像は空欄にし、理由を表示します。
           </p>
         </section>
         <section
