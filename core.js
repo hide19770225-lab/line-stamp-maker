@@ -287,72 +287,77 @@
   // can be vertically staggered, so a single row boundary may cut another cat.
   function suggestColumnRowLines(image, xs, rows) {
     const width = image.width, height = image.height;
-    const sample = canvas(width, height);
-    const ctx = sample.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(image, 0, 0);
-    const data = ctx.getImageData(0, 0, width, height).data;
-    sample.width = sample.height = 1;
-    const corners = [0, width - 1, width * (height - 1), width * height - 1];
-    const bg = [data[0], data[1], data[2]];
-    if (corners.some(p => [0,1,2].some(k => Math.abs(data[p*4+k]-bg[k]) > 18))) return null;
-    const lines = [];
-    const cellHeight = height / rows;
-    for (let c = 0; c < xs.length - 1; c++) {
-      const x0 = Math.round(xs[c] * width), x1 = Math.round(xs[c+1] * width);
+    if (rows < 2 || width < 80 || height < rows * 40) return null;
+    const surface = canvas(width, height);
+    const context = surface.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    surface.width = surface.height = 1;
+    const cornerPixels = [0, width - 1, width * (height - 1), width * height - 1];
+    const bg = [pixels[0], pixels[1], pixels[2]];
+    if (cornerPixels.some(p => [0,1,2].some(k => Math.abs(pixels[p*4+k]-bg[k]) > 24))) return null;
+    const cell = height / rows;
+    const result = [];
+    for (let col = 0; col < xs.length - 1; col++) {
+      const x0 = Math.round(xs[col] * width), x1 = Math.round(xs[col+1] * width);
       const density = new Float32Array(height);
-      const step = Math.max(1, Math.floor((x1-x0)/500));
-      for (let y = 0; y < height; y++) {
-        let ink = 0, total = 0;
-        for (let x = x0; x < x1; x += step) {
-          const i = (y*width+x)*4;
-          if (data[i+3] > 16 && Math.max(Math.abs(data[i]-bg[0]),
-              Math.abs(data[i+1]-bg[1]), Math.abs(data[i+2]-bg[2])) > 38) ink++;
+      const step = Math.max(1, Math.floor((x1-x0)/350));
+      for (let y=0;y<height;y++) {
+        let ink=0,total=0;
+        for(let x=x0;x<x1;x+=step) {
+          const p=(y*width+x)*4;
+          if(pixels[p+3]>20 && Math.max(Math.abs(pixels[p]-bg[0]),
+              Math.abs(pixels[p+1]-bg[1]),Math.abs(pixels[p+2]-bg[2]))>32) ink++;
           total++;
         }
-        density[y] = ink / Math.max(1,total);
+        density[y]=ink/Math.max(1,total);
       }
-      const candidates = [];
-      for (let y = 1; y < height-1;) {
-        if (density[y] > 0.006) { y++; continue; }
-        const start = y;
-        while (y < height-1 && density[y] <= 0.006) y++;
-        const end = y-1, len = end-start+1;
-        if (len < Math.max(5, Math.round(cellHeight*0.012))) continue;
-        const center = (start+end)/2;
-        const look = Math.round(cellHeight*0.30);
-        const before = density.slice(Math.max(0,start-look),start);
-        const after = density.slice(end+1,Math.min(height,end+look+1));
-        const beforePeak = before.reduce((m,v)=>Math.max(m,v),0);
-        const afterPeak = after.reduce((m,v)=>Math.max(m,v),0);
-        if (beforePeak < 0.045 || afterPeak < 0.045) continue;
-        candidates.push({center,len});
+      // Search for low-ink corridors even when compression leaves no perfectly
+      // empty scanline. Optimize boundaries jointly to avoid drifting rows.
+      const radius = Math.max(3,Math.round(cell*0.024));
+      const smooth = new Float32Array(height);
+      let sum=0;
+      for(let y=0;y<height;y++){
+        if(y+radius<height)sum+=density[y+radius];
+        if(y-radius-1>=0)sum-=density[y-radius-1];
+        smooth[y]=sum/(Math.min(height-1,y+radius)-Math.max(0,y-radius)+1);
       }
-      // Optimize all four boundaries together. A wrong early boundary must not
-      // force every subsequent row back to equally sized slices.
-      let states = [{positions:[0],score:0}];
-      for (let r=1;r<rows;r++) {
-        const nominal = r*cellHeight;
-        const next = [];
-        for (const state of states) for (const item of candidates) {
-          const prev = state.positions[state.positions.length-1];
-          const gap = item.center-prev;
-          if (gap < cellHeight*0.53 || gap > cellHeight*1.43) continue;
-          if (Math.abs(item.center-nominal) > cellHeight*0.78) continue;
-          const score = state.score + item.len*0.35
-            - Math.abs(item.center-nominal)*0.12
-            - Math.abs(gap-cellHeight)*0.04;
-          next.push({positions:[...state.positions,item.center],score});
+      const candidates=[];
+      for(let row=1;row<rows;row++){
+        const nominal=row*cell, options=[];
+        const low=Math.max(1,Math.round(nominal-cell*0.43));
+        const high=Math.min(height-2,Math.round(nominal+cell*0.43));
+        for(let y=low;y<=high;y+=2){
+          const left=Math.max(0,y-Math.round(cell*0.12));
+          const right=Math.min(height-1,y+Math.round(cell*0.12));
+          const surrounding=Math.max(smooth[left],smooth[right]);
+          // A good gutter is pale and lies between two populated rows.
+          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
+              +Math.max(0,0.025-surrounding)*2;
+          options.push({y,score});
         }
-        next.sort((a,b)=>b.score-a.score);
-        states = next.slice(0,30);
-        if (!states.length) return null;
+        options.sort((a,b)=>a.score-b.score);
+        candidates.push(options.slice(0,35));
       }
-      states = states.filter(st => height-st.positions[rows-1] >= cellHeight*0.48);
-      if (!states.length) return null;
-      states.sort((a,b)=>b.score-a.score);
-      lines.push([...states[0].positions.map(v=>v/height),1]);
+      let states=[{cuts:[0],score:0}];
+      for(let row=0;row<candidates.length;row++){
+        const next=[];
+        for(const state of states)for(const option of candidates[row]){
+          const gap=option.y-state.cuts[state.cuts.length-1];
+          if(gap<cell*0.56||gap>cell*1.44)continue;
+          next.push({cuts:[...state.cuts,option.y],
+            score:state.score+option.score+Math.abs(gap-cell)/cell*0.035});
+        }
+        next.sort((a,b)=>a.score-b.score);
+        states=next.slice(0,45);
+        if(!states.length)return null;
+      }
+      states=states.filter(st=>height-st.cuts[rows-1]>=cell*0.56);
+      if(!states.length)return null;
+      states.sort((a,b)=>a.score-b.score);
+      result.push([...states[0].cuts.map(y=>y/height),1]);
     }
-    return lines;
+    return result;
   }
   // A source-grid cut through visible artwork needs a human ownership check.
   // This is diagnostic only: never erase thin antennae, lettering or decorations.
