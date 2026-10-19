@@ -547,22 +547,33 @@
         0, 0, rect.width, rect.height);
       const edgeData = probeCtx.getImageData(0, 0, rect.width, rect.height).data;
       probe.width = probe.height = 1;
-      let suspicious = 0;
-      const check = (x, y) => {
+      // A few isolated colored JPEG edge pixels do not prove clipping.
+      // Count a continuous stroke on each edge instead of accumulating
+      // unrelated compression artifacts from all four sides.
+      const isInk = (x, y) => {
         const k = (y * rect.width + x) * 4;
-        if (edgeData[k+3] < 128) return;
+        if (edgeData[k+3] < 128) return false;
         const hi = Math.max(edgeData[k], edgeData[k+1], edgeData[k+2]);
         const lo = Math.min(edgeData[k], edgeData[k+1], edgeData[k+2]);
-        if (hi < 195 || (hi-lo > 35 && lo < 220)) suspicious++;
+        return hi < 195 || (hi-lo > 35 && lo < 220);
       };
-      for (let x = 0; x < rect.width; x++) {
-        check(x, 0); check(x, rect.height-1);
-      }
-      for (let y = 1; y < rect.height-1; y++) {
-        check(0, y); check(rect.width-1, y);
-      }
-      if (suspicious >= Math.max(3, Math.round(Math.min(rect.width,rect.height)*0.015)))
-        throw new Error(`コマ${row * source.columns + column + 1}の切り抜き枠が絵柄に重なっています。分割線と余白設定を調整してください（境界の色付き画素 ${suspicious}個）。`);
+      const longestRun = (length, point) => {
+        let run = 0, longest = 0;
+        for (let n = 0; n < length; n++) {
+          run = point(n) ? run + 1 : 0;
+          if (run > longest) longest = run;
+        }
+        return longest;
+      };
+      const runs = [
+        longestRun(rect.width, x => isInk(x, 0)),
+        longestRun(rect.width, x => isInk(x, rect.height-1)),
+        longestRun(rect.height, y => isInk(0, y)),
+        longestRun(rect.height, y => isInk(rect.width-1, y))
+      ];
+      const threshold = Math.max(4, Math.round(Math.min(rect.width,rect.height)*0.02));
+      if (Math.max(...runs) >= threshold)
+        throw new Error(`コマ${row * source.columns + column + 1}の切り抜き枠が絵柄に重なっています。分割線と余白設定を調整してください（境界の連続した色付き画素 ${Math.max(...runs)}個）。`);
     }
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
     const scale = Math.min(1, 600 / Math.max(rect.width, rect.height));
