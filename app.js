@@ -976,8 +976,10 @@
       );
       source.columnYs = columnLines || null;
       source.gutterUncertain = !columnLines;
-      // Never substitute a shared horizontal boundary for a failed
-      // column-specific search: it can cut off ears in staggered sheets.
+      // A failed search must stop processing. Falling through to tileRect()
+      // would silently use the equal-height grid and cut neighbouring art.
+      if (!columnLines)
+        throw new Error("安全な分割線を自動検出できませんでした。元画像の『左右の列ごとに横線を調整』で境界を確認・調整してから、再実行してください。画像はまだ書き出していません。");
     }
     if (!source.manualColumnYs && (!defaultGrid(source.xs) || !defaultGrid(source.ys))) {
       source.columnYs = null;
