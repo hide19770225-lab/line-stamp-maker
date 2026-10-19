@@ -204,6 +204,27 @@
     isolated.getContext("2d").drawImage(image, -rect.x, -rect.y);
     return isolated;
   }
+  // A source-grid cut through visible artwork needs a human ownership check.
+  // This is diagnostic only: never erase thin antennae, lettering or decorations.
+  function tileBoundaryReview(mask, width, height) {
+    const band = Math.max(2, Math.ceil(Math.min(width, height) * 0.015));
+    const edges = [];
+    const count = (side) => {
+      let pixels = 0;
+      for (let y = 0; y < height; y++)
+        for (let x = 0; x < width; x++) {
+          if (side === "left" && x >= band) continue;
+          if (side === "right" && x < width - band) continue;
+          if (side === "top" && y >= band) continue;
+          if (side === "bottom" && y < height - band) continue;
+          if (mask[y * width + x] > 0) pixels++;
+        }
+      return pixels;
+    };
+    for (const side of ["left", "right", "top", "bottom"])
+      if (count(side) >= 2) edges.push(side);
+    return { needsReview: edges.length > 0, edges };
+  }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
@@ -219,7 +240,9 @@
     const original = ctx.getImageData(0, 0, crop.width, crop.height);
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
+    const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
     return {
+      boundaryReview,
       original,
       mask,
       autoMask: mask.slice(),
@@ -695,6 +718,7 @@
     createTile,
     isolateRect,
     tileRect,
+    tileBoundaryReview,
     stampCrop,
     maskBounds,
     imagePlacement,
