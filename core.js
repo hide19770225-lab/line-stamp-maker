@@ -300,7 +300,8 @@
       const perColumn = [0];
       for (let r = 1; r < rows; r++) {
         const nominal = Math.round(r * height / rows);
-        // Only search near the expected row divider. Wider searches can pick\n        // an empty band *inside* a neighboring sticker.\n        const radius = Math.round(height / rows * 0.26);
+        // Search around the expected divider, not inside neighboring artwork.
+        const radius = Math.round(height / rows * 0.26);
         const start = Math.max(1, nominal - radius), end = Math.min(height-2, nominal+radius);
         const blank = [];
         const step = Math.max(1, Math.floor((x1-x0)/500));
