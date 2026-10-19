@@ -327,31 +327,30 @@
         const nominal=row*cell, options=[];
         const low=Math.max(1,Math.round(nominal-cell*0.43));
         const high=Math.min(height-2,Math.round(nominal+cell*0.43));
-        // A genuine separator needs an extended empty corridor, not merely
-        // a pale horizontal stroke inside a letter or a white animal face.
-        const window=Math.max(5,Math.round(cell*0.035));
-        const side=Math.max(window+2,Math.round(cell*0.16));
-        for(let y=low;y<=high;y+=2){
-          let maxInk=0,meanInk=0,count=0;
-          for(let yy=Math.max(0,y-window);yy<=Math.min(height-1,y+window);yy++){
-            maxInk=Math.max(maxInk,density[yy]);
-            meanInk+=density[yy];count++;
-          }
-          meanInk/=count;
-          const above=Math.max(0,y-side),below=Math.min(height-1,y+side);
-          let upper=0,lower=0;
-          for(let yy=Math.max(0,above-window);yy<=above+window;yy++)
-            if(yy<height)upper=Math.max(upper,smooth[yy]);
-          for(let yy=Math.max(0,below-window);yy<=Math.min(height-1,below+window);yy++)
-            lower=Math.max(lower,smooth[yy]);
-          // Reject populated scanlines: these produce neighboring sticker
-          // fragments and are not safe even if close to the nominal grid.
-          if(maxInk>0.006 || meanInk>0.002)continue;
-          if(upper<0.018 || lower<0.018)continue;
-          const score=Math.abs(y-nominal)/cell*0.15
-            +Math.max(0,0.05-upper)*0.4
-            +Math.max(0,0.05-lower)*0.4;
-          options.push({y,score});
+        // Find complete empty runs. Cutting at the beginning of a run
+        // leaves the following row's artwork attached to the previous tile.
+        const isBlank=y=>density[y]<=0.002;
+        const minRun=Math.max(7,Math.round(cell*0.045));
+        let y=low;
+        while(y<=high){
+          if(!isBlank(y)){y++;continue;}
+          const start=y;
+          while(y<=high&&isBlank(y))y++;
+          const end=y-1,span=end-start+1;
+          if(span<minRun)continue;
+          const center=Math.round((start+end)/2);
+          const side=Math.max(minRun,Math.round(cell*0.13));
+          const upperStart=Math.max(0,start-side);
+          const lowerEnd=Math.min(height-1,end+side);
+          let above=0,below=0;
+          for(let p=upperStart;p<start;p++)above=Math.max(above,smooth[p]);
+          for(let p=end+1;p<=lowerEnd;p++)below=Math.max(below,smooth[p]);
+          if(above<0.015||below<0.015)continue;
+          // Favor the widest truly empty corridor, not a small white gap
+          // inside a face, letter or outline.
+          const score=Math.abs(center-nominal)/cell*0.12
+            -Math.min(span/cell,0.2)*0.8;
+          options.push({y:center,score});
         }
         if(!options.length)return null;
         options.sort((a,b)=>a.score-b.score);
