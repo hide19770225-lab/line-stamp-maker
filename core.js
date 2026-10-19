@@ -85,8 +85,24 @@
           (data[i * 4 + 3] === 0 || data[i * 4 + 3] === 255) &&
           near(data, i * 4, color, safeTolerance)
         ) {
-          queue[tail++] = i;
-          mask[i] = 0;
+          // Do not let a thin antialiased break in a dark character outline
+          // turn a large white face or paw into transparent background.
+          // Narrow passages surrounded by colored ink are treated as
+          // uncertain artwork, not automatically erased.
+          const x = i % width, y = Math.floor(i / width);
+          let nearMatte = 0, sampled = 0;
+          if (x > 1 && x < width - 2 && y > 1 && y < height - 2) {
+            for (let dy = -1; dy <= 1; dy++)
+              for (let dx = -1; dx <= 1; dx++) {
+                sampled++;
+                if (near(data, ((y + dy) * width + x + dx) * 4,
+                  color, safeTolerance)) nearMatte++;
+              }
+          }
+          if (!sampled || nearMatte >= 7) {
+            queue[tail++] = i;
+            mask[i] = 0;
+          }
         }
       }
     }
