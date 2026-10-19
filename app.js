@@ -968,7 +968,7 @@
       values.every((value, index) =>
         Math.abs(value - index / (values.length - 1)) < 0.0001,
       );
-    if (!source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
+    if (source.rows > 1 && !source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
       // Use column-specific boundaries when each column has clear white gutters.
       // Never silently fall back to a potentially destructive shared row line.
       const columnLines = C.suggestColumnRowLines(

@@ -155,15 +155,18 @@ test("explicit white/custom flood preserves original partial-alpha shadows and d
     assert.equal(mask[31], 190);
   }
 });
-test("matte fringe proposal is alpha-only, opt-in, one-pixel and preserves interior whites/partial alpha", () => {
+test("manual matte proposal on a restored opaque rim preserves interior whites/partial alpha", () => {
   const im = fixture(9, 9);
   for (let y = 2; y < 7; y++)
     for (let x = 2; x < 7; x++) pixel(im, x, y, [20, 40, 20, 255]);
   pixel(im, 2, 2, [210, 210, 210, 255]);
   pixel(im, 4, 4, [255, 255, 255, 255]);
   pixel(im, 1, 4, [250, 250, 250, 90]);
-  const mask = C.floodMask(im, "white", 24),
-    before = mask.slice(),
+  const mask = C.floodMask(im, "white", 24);
+  // Simulate restoring a rim with the existing restore brush. Automatic
+  // exterior matting may already have softened this pixel on initial import.
+  mask[2 * 9 + 2] = 255;
+  const before = mask.slice(),
     rgb = im.data.slice();
   const p = C.proposeMatteCleanup(im, mask, "white", 24, "#ffffff");
   assert(p.changed > 0);
