@@ -204,6 +204,69 @@
     isolated.getContext("2d").drawImage(image, -rect.x, -rect.y);
     return isolated;
   }
+  // Locate nearly blank gutters close to the expected grid positions.
+  // Only return strong suggestions; uncertain sheets keep their manual grid.
+  function suggestGridLines(image, columns, rows) {
+    const width = image.width, height = image.height;
+    if (!columns || !rows || width < columns * 20 || height < rows * 20)
+      return null;
+    const sample = canvas(width, height);
+    const ctx = sample.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    sample.width = sample.height = 1;
+    const cornerIndices = [0, width - 1, (height - 1) * width, width * height - 1];
+    const corners = cornerIndices.map((i) => Array.from(pixels.slice(i * 4, i * 4 + 3)));
+    const background = corners[0];
+    // A nonuniform border cannot safely establish the background color.
+    if (corners.some((c) => c.some((v, i) => Math.abs(v - background[i]) > 18)))
+      return null;
+    const isInk = (x, y) => {
+      const i = (y * width + x) * 4;
+      if (pixels[i + 3] < 16) return false;
+      return Math.max(
+        Math.abs(pixels[i] - background[0]),
+        Math.abs(pixels[i + 1] - background[1]),
+        Math.abs(pixels[i + 2] - background[2]),
+      ) > 30;
+    };
+    function line(axis, index, total, count) {
+      const nominal = Math.round((index * total) / count);
+      const radius = Math.max(2, Math.round((total / count) * 0.16));
+      const cross = axis === "x" ? height : width;
+      const step = Math.max(1, Math.floor(cross / 600));
+      let best = null;
+      for (let pos = Math.max(1, nominal - radius); pos <= Math.min(total - 2, nominal + radius); pos++) {
+        let ink = 0, samples = 0;
+        for (let other = 0; other < cross; other += step) {
+          const x = axis === "x" ? pos : other;
+          const y = axis === "x" ? other : pos;
+          if (isInk(x, y)) ink++;
+          samples++;
+        }
+        const fraction = ink / samples;
+        const candidate = { pos, fraction, displacement: Math.abs(pos - nominal) };
+        if (!best || fraction < best.fraction ||
+          (fraction === best.fraction && candidate.displacement < best.displacement))
+          best = candidate;
+      }
+      // Require an almost empty line, not merely a locally sparse artwork row.
+      return best && best.fraction <= 0.003 ? best.pos / total : null;
+    }
+    const xs = [0], ys = [0];
+    for (let i = 1; i < columns; i++) {
+      const x = line("x", i, width, columns);
+      if (x === null) return null;
+      xs.push(x);
+    }
+    for (let i = 1; i < rows; i++) {
+      const y = line("y", i, height, rows);
+      if (y === null) return null;
+      ys.push(y);
+    }
+    xs.push(1); ys.push(1);
+    return { xs, ys };
+  }
   // A source-grid cut through visible artwork needs a human ownership check.
   // This is diagnostic only: never erase thin antennae, lettering or decorations.
   function tileBoundaryReview(mask, width, height) {
@@ -718,6 +781,7 @@
     createTile,
     isolateRect,
     tileRect,
+    suggestGridLines,
     tileBoundaryReview,
     stampCrop,
     maskBounds,
