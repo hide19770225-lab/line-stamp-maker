@@ -698,6 +698,51 @@
   function renderGridControls() {
     const source = state.sources[state.selectedSource];
     $("grid-controls").replaceChildren();
+    if (source.columns === 2 && source.rows === 5) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.textContent = source.manualColumnYs
+        ? "左右別の横線調整を終了"
+        : "左右の列ごとに横線を調整";
+      toggle.onclick = () => {
+        source.manualColumnYs = !source.manualColumnYs;
+        if (source.manualColumnYs) {
+          source.columnYs = source.columnYs ||
+            Array.from({ length: source.columns }, () => source.ys.slice());
+        } else {
+          source.columnYs = null;
+        }
+        invalidate();
+        renderGridControls();
+        drawSplit();
+      };
+      $("grid-controls").append(toggle);
+      if (source.manualColumnYs) {
+        for (let col = 0; col < source.columns; col++) {
+          for (let row = 1; row < source.rows; row++) {
+            const label = document.createElement("label");
+            label.textContent = `${col === 0 ? "左" : "右"}列・${row}段目の下（%）`;
+            const input = document.createElement("input");
+            input.type = "number";
+            input.inputMode = "decimal";
+            input.min = "0"; input.max = "100"; input.step = ".1";
+            input.value = (source.columnYs[col][row] * 100).toFixed(1);
+            input.onchange = () => {
+              const lines = source.columnYs[col];
+              const value = Number(input.value) / 100;
+              if (!Number.isFinite(value)) return;
+              const gap = Math.max(0.004, 2 / source.height);
+              lines[row] = Math.max(lines[row-1]+gap,
+                Math.min(lines[row+1]-gap, value));
+              input.value = (lines[row] * 100).toFixed(1);
+              invalidate(); drawSplit();
+            };
+            label.append(input);
+            $("grid-controls").append(label);
+          }
+        }
+      }
+    }
     for (const [axis, values] of [
       ["xs", source.xs],
       ["ys", source.ys],
@@ -727,6 +772,7 @@
     if (!Number.isFinite(value)) return;
     const gap = Math.max(0.004, 2 / (axis === "xs" ? s.width : s.height));
     s.columnYs = null;
+    s.manualColumnYs = false;
     lines[index] = Math.max(
       index ? lines[index - 1] + gap : 0,
       Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value),
@@ -780,12 +826,25 @@
       ctx.lineTo(xx, c.height);
       ctx.stroke();
     }
-    for (const y of source.ys) {
-      const yy = Math.max(1, Math.min(c.height - 1, y * c.height));
-      ctx.beginPath();
-      ctx.moveTo(0, yy);
-      ctx.lineTo(c.width, yy);
-      ctx.stroke();
+    if (source.columnYs) {
+      for (let col = 0; col < source.columns; col++) {
+        ctx.strokeStyle = col % 2 ? "#dc542c" : "#21875c";
+        for (const y of source.columnYs[col]) {
+          const yy = Math.max(1, Math.min(c.height - 1, y * c.height));
+          ctx.beginPath();
+          ctx.moveTo(source.xs[col] * c.width, yy);
+          ctx.lineTo(source.xs[col + 1] * c.width, yy);
+          ctx.stroke();
+        }
+      }
+    } else {
+      for (const y of source.ys) {
+        const yy = Math.max(1, Math.min(c.height - 1, y * c.height));
+        ctx.beginPath();
+        ctx.moveTo(0, yy);
+        ctx.lineTo(c.width, yy);
+        ctx.stroke();
+      }
     }
     if (Object.values(source.insets).some((value) => value > 0)) {
       ctx.save();
@@ -871,6 +930,8 @@
     const source = state.sources[state.selectedSource];
     source.xs = P.lines(source.columns);
     source.ys = P.lines(source.rows);
+    source.columnYs = null;
+    source.manualColumnYs = false;
     invalidate();
     renderSourceEditor();
   };
@@ -894,7 +955,7 @@
       values.every((value, index) =>
         Math.abs(value - index / (values.length - 1)) < 0.0001,
       );
-    if (defaultGrid(source.xs) && defaultGrid(source.ys)) {
+    if (!source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
       // Use column-specific boundaries when each column has clear white gutters.
       // Never silently fall back to a potentially destructive shared row line.
       const columnLines = C.suggestColumnRowLines(
@@ -905,7 +966,7 @@
       // Never substitute a shared horizontal boundary for a failed
       // column-specific search: it can cut off ears in staggered sheets.
     }
-    if (!defaultGrid(source.xs) || !defaultGrid(source.ys)) {
+    if (!source.manualColumnYs && (!defaultGrid(source.xs) || !defaultGrid(source.ys))) {
       source.columnYs = null;
       source.gutterUncertain = false; // User explicitly chose manual grid lines.
     }
