@@ -303,6 +303,7 @@
         const start = Math.max(1, nominal - Math.round(height / rows * 0.26));
         const end = Math.min(height - 2, nominal + Math.round(height / rows * 0.26));
         const blank = [];
+        const inkCount = [];
         const step = Math.max(1, Math.floor((x1-x0)/500));
         for (let y = start; y <= end; y++) {
           let ink = 0, count = 0;
@@ -313,6 +314,7 @@
             ) > 65) ink++;
             count++;
           }
+          inkCount.push(ink);
           blank.push(ink / Math.max(1,count) <= 0.003);
         }
         let best = null;
@@ -332,9 +334,20 @@
           const maxDrift = Math.round((height / rows) * 0.24);
           const distance = Math.abs(center - nominal);
           if (length >= minLength && distance <= maxDrift) {
-            const score = length - distance * 0.08;
-            if (!best || score > best.score)
-              best = {center, length, score};
+            // A valid boundary separates foreground groups on BOTH sides.
+            // This avoids selecting an empty strip below one illustration
+            // while accidentally absorbing the next sticker into its tile.
+            const probe = Math.max(8, Math.round(height / rows * 0.18));
+            const leftFrom = Math.max(0, i - probe);
+            const rightTo = Math.min(inkCount.length, j + 1 + probe);
+            let before = 0, after = 0;
+            for (let k = leftFrom; k < i; k++) before += inkCount[k];
+            for (let k = j + 1; k < rightTo; k++) after += inkCount[k];
+            if (before > 0 && after > 0) {
+              const score = length - distance * 0.08;
+              if (!best || score > best.score)
+                best = {center, length, score};
+            }
           }
           i=j+1;
         }
