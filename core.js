@@ -71,6 +71,9 @@
         : mode === "custom"
           ? [1, 3, 5].map((i) => parseInt(custom.slice(i, i + 2), 16))
           : backgroundColor(data, width, height);
+    // Conservative white matte: avoid crossing pale outlines into white artwork.
+    const safeTolerance = color.every((v) => v >= 235)
+      ? Math.min(tolerance, 12) : tolerance;
     const seen = new Uint8Array(width * height),
       queue = new Uint32Array(width * height);
     let head = 0,
@@ -80,7 +83,7 @@
         seen[i] = 1;
         if (
           (data[i * 4 + 3] === 0 || data[i * 4 + 3] === 255) &&
-          near(data, i * 4, color, tolerance)
+          near(data, i * 4, color, safeTolerance)
         ) {
           queue[tail++] = i;
           mask[i] = 0;
@@ -396,6 +399,29 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    // Conservative signal only: do not certify tiles with suspiciously
+    // large erased areas surrounded by colored artwork.
+    const x0 = Math.floor(original.width * 0.3);
+    const x1 = Math.ceil(original.width * 0.7);
+    const y0 = Math.floor(original.height * 0.3);
+    const y1 = Math.ceil(original.height * 0.7);
+    let erased = 0, colorful = 0, samples = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const p = y * original.width + x, k = p * 4;
+        if (original.data[k + 3] < 200) continue;
+        samples++;
+        if (mask[p] === 0) erased++;
+        if (Math.max(original.data[k], original.data[k + 1], original.data[k + 2]) -
+            Math.min(original.data[k], original.data[k + 1], original.data[k + 2]) > 40)
+          colorful++;
+      }
+    }
+    if (mode !== "none" && samples > 0 && colorful > 20 &&
+        erased / samples > 0.45) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("possible-white-artwork-loss");
+    }
     return {
       sourceRect: { ...rect },
       boundaryReview,
