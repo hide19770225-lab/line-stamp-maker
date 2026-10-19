@@ -71,6 +71,12 @@
         : mode === "custom"
           ? [1, 3, 5].map((i) => parseInt(custom.slice(i, i + 2), 16))
           : backgroundColor(data, width, height);
+    // On JPEG white sheets, a broad tolerance can walk through faint gaps
+    // in an outline and erase white fur, faces or bellies. Prefer a narrow
+    // matte threshold; unresolved halos must be reviewed, not "cleaned"
+    // by flooding farther into the artwork.
+    const whiteMatte = color.every((channel) => channel >= 235);
+    const safeTolerance = whiteMatte ? Math.min(tolerance, 12) : tolerance;
     const seen = new Uint8Array(width * height),
       queue = new Uint32Array(width * height);
     let head = 0,
@@ -80,7 +86,7 @@
         seen[i] = 1;
         if (
           (data[i * 4 + 3] === 0 || data[i * 4 + 3] === 255) &&
-          near(data, i * 4, color, tolerance)
+          near(data, i * 4, color, safeTolerance)
         ) {
           queue[tail++] = i;
           mask[i] = 0;
