@@ -147,7 +147,22 @@
               if (dark(yy*width+xx)) { sides++; break; }
             }
           }
-          if (sides === 4) candidates[p] = 1;
+          // Paws and panda cheeks often have an open edge in the source.
+          // Four enclosing rays misses those white regions entirely.
+          // Require opposing ink on one axis and a third contour instead.
+          // Keep the search local so distant text cannot enclose background.
+          if (sides >= 3) {
+            let left = false, right = false, up = false, down = false;
+            const reach = Math.max(8, Math.round(Math.min(width,height) * 0.14));
+            for (let d = 1; d <= reach; d++) {
+              if (x-d >= 0 && dark(y*width+x-d)) left = true;
+              if (x+d < width && dark(y*width+x+d)) right = true;
+              if (y-d >= 0 && dark((y-d)*width+x)) up = true;
+              if (y+d < height && dark((y+d)*width+x)) down = true;
+            }
+            if ((left && right && (up || down)) ||
+                (up && down && (left || right))) candidates[p] = 1;
+          }
         }
       for (let y=2; y<height-2; y++)
         for (let x=2; x<width-2; x++) {
