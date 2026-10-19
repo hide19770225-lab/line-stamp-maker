@@ -325,11 +325,17 @@
           // A few blank scanlines inside an illustration are not a gutter.
           // Prefer the broadest full-column empty corridor, then proximity.
           const minLength = Math.max(5,Math.round(height/rows*0.018));
-          if (length >= minLength && (!best ||
-              Math.abs(center-nominal) < Math.abs(best.center-nominal) ||
-              (Math.abs(center-nominal) === Math.abs(best.center-nominal) &&
-                length > best.length)))
-            best = {center,length};
+          // A narrow blank gap inside lettering can be closer to the nominal
+          // divider than the actual gap between two sticker groups.
+          // Only consider corridors reasonably close to the expected boundary,
+          // and prefer a genuinely wide empty band over a short internal gap.
+          const maxDrift = Math.round((height / rows) * 0.24);
+          const distance = Math.abs(center - nominal);
+          if (length >= minLength && distance <= maxDrift) {
+            const score = length - distance * 0.08;
+            if (!best || score > best.score)
+              best = {center, length, score};
+          }
           i=j+1;
         }
         if (!best) return null;
