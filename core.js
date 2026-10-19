@@ -396,6 +396,38 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    // A neighbouring row can leak into the bottom of a tile even when the
+    // source-grid cut looks plausible. Find a genuinely empty horizontal
+    // corridor separating a compact bottom fragment from the main artwork.
+    // Never silently delete artwork: preserve pixels and require review.
+    const rowInk = new Uint32Array(original.height);
+    for (let y = 0; y < original.height; y++)
+      for (let x = 0; x < original.width; x++)
+        if (mask[y * original.width + x] > 32) rowInk[y]++;
+    const start = Math.floor(original.height * 0.68);
+    const end = Math.floor(original.height * 0.94);
+    const minGap = Math.max(3, Math.round(original.height * 0.025));
+    let bottomFragment = false;
+    for (let y = start; y < end;) {
+      if (rowInk[y] > 0) { y++; continue; }
+      let next = y;
+      while (next < end && rowInk[next] === 0) next++;
+      if (next - y >= minGap) {
+        let below = 0, above = 0;
+        for (let k = next; k < original.height; k++) below += rowInk[k];
+        for (let k = 0; k < y; k++) above += rowInk[k];
+        if (below >= Math.max(12, original.width * 0.12) &&
+            above >= below * 2 && next < original.height * 0.91) {
+          bottomFragment = true;
+          break;
+        }
+      }
+      y = next;
+    }
+    if (bottomFragment) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("detached-bottom-fragment");
+    }
     // Conservative signal only: do not certify tiles with suspiciously
     // large erased areas surrounded by colored artwork.
     const x0 = Math.floor(original.width * 0.3);
