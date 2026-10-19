@@ -127,6 +127,39 @@
       if (i >= width) visit(i - width);
       if (i + width < mask.length) visit(i + width);
     }
+    // Restore white artwork with nearby dark contours on all four sides.
+    // This catches a face connected to the exterior through a tiny gap.
+    if (color.every(v => v >= 235)) {
+      const originalMask = mask.slice();
+      const radius = Math.round(Math.min(width, height) * 0.26);
+      const dark = (p) => data[p*4+3] > 128 &&
+        Math.max(data[p*4], data[p*4+1], data[p*4+2]) < 125;
+      const candidates = new Uint8Array(mask.length);
+      for (let y = 2; y < height-2; y += 2)
+        for (let x = 2; x < width-2; x += 2) {
+          const p = y*width+x;
+          if (originalMask[p] !== 0 || !near(data,p*4,color,safeTolerance)) continue;
+          let sides = 0;
+          for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+            for (let d = 1; d <= radius; d++) {
+              const xx=x+dx*d, yy=y+dy*d;
+              if (xx<0 || yy<0 || xx>=width || yy>=height) break;
+              if (dark(yy*width+xx)) { sides++; break; }
+            }
+          }
+          if (sides === 4) candidates[p] = 1;
+        }
+      for (let y=2; y<height-2; y++)
+        for (let x=2; x<width-2; x++) {
+          const p=y*width+x, bx=x-(x%2), by=y-(y%2);
+          if (originalMask[p] === 0 &&
+              near(data,p*4,color,safeTolerance) &&
+              (candidates[by*width+bx] ||
+               candidates[by*width+Math.min(width-1,bx+2)] ||
+               candidates[Math.min(height-1,by+2)*width+bx]))
+            mask[p]=data[p*4+3];
+        }
+    }
     return mask;
   }
   // Preview-only proposal. Change alpha on one exposed opaque matte rim;
