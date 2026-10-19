@@ -698,6 +698,19 @@
   function renderGridControls() {
     const source = state.sources[state.selectedSource];
     $("grid-controls").replaceChildren();
+    if (source.cropReport?.length) {
+      const details = document.createElement("details");
+      details.open = true;
+      const summary = document.createElement("summary");
+      summary.textContent = `前回の実切り抜き座標（${source.cropMethod}）`;
+      const pre = document.createElement("pre");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.style.overflowWrap = "anywhere";
+      pre.textContent = source.cropReport.join("\\n");
+      details.append(summary, pre);
+      $("grid-controls").append(details);
+    }
+
     if (source.columns === 2 && source.rows === 5) {
       const toggle = document.createElement("button");
       toggle.type = "button";
@@ -1038,8 +1051,13 @@
       tiles.push(stamp);
     }
     source.stamps = tiles;
+    source.cropReport = tiles.map((stamp) => stamp.cropDiagnostic).filter(Boolean);
+    source.cropMethod = source.manualColumnYs
+      ? "左右別・手動調整"
+      : source.columnYs ? "左右別・自動検出" : "共通線・要確認";
     source.processSignature = signature(source);
     invalidate();
+    if (state.sources[state.selectedSource] === source) renderGridControls();
   }
   function finishedProcessing() {
     renderSources();
