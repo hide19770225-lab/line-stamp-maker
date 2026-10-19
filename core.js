@@ -71,6 +71,9 @@
         : mode === "custom"
           ? [1, 3, 5].map((i) => parseInt(custom.slice(i, i + 2), 16))
           : backgroundColor(data, width, height);
+    // Conservative white matte: avoid crossing pale outlines into white artwork.
+    const safeTolerance = color.every((v) => v >= 235)
+      ? Math.min(tolerance, 12) : tolerance;
     const seen = new Uint8Array(width * height),
       queue = new Uint32Array(width * height);
     let head = 0,
@@ -80,7 +83,7 @@
         seen[i] = 1;
         if (
           (data[i * 4 + 3] === 0 || data[i * 4 + 3] === 255) &&
-          near(data, i * 4, color, tolerance)
+          near(data, i * 4, color, safeTolerance)
         ) {
           queue[tail++] = i;
           mask[i] = 0;
@@ -284,80 +287,77 @@
   // can be vertically staggered, so a single row boundary may cut another cat.
   function suggestColumnRowLines(image, xs, rows) {
     const width = image.width, height = image.height;
-    const sample = canvas(width, height);
-    const ctx = sample.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(image, 0, 0);
-    const data = ctx.getImageData(0, 0, width, height).data;
-    sample.width = sample.height = 1;
-    const corners = [0, width - 1, width * (height - 1), width * height - 1];
-    const bg = [data[0], data[1], data[2]];
-    if (corners.some((p) => [0,1,2].some((k) => Math.abs(data[p*4+k]-bg[k]) > 18)))
-      return null;
-    const lines = [];
-    for (let c = 0; c < xs.length - 1; c++) {
-      const x0 = Math.round(xs[c] * width), x1 = Math.round(xs[c+1] * width);
-      const perColumn = [0];
-      for (let r = 1; r < rows; r++) {
-        const nominal = Math.round(r * height / rows);
-        // Search around the expected divider, not inside neighboring artwork.
-        const start = Math.max(1, nominal - Math.round(height / rows * 0.26));
-        const end = Math.min(height - 2, nominal + Math.round(height / rows * 0.26));
-        // Count foreground pixels in each scanline. A true gutter must
-        // separate two foreground groups, not just pass through a letter.
-        const densities = [];
-        const step = Math.max(1, Math.floor((x1 - x0) / 500));
-        for (let y = start; y <= end; y++) {
-          let ink = 0, count = 0;
-          for (let x = x0; x < x1; x += step) {
-            const i = (y * width + x) * 4;
-            if (data[i + 3] > 16 && Math.max(
-              Math.abs(data[i] - bg[0]),
-              Math.abs(data[i + 1] - bg[1]),
-              Math.abs(data[i + 2] - bg[2])
-            ) > 65) ink++;
-            count++;
-          }
-          densities.push(ink / Math.max(1, count));
+    if (rows < 2 || width < 80 || height < rows * 40) return null;
+    const surface = canvas(width, height);
+    const context = surface.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    surface.width = surface.height = 1;
+    const cornerPixels = [0, width - 1, width * (height - 1), width * height - 1];
+    const bg = [pixels[0], pixels[1], pixels[2]];
+    if (cornerPixels.some(p => [0,1,2].some(k => Math.abs(pixels[p*4+k]-bg[k]) > 24))) return null;
+    const cell = height / rows;
+    const result = [];
+    for (let col = 0; col < xs.length - 1; col++) {
+      const x0 = Math.round(xs[col] * width), x1 = Math.round(xs[col+1] * width);
+      const density = new Float32Array(height);
+      const step = Math.max(1, Math.floor((x1-x0)/350));
+      for (let y=0;y<height;y++) {
+        let ink=0,total=0;
+        for(let x=x0;x<x1;x+=step) {
+          const p=(y*width+x)*4;
+          if(pixels[p+3]>20 && Math.max(Math.abs(pixels[p]-bg[0]),
+              Math.abs(pixels[p+1]-bg[1]),Math.abs(pixels[p+2]-bg[2]))>32) ink++;
+          total++;
         }
-        const blank = densities.map((v) => v <= 0.003);
-        const minLength = Math.max(5, Math.round(height / rows * 0.018));
-        const maxDrift = Math.round(height / rows * 0.24);
-        const look = Math.max(8, Math.round(height / rows * 0.09));
-        let best = null;
-        for (let i = 0; i < blank.length;) {
-          if (!blank[i]) { i++; continue; }
-          let j = i;
-          while (j + 1 < blank.length && blank[j + 1]) j++;
-          const center = start + Math.round((i + j) / 2);
-          const length = j - i + 1;
-          const distance = Math.abs(center - nominal);
-          if (length >= minLength && distance <= maxDrift) {
-            // Inspect the image on both sides of the proposed boundary.
-            // An empty interior gap in a caption or drawing is unsafe.
-            const upper = densities.slice(Math.max(0, i - look), i);
-            const lower = densities.slice(j + 1, Math.min(densities.length, j + 1 + look));
-            const upperInk = upper.reduce((a, b) => a + b, 0);
-            const lowerInk = lower.reduce((a, b) => a + b, 0);
-            const hasBothGroups = upperInk >= 0.02 && lowerInk >= 0.02;
-            // Prefer a broad empty corridor between actual groups.
-            if (hasBothGroups) {
-              const score = length - distance * 0.08 +
-                Math.min(upperInk, lowerInk) * 4;
-              if (!best || score > best.score)
-                best = { center, length, score };
-            }
-          }
-          i = j + 1;
-        }
-        // Never guess a boundary if there is no defensible separation.
-        if (!best) return null;
-        perColumn.push(best.center / height);
+        density[y]=ink/Math.max(1,total);
       }
-      perColumn.push(1);
-      if (perColumn.some((v,i)=>i>0 && v<=perColumn[i-1])) return null;
-      lines.push(perColumn);
+      // Search for low-ink corridors even when compression leaves no perfectly
+      // empty scanline. Optimize boundaries jointly to avoid drifting rows.
+      const radius = Math.max(3,Math.round(cell*0.024));
+      const smooth = new Float32Array(height);
+      let sum=0;
+      for(let y=0;y<height;y++){
+        if(y+radius<height)sum+=density[y+radius];
+        if(y-radius-1>=0)sum-=density[y-radius-1];
+        smooth[y]=sum/(Math.min(height-1,y+radius)-Math.max(0,y-radius)+1);
+      }
+      const candidates=[];
+      for(let row=1;row<rows;row++){
+        const nominal=row*cell, options=[];
+        const low=Math.max(1,Math.round(nominal-cell*0.43));
+        const high=Math.min(height-2,Math.round(nominal+cell*0.43));
+        for(let y=low;y<=high;y+=2){
+          const left=Math.max(0,y-Math.round(cell*0.12));
+          const right=Math.min(height-1,y+Math.round(cell*0.12));
+          const surrounding=Math.max(smooth[left],smooth[right]);
+          // A good gutter is pale and lies between two populated rows.
+          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
+              +Math.max(0,0.025-surrounding)*2;
+          options.push({y,score});
+        }
+        options.sort((a,b)=>a.score-b.score);
+        candidates.push(options.slice(0,35));
+      }
+      let states=[{cuts:[0],score:0}];
+      for(let row=0;row<candidates.length;row++){
+        const next=[];
+        for(const state of states)for(const option of candidates[row]){
+          const gap=option.y-state.cuts[state.cuts.length-1];
+          if(gap<cell*0.56||gap>cell*1.44)continue;
+          next.push({cuts:[...state.cuts,option.y],
+            score:state.score+option.score+Math.abs(gap-cell)/cell*0.035});
+        }
+        next.sort((a,b)=>a.score-b.score);
+        states=next.slice(0,45);
+        if(!states.length)return null;
+      }
+      states=states.filter(st=>height-st.cuts[rows-1]>=cell*0.56);
+      if(!states.length)return null;
+      states.sort((a,b)=>a.score-b.score);
+      result.push([...states[0].cuts.map(y=>y/height),1]);
     }
-    return lines;
+    return result;
   }
   // A source-grid cut through visible artwork needs a human ownership check.
   // This is diagnostic only: never erase thin antennae, lettering or decorations.
@@ -396,6 +396,29 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    // Conservative signal only: do not certify tiles with suspiciously
+    // large erased areas surrounded by colored artwork.
+    const x0 = Math.floor(original.width * 0.3);
+    const x1 = Math.ceil(original.width * 0.7);
+    const y0 = Math.floor(original.height * 0.3);
+    const y1 = Math.ceil(original.height * 0.7);
+    let erased = 0, colorful = 0, samples = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const p = y * original.width + x, k = p * 4;
+        if (original.data[k + 3] < 200) continue;
+        samples++;
+        if (mask[p] === 0) erased++;
+        if (Math.max(original.data[k], original.data[k + 1], original.data[k + 2]) -
+            Math.min(original.data[k], original.data[k + 1], original.data[k + 2]) > 40)
+          colorful++;
+      }
+    }
+    if (mode !== "none" && samples > 0 && colorful > 20 &&
+        erased / samples > 0.45) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("possible-white-artwork-loss");
+    }
     return {
       sourceRect: { ...rect },
       boundaryReview,
