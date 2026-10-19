@@ -384,7 +384,17 @@
       states=states.filter(st=>height-st.cuts[rows-1]>=cell*0.56);
       if(!states.length)return null;
       states.sort((a,b)=>a.score-b.score);
-      result.push([...states[0].cuts.map(y=>y/height),1]);
+      // Select the middle of the contiguous blank corridor instead of a
+      // nominal-biased edge. This maximizes clearance from both stickers,
+      // especially around the 07/08 -> 09/10 transition.
+      const selected = states[0].cuts.slice();
+      for (let i = 1; i < selected.length; i++) {
+        let lo = selected[i], hi = selected[i];
+        while (lo > 0 && density[lo - 1] <= 0.008) lo--;
+        while (hi < height - 1 && density[hi + 1] <= 0.008) hi++;
+        selected[i] = Math.round((lo + hi) / 2);
+      }
+      result.push([...selected.map(y=>y/height),1]);
     }
     return result;
   }
