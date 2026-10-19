@@ -1131,6 +1131,14 @@
             rendered.textOverlap &&
             T.resolve(stamp.caption, stamp.style).autoPlace,
         });
+        if (stamp.boundaryReview?.needsReview && !stamp.reviewed) {
+          report.warnings.push(
+            "元画像の分割境界に前景があります（" +
+            stamp.boundaryReview.edges.join("・") +
+            "）。隣のコマの混入・文字や触角の欠けを個別編集で確認してください。",
+          );
+          if (report.status !== "エラー") report.status = "要確認";
+        }
         if (pendingSuggestion(stamp)) {
           report.errors.push(
             "承認後の画像生成が未完了です。セリフ一覧で再承認して生成してください。",
@@ -1200,13 +1208,17 @@
       Array.from({ length: state.target }, (_, i) => i + 1).every((slot) =>
         all.some((stamp) => stamp.slot === slot),
       );
+    const unresolvedBoundary = all.filter(
+      (stamp) => stamp.boundaryReview?.needsReview && !stamp.reviewed,
+    ).length;
     const errors = rows.filter((row) => row.report.status === "エラー").length;
     const warnings = rows.filter(
       (row) => row.report.status === "要確認",
     ).length;
-    bulkAudit = { rows, complete, errors };
+    bulkAudit = { rows, complete, errors: errors + unresolvedBoundary };
     $("bulk-summary").textContent =
       `${rows.length}画像：正常 ${rows.length - errors - warnings}・要確認 ${warnings}・エラー ${errors}。` +
+      (unresolvedBoundary ? ` 分割境界の未確認が${unresolvedBoundary}個あります。個別編集で確認してください。` : "") +
       (complete
         ? "一覧を目視確認してください。"
         : `未加工の番号があります（${all.length}/${state.target}個）。全数を加工してから再検査してください。`);
