@@ -983,11 +983,20 @@
       source.columnYs = null;
       source.gutterUncertain = false; // User explicitly chose manual grid lines.
     }
+    // Recover from an empty assignment map after a layout/project change.
+    // Never force the user to assign each cell manually for a fresh sheet.
+    if (!source.assignments.some(Boolean)) {
+      P.fillFree(state, source);
+      if (source.assignments.some(Boolean)) {
+        renderAssignments();
+        renderSources();
+      }
+    }
     const tiles = [],
       count = source.assignments.filter(Boolean).length;
     if (!count)
       throw new Error(
-        "採用するコマがありません。コマに番号を割り当ててください。",
+        "採用できる空き番号がありません。申請数と既存画像の番号を確認してください。",
       );
     for (let cell = 0; cell < source.assignments.length; cell++) {
       const number = source.assignments[cell];
