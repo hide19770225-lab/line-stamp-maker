@@ -487,6 +487,16 @@
         selected[i] = centered - previous >= cell * 0.56 &&
           next - centered >= cell * 0.56 ? centered : states[0].cuts[i];
       }
+      // Independently verify every selected split against the original
+      // column pixels. A split through even one visible scanline is not
+      // reliable, regardless of the optimization score.
+      for (let i = 1; i < selected.length; i++) {
+        const cut = selected[i];
+        const before = density[Math.max(0, cut - 1)];
+        const at = density[cut];
+        const after = density[Math.min(height - 1, cut + 1)];
+        if (Math.max(before, at, after) > 0.008) return null;
+      }
       result.push([...selected.map(y=>y/height),1]);
     }
     return result;
