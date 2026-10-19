@@ -415,8 +415,13 @@
           // The last 2x5 boundary often sits above its equal-height
           // position. Penalize a late cut there: it can import the first
           // pixels of row five into row four (07/08 contamination).
-          const lateFinalRow = rows === 5 && row === rows - 1 &&
-            y > nominal - cell * 0.05 ? 0.20 : 0;
+          // For the final 2x5 junction, the fifth sticker can begin well
+          // before the equal-height grid line. Favor the FIRST clean
+          // corridor after row four rather than an empty stripe inside
+          // the artwork of row five.
+          const lateFinalRow = rows === 5 && row === rows - 1
+            ? Math.max(0, y - (nominal - cell * 0.12)) / cell * 1.5
+            : 0;
           const score = Math.abs(y - nominal) / cell * 0.13 +
             0.7 / (corridor + 3) + smooth[y] * 0.08 + lateFinalRow;
           options.push({y,score});
