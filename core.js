@@ -90,16 +90,21 @@
           // Narrow passages surrounded by colored ink are treated as
           // uncertain artwork, not automatically erased.
           const x = i % width, y = Math.floor(i / width);
-          let nearMatte = 0, sampled = 0;
+          let nearMatte = 0, sampled = 0, darkInk = 0;
           if (x > 1 && x < width - 2 && y > 1 && y < height - 2) {
             for (let dy = -1; dy <= 1; dy++)
               for (let dx = -1; dx <= 1; dx++) {
+                const p = ((y + dy) * width + x + dx) * 4;
                 sampled++;
-                if (near(data, ((y + dy) * width + x + dx) * 4,
-                  color, safeTolerance)) nearMatte++;
+                if (near(data, p, color, safeTolerance)) nearMatte++;
+                // Only dark outline pixels should act as a barrier. Pale
+                // antialiasing in ordinary background must not trap white.
+                if (data[p + 3] > 128 &&
+                    Math.max(data[p], data[p + 1], data[p + 2]) < 115)
+                  darkInk++;
               }
           }
-          if (!sampled || nearMatte >= 7) {
+          if (!sampled || nearMatte >= 7 || darkInk === 0) {
             queue[tail++] = i;
             mask[i] = 0;
           }
