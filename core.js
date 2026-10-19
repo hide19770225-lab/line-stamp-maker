@@ -177,6 +177,22 @@
             }
             if ((left && right && (up || down)) ||
                 (up && down && (left || right))) candidates[p] = 1;
+          } else {
+            // The centre of a large white face can be farther than the
+            // strict local radius from one side of its outline. Permit a
+            // wider search only when both opposing sides are visible,
+            // and a third side is also bounded. Avoid isolated text strokes.
+            const wide = Math.round(Math.min(width,height)*0.25);
+            const found = [false,false,false,false];
+            for (let d=1; d<=wide; d++) {
+              if (x-d>=0 && dark(y*width+x-d)) found[0]=true;
+              if (x+d<width && dark(y*width+x+d)) found[1]=true;
+              if (y-d>=0 && dark((y-d)*width+x)) found[2]=true;
+              if (y+d<height && dark((y+d)*width+x)) found[3]=true;
+            }
+            if ((found[0] && found[1] && (found[2] || found[3])) ||
+                (found[2] && found[3] && (found[0] || found[1])))
+              candidates[p]=1;
           }
         }
       for (let y=2; y<height-2; y++)
