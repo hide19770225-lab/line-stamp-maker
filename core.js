@@ -344,20 +344,22 @@
           // A good gutter is pale and lies between two populated rows.
           // The cut must lie in a sustained empty corridor, not merely a
           // pale stripe inside a caption or at the top of the next sticker.
-          const guard = Math.max(3, Math.round(cell * 0.035));
-          let nearbyInk = 0, peakInk = 0;
-          for (let k = Math.max(0,y-guard); k <= Math.min(height-1,y+guard); k++) {
-            nearbyInk += density[k];
-            peakInk = Math.max(peakInk,density[k]);
-          }
-          const averageInk = nearbyInk /
-            (Math.min(height-1,y+guard)-Math.max(0,y-guard)+1);
-          // A few isolated anti-aliased pixels are tolerable, but an actual
-          // drawing stroke anywhere in the guard band is not a safe cut.
-          if (peakInk > 0.025 || averageInk > 0.006) continue;
-          const score = averageInk*18 + smooth[y]*9 +
-              Math.abs(y-nominal)/cell*0.10 +
-              Math.max(0,0.025-surrounding)*2;
+          // Real 2x5 artwork sometimes leaves only 2-10 clean scanlines.
+          // Reject any cut through visible ink, but do not require a broad
+          // 3.5%-of-cell gutter (which rejects every row on such sheets).
+          const inkHere = density[y];
+          if (inkHere > 0.008) continue;
+          let clearUp = 0, clearDown = 0;
+          while (clearUp < cell * 0.10 && y - clearUp >= 0 &&
+                 density[y - clearUp] <= 0.008) clearUp++;
+          while (clearDown < cell * 0.10 && y + clearDown < height &&
+                 density[y + clearDown] <= 0.008) clearDown++;
+          const corridor = clearUp + clearDown - 1;
+          if (corridor < 2) continue;
+          // A long clear run near the expected boundary is preferred.
+          // The two-sided ink check above excludes blank image margins.
+          const score = Math.abs(y - nominal) / cell * 0.13 +
+            0.7 / (corridor + 3) + smooth[y] * 0.08;
           options.push({y,score});
         }
         options.sort((a,b)=>a.score-b.score);
