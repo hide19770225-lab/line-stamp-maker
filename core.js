@@ -476,7 +476,11 @@
         const maxY = Math.min(height - 2, Math.floor(nominal + cell * 0.43));
         while (lo > minY && density[lo - 1] <= 0.008) lo--;
         while (hi < maxY && density[hi + 1] <= 0.008) hi++;
-        const centered = Math.round((lo + hi) / 2);
+        // On the fourth/fifth row boundary, keep the chosen clean cut.
+        // Re-centering a long pale run can cross the top of row-five artwork
+        // and then crop the corresponding 09/10 image.
+        const centered = rows === 5 && i === rows - 1
+          ? selected[i] : Math.round((lo + hi) / 2);
         // Preserve the joint optimizer's minimum row height after centering.
         const previous = selected[i - 1];
         const next = i + 1 < selected.length ? states[0].cuts[i + 1] : height;
