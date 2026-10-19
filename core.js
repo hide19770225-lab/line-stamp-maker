@@ -119,6 +119,10 @@
       visit(y * width);
       visit(y * width + width - 1);
     }
+    // Guard against a white face becoming connected to the outer matte
+    // through a small outline break. Such a leak can erase thousands of
+    // interior pixels; stop propagation when it enters a locally ink-bounded
+    // region instead of relying solely on after-the-fact restoration.
     while (head < tail) {
       const i = queue[head++],
         x = i % width;
@@ -141,10 +145,10 @@
       const artworkWhite = (p) => {
         const k = p * 4;
         return data[k+3] > 200 &&
-          Math.min(data[k],data[k+1],data[k+2]) >= 225 &&
+          Math.min(data[k],data[k+1],data[k+2]) >= 215 &&
           Math.max(Math.abs(data[k]-color[0]),
                    Math.abs(data[k+1]-color[1]),
-                   Math.abs(data[k+2]-color[2])) <= 30;
+                   Math.abs(data[k+2]-color[2])) <= 40;
       };
       const candidates = new Uint8Array(mask.length);
       for (let y = 2; y < height-2; y += 2)
