@@ -564,6 +564,34 @@
       boundaryReview.needsReview = true;
       boundaryReview.edges.push("possible-white-artwork-loss");
     }
+    // A single aggregate erased percentage misses localized white paws and
+    // panda faces. Inspect small interior blocks individually; flag any
+    // opaque, near-white region that has dark outline ink on several sides.
+    if (mode !== "none") {
+      const block = Math.max(10, Math.round(Math.min(original.width, original.height) * 0.09));
+      let suspectBlocks = 0;
+      for (let by = block; by + block < original.height; by += block)
+        for (let bx = block; bx + block < original.width; bx += block) {
+          let lost = 0, dark = 0, eligible = 0;
+          for (let y = by; y < by + block; y++)
+            for (let x = bx; x < bx + block; x++) {
+              const p = y * original.width + x, k = p * 4;
+              if (original.data[k + 3] < 220) continue;
+              eligible++;
+              if (Math.min(original.data[k], original.data[k+1], original.data[k+2]) > 205 &&
+                  mask[p] === 0) lost++;
+              if (Math.max(original.data[k], original.data[k+1], original.data[k+2]) < 130)
+                dark++;
+            }
+          if (eligible && lost > block * block * 0.18 && dark > block * 0.8)
+            suspectBlocks++;
+        }
+      if (suspectBlocks >= 2) {
+        boundaryReview.needsReview = true;
+        if (!boundaryReview.edges.includes("possible-white-artwork-loss"))
+          boundaryReview.edges.push("possible-white-artwork-loss");
+      }
+    }
     return {
       sourceRect: { ...rect },
       boundaryReview,
