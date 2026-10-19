@@ -327,15 +327,33 @@
         const nominal=row*cell, options=[];
         const low=Math.max(1,Math.round(nominal-cell*0.43));
         const high=Math.min(height-2,Math.round(nominal+cell*0.43));
+        // A genuine separator needs an extended empty corridor, not merely
+        // a pale horizontal stroke inside a letter or a white animal face.
+        const window=Math.max(5,Math.round(cell*0.035));
+        const side=Math.max(window+2,Math.round(cell*0.16));
         for(let y=low;y<=high;y+=2){
-          const left=Math.max(0,y-Math.round(cell*0.12));
-          const right=Math.min(height-1,y+Math.round(cell*0.12));
-          const surrounding=Math.max(smooth[left],smooth[right]);
-          // A good gutter is pale and lies between two populated rows.
-          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
-              +Math.max(0,0.025-surrounding)*2;
+          let maxInk=0,meanInk=0,count=0;
+          for(let yy=Math.max(0,y-window);yy<=Math.min(height-1,y+window);yy++){
+            maxInk=Math.max(maxInk,density[yy]);
+            meanInk+=density[yy];count++;
+          }
+          meanInk/=count;
+          const above=Math.max(0,y-side),below=Math.min(height-1,y+side);
+          let upper=0,lower=0;
+          for(let yy=Math.max(0,above-window);yy<=above+window;yy++)
+            if(yy<height)upper=Math.max(upper,smooth[yy]);
+          for(let yy=Math.max(0,below-window);yy<=Math.min(height-1,below+window);yy++)
+            lower=Math.max(lower,smooth[yy]);
+          // Reject populated scanlines: these produce neighboring sticker
+          // fragments and are not safe even if close to the nominal grid.
+          if(maxInk>0.006 || meanInk>0.002)continue;
+          if(upper<0.018 || lower<0.018)continue;
+          const score=Math.abs(y-nominal)/cell*0.15
+            +Math.max(0,0.05-upper)*0.4
+            +Math.max(0,0.05-lower)*0.4;
           options.push({y,score});
         }
+        if(!options.length)return null;
         options.sort((a,b)=>a.score-b.score);
         candidates.push(options.slice(0,35));
       }
