@@ -331,6 +331,16 @@
           const left=Math.max(0,y-Math.round(cell*0.12));
           const right=Math.min(height-1,y+Math.round(cell*0.12));
           const surrounding=Math.max(smooth[left],smooth[right]);
+          // Confirm this is a gap BETWEEN two stickers. White bands inside
+          // lettering, or empty margins before the next drawing, are not
+          // sufficient evidence for a row separator.
+          const band = Math.max(4, Math.round(cell * 0.10));
+          const reach = Math.max(band + 2, Math.round(cell * 0.32));
+          const inkAbove = Math.max(...smooth.subarray(
+            Math.max(0, y - reach), Math.max(1, y - band)));
+          const inkBelow = Math.max(...smooth.subarray(
+            Math.min(height - 1, y + band), Math.min(height, y + reach)));
+          if (inkAbove < 0.035 || inkBelow < 0.035) continue;
           // A good gutter is pale and lies between two populated rows.
           // The cut must lie in a sustained empty corridor, not merely a
           // pale stripe inside a caption or at the top of the next sticker.
