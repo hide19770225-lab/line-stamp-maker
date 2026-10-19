@@ -188,20 +188,43 @@
             (i + width < mask.length && outside[i + width])) mask[i] = 0;
       }
     }
-    // Reduce the neutral antialias matte on the exposed outermost layer only.
-    // Interior whites, chromatic pixels and original partial alpha are intact.
     Object.defineProperty(mask, "baselineCaps", { value: barrier.baselineCaps });
-    const solid = mask.slice();
+    // Estimate coverage only on the ORIGINAL exposed rim. Never iterate inward.
+    // Keep the original RGB immutable; rendering uses a sparse unmatting layer.
+    const matte = [], solid = mask.slice();
     for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
       const i = y * width + x, k = i * 4;
-      if (solid[i] !== 255 || data[k + 3] !== 255) continue;
+      if (mask[i] !== 255 || data[k + 3] !== 255) continue;
       if (![i - 1, i + 1, i - width, i + width].some(n => outside[n])) continue;
-      const distance = Math.max(...color.map((c, j) => Math.abs(data[k + j] - c)));
+      const v = color.map((c, j) => c - data[k + j]);
+      const distance = Math.max(...v.map(Math.abs));
       const chroma = Math.max(data[k], data[k + 1], data[k + 2]) -
         Math.min(data[k], data[k + 1], data[k + 2]);
-      if (distance <= tolerance || distance > tolerance + 32 || chroma > 12) continue;
-      mask[i] = Math.max(1, Math.round(255 * (distance - tolerance) / 32));
+      // White artwork, dark ink and coloured ornament edges are ambiguous:
+      // preserve them. A neutral transition needs a nearby opaque dark core.
+      if (distance <= tolerance || distance > 160 || chroma > 24) continue;
+      let best = null;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+        const q = yy * width + xx, p = q * 4;
+        if (solid[q] !== 255 || data[p + 3] !== 255) continue;
+        const f = color.map((c, j) => c - data[p + j]);
+        if (Math.max(...f.map(Math.abs)) < 180) continue;
+        const norm = f.reduce((sum, c) => sum + c * c, 0);
+        const alpha = v.reduce((sum, c, j) => sum + c * f[j], 0) / norm;
+        const residual = Math.max(...v.map((c, j) => Math.abs(c - alpha * f[j])));
+        if (alpha <= 0 || alpha >= 0.95 || residual > 12) continue;
+        const score = dx * dx + dy * dy + residual;
+        if (!best || score < best.score) best = { alpha, score };
+      }
+      if (!best) continue;
+      const alpha = Math.max(1, Math.round(best.alpha * 255));
+      mask[i] = alpha;
+      matte.push([i, ...color.map((c, j) => Math.max(0, Math.min(255,
+        Math.round(c + (data[k + j] - c) * 255 / alpha))))]);
     }
+    Object.defineProperty(mask, "matte", { value: matte });
     return mask;
   }
   // Preview-only proposal. Change alpha on one exposed opaque matte rim;
@@ -646,6 +669,7 @@
       original,
       mask,
       autoMask: mask.slice(),
+      matte: mask.matte || [],
       caption: "",
       crop: { left: 0, right: 0, top: 0, bottom: 0 },
       layout: { scale: 90, x: 50, y: 50 },
@@ -839,6 +863,11 @@
     );
     for (let i = 0; i < stamp.mask.length; i++)
       data.data[i * 4 + 3] = stamp.mask[i];
+    // Manual erase/restore wins over inferred edge coverage. Recreated tiles
+    // regenerate this sparse layer, including after project JSON reload.
+    for (const [i, r, g, b] of stamp.matte || []) {
+      if (stamp.mask[i] === stamp.autoMask[i]) data.data.set([r, g, b], i * 4);
+    }
     const layer = canvas(width, height);
     layer.getContext("2d").putImageData(data, 0, 0);
     const selectedCrop = stampCrop(stamp);
