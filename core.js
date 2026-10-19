@@ -396,6 +396,32 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    // A large transparent cavity near the middle can indicate that an
+    // unclosed white character body was mistaken for the background.
+    // Flag it for human inspection instead of silently claiming success.
+    const midX = Math.floor(original.width / 2);
+    const midY = Math.floor(original.height / 2);
+    const x0 = Math.floor(original.width * 0.3);
+    const x1 = Math.ceil(original.width * 0.7);
+    const y0 = Math.floor(original.height * 0.3);
+    const y1 = Math.ceil(original.height * 0.7);
+    let erased = 0, colorful = 0, samples = 0;
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        const p = y * original.width + x, k = p * 4;
+        if (original.data[k + 3] < 200) continue;
+        samples++;
+        if (mask[p] === 0) erased++;
+        if (Math.max(original.data[k], original.data[k + 1], original.data[k + 2]) -
+            Math.min(original.data[k], original.data[k + 1], original.data[k + 2]) > 40)
+          colorful++;
+      }
+    const suspectedWhiteLoss = mode !== "none" && samples > 0 &&
+      colorful > 20 && erased / samples > 0.45;
+    if (suspectedWhiteLoss) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("possible-white-artwork-loss");
+    }
     return {
       sourceRect: { ...rect },
       boundaryReview,
