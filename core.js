@@ -294,71 +294,63 @@
     sample.width = sample.height = 1;
     const corners = [0, width - 1, width * (height - 1), width * height - 1];
     const bg = [data[0], data[1], data[2]];
-    if (corners.some((p) => [0,1,2].some((k) => Math.abs(data[p*4+k]-bg[k]) > 18)))
-      return null;
+    if (corners.some(p => [0,1,2].some(k => Math.abs(data[p*4+k]-bg[k]) > 18))) return null;
     const lines = [];
+    const cellHeight = height / rows;
     for (let c = 0; c < xs.length - 1; c++) {
       const x0 = Math.round(xs[c] * width), x1 = Math.round(xs[c+1] * width);
-      const perColumn = [0];
-      for (let r = 1; r < rows; r++) {
-        const nominal = Math.round(r * height / rows);
-        // Search around the expected divider, not inside neighboring artwork.
-        const start = Math.max(1, nominal - Math.round(height / rows * 0.70));
-        const end = Math.min(height - 2, nominal + Math.round(height / rows * 0.50));
-        // Count foreground pixels in each scanline. A true gutter must
-        // separate two foreground groups, not just pass through a letter.
-        const densities = [];
-        const step = Math.max(1, Math.floor((x1 - x0) / 500));
-        for (let y = start; y <= end; y++) {
-          let ink = 0, count = 0;
-          for (let x = x0; x < x1; x += step) {
-            const i = (y * width + x) * 4;
-            if (data[i + 3] > 16 && Math.max(
-              Math.abs(data[i] - bg[0]),
-              Math.abs(data[i + 1] - bg[1]),
-              Math.abs(data[i + 2] - bg[2])
-            ) > 65) ink++;
-            count++;
-          }
-          densities.push(ink / Math.max(1, count));
+      const density = new Float32Array(height);
+      const step = Math.max(1, Math.floor((x1-x0)/500));
+      for (let y = 0; y < height; y++) {
+        let ink = 0, total = 0;
+        for (let x = x0; x < x1; x += step) {
+          const i = (y*width+x)*4;
+          if (data[i+3] > 16 && Math.max(Math.abs(data[i]-bg[0]),
+              Math.abs(data[i+1]-bg[1]), Math.abs(data[i+2]-bg[2])) > 38) ink++;
+          total++;
         }
-        const blank = densities.map((v) => v <= 0.012);
-        const minLength = Math.max(7, Math.round(height / rows * 0.025));
-        const maxDrift = Math.round(height / rows * 0.68);
-        const look = Math.max(8, Math.round(height / rows * 0.09));
-        let best = null;
-        for (let i = 0; i < blank.length;) {
-          if (!blank[i]) { i++; continue; }
-          let j = i;
-          while (j + 1 < blank.length && blank[j + 1]) j++;
-          const center = start + Math.round((i + j) / 2);
-          const length = j - i + 1;
-          const distance = Math.abs(center - nominal);
-          if (length >= minLength && distance <= maxDrift) {
-            // Inspect the image on both sides of the proposed boundary.
-            // An empty interior gap in a caption or drawing is unsafe.
-            const upper = densities.slice(Math.max(0, i - look), i);
-            const lower = densities.slice(j + 1, Math.min(densities.length, j + 1 + look));
-            const upperInk = upper.reduce((a, b) => a + b, 0);
-            const lowerInk = lower.reduce((a, b) => a + b, 0);
-            const hasBothGroups = upperInk >= 0.02 && lowerInk >= 0.02;
-            // Prefer a broad empty corridor between actual groups.
-            if (hasBothGroups) {
-              const score = length - distance * 0.025 +
-                Math.min(upperInk, lowerInk) * 4;
-              if (!best || score > best.score)
-                best = { center, length, score };
-            }
-          }
-          i = j + 1;
-        }
-        // Never guess a boundary if there is no defensible separation.
-        if (!best) return null;
-        perColumn.push(best.center / height);
+        density[y] = ink / Math.max(1,total);
       }
-      perColumn.push(1);
-      if (perColumn.some((v,i)=>i>0 && v<=perColumn[i-1])) return null;
-      lines.push(perColumn);
+      const candidates = [];
+      for (let y = 1; y < height-1;) {
+        if (density[y] > 0.006) { y++; continue; }
+        const start = y;
+        while (y < height-1 && density[y] <= 0.006) y++;
+        const end = y-1, len = end-start+1;
+        if (len < Math.max(5, Math.round(cellHeight*0.012))) continue;
+        const center = (start+end)/2;
+        const look = Math.round(cellHeight*0.30);
+        const before = density.slice(Math.max(0,start-look),start);
+        const after = density.slice(end+1,Math.min(height,end+look+1));
+        const beforePeak = before.reduce((m,v)=>Math.max(m,v),0);
+        const afterPeak = after.reduce((m,v)=>Math.max(m,v),0);
+        if (beforePeak < 0.045 || afterPeak < 0.045) continue;
+        candidates.push({center,len});
+      }
+      // Optimize all four boundaries together. A wrong early boundary must not
+      // force every subsequent row back to equally sized slices.
+      let states = [{positions:[0],score:0}];
+      for (let r=1;r<rows;r++) {
+        const nominal = r*cellHeight;
+        const next = [];
+        for (const state of states) for (const item of candidates) {
+          const prev = state.positions[state.positions.length-1];
+          const gap = item.center-prev;
+          if (gap < cellHeight*0.53 || gap > cellHeight*1.43) continue;
+          if (Math.abs(item.center-nominal) > cellHeight*0.78) continue;
+          const score = state.score + item.len*0.35
+            - Math.abs(item.center-nominal)*0.12
+            - Math.abs(gap-cellHeight)*0.04;
+          next.push({positions:[...state.positions,item.center],score});
+        }
+        next.sort((a,b)=>b.score-a.score);
+        states = next.slice(0,30);
+        if (!states.length) return null;
+      }
+      states = states.filter(st => height-st.positions[rows-1] >= cellHeight*0.48);
+      if (!states.length) return null;
+      states.sort((a,b)=>b.score-a.score);
+      lines.push([...states[0].positions.map(v=>v/height),1]);
     }
     return lines;
   }
