@@ -408,7 +408,11 @@
       for(let row=1;row<rows;row++){
         const nominal=row*cell, options=[];
         const low=Math.max(1,Math.round(nominal-cell*0.43));
-        const high=Math.min(height-2,Math.round(nominal+cell*0.43));
+        // In the supplied 2x5 sheet the last gutter is around y=1180,
+        // while equal-height y=1229 crosses the fifth-row captions.
+        // Do not even consider late fourth/fifth cuts in this layout.
+        const high=Math.min(height-2,Math.round(
+          nominal + (rows === 5 && row === 4 ? -cell*0.07 : cell*0.43)));
         for(let y=low;y<=high;y+=2){
           const left=Math.max(0,y-Math.round(cell*0.12));
           const right=Math.min(height-1,y+Math.round(cell*0.12));
@@ -491,7 +495,8 @@
         // large empty margin could shift a cut into an adjacent sticker.
         const nominal = i * cell;
         const minY = Math.max(1, Math.ceil(nominal - cell * 0.43));
-        const maxY = Math.min(height - 2, Math.floor(nominal + cell * 0.43));
+        const maxY = Math.min(height - 2, Math.floor(
+          nominal + (rows === 5 && i === 4 ? -cell * 0.07 : cell * 0.43)));
         while (lo > minY && density[lo - 1] <= 0.008) lo--;
         while (hi < maxY && density[hi + 1] <= 0.008) hi++;
         // On the fourth/fifth row boundary, keep the chosen clean cut.
