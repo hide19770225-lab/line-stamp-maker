@@ -191,6 +191,19 @@
                (by>=2 && candidates[(by-2)*width+bx])))
             mask[p]=data[p*4+3];
         }
+      // A 2-pixel sample can leave thin transparent seams in otherwise
+      // restored faces. Fill only near-white holes fully surrounded by
+      // already retained pixels, never expand into an open background.
+      const restored = mask.slice();
+      for (let y=2; y<height-2; y++)
+        for (let x=2; x<width-2; x++) {
+          const p=y*width+x;
+          if (restored[p] !== 0 || !artworkWhite(p)) continue;
+          let enclosed=0;
+          for (const n of [p-1,p+1,p-width,p+width])
+            if (restored[n]>200) enclosed++;
+          if (enclosed===4) mask[p]=data[p*4+3];
+        }
     }
     return mask;
   }
