@@ -134,11 +134,22 @@
       const radius = Math.round(Math.min(width, height) * 0.26);
       const dark = (p) => data[p*4+3] > 128 &&
         Math.max(data[p*4], data[p*4+1], data[p*4+2]) < 125;
+      // JPEG compression makes white faces and paws slightly grey. The
+      // exterior flood must remain strict, but interior recovery needs a
+      // separate, broader near-white test after contour checks.
+      const artworkWhite = (p) => {
+        const k = p * 4;
+        return data[k+3] > 200 &&
+          Math.min(data[k],data[k+1],data[k+2]) >= 225 &&
+          Math.max(Math.abs(data[k]-color[0]),
+                   Math.abs(data[k+1]-color[1]),
+                   Math.abs(data[k+2]-color[2])) <= 30;
+      };
       const candidates = new Uint8Array(mask.length);
       for (let y = 2; y < height-2; y += 2)
         for (let x = 2; x < width-2; x += 2) {
           const p = y*width+x;
-          if (originalMask[p] !== 0 || !near(data,p*4,color,safeTolerance)) continue;
+          if (originalMask[p] !== 0 || !artworkWhite(p)) continue;
           let sides = 0;
           for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
             for (let d = 1; d <= radius; d++) {
@@ -168,7 +179,7 @@
         for (let x=2; x<width-2; x++) {
           const p=y*width+x, bx=x-(x%2), by=y-(y%2);
           if (originalMask[p] === 0 &&
-              near(data,p*4,color,safeTolerance) &&
+              artworkWhite(p) &&
               (candidates[by*width+bx] ||
                candidates[by*width+Math.min(width-1,bx+2)] ||
                candidates[Math.min(height-1,by+2)*width+bx]))
