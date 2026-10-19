@@ -223,7 +223,15 @@
             if(x+d<width && dark(y*width+x+d)) right=true;
             if(y-d>=0 && mask[(y-d)*width+x]>200) upper=true;
           }
-          if(left && right && upper) pawSeeds[p]=1;
+          // Require a nearby retained white region, not merely any dark
+          // caption or outline above the candidate.
+          let attached=false;
+          for(let d=1;d<=Math.min(pawRadius,10);d++) {
+            const q=(y-d)*width+x;
+            if(q<0)break;
+            if(mask[q]>200 && artworkWhite(q)) {attached=true;break;}
+          }
+          if(left && right && upper && attached) pawSeeds[p]=1;
         }
       // Fill seed neighbours without crossing dark strokes or restoring
       // a whole white exterior region.
