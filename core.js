@@ -524,6 +524,33 @@
   }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
+    // A manually adjusted inset or row line can still cut through artwork.
+    // Check the ORIGINAL source pixels along all four crop edges, before
+    // resizing or flood masking can hide the evidence.
+    if (source.image && (source.mode === "auto" || source.mode === "white")) {
+      const probe = canvas(rect.width, rect.height);
+      const probeCtx = probe.getContext("2d", { willReadFrequently: true });
+      probeCtx.drawImage(source.image, rect.x, rect.y, rect.width, rect.height,
+        0, 0, rect.width, rect.height);
+      const edgeData = probeCtx.getImageData(0, 0, rect.width, rect.height).data;
+      probe.width = probe.height = 1;
+      let suspicious = 0;
+      const check = (x, y) => {
+        const k = (y * rect.width + x) * 4;
+        if (edgeData[k+3] < 128) return;
+        const hi = Math.max(edgeData[k], edgeData[k+1], edgeData[k+2]);
+        const lo = Math.min(edgeData[k], edgeData[k+1], edgeData[k+2]);
+        if (hi < 195 || (hi-lo > 35 && lo < 220)) suspicious++;
+      };
+      for (let x = 0; x < rect.width; x++) {
+        check(x, 0); check(x, rect.height-1);
+      }
+      for (let y = 1; y < rect.height-1; y++) {
+        check(0, y); check(rect.width-1, y);
+      }
+      if (suspicious >= Math.max(3, Math.round(Math.min(rect.width,rect.height)*0.015)))
+        throw new Error(`コマ${row * source.columns + column + 1}の切り抜き枠が絵柄に重なっています。分割線と余白設定を調整してください（境界の色付き画素 ${suspicious}個）。`);
+    }
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
     const scale = Math.min(1, 600 / Math.max(rect.width, rect.height));
     const crop = canvas(
