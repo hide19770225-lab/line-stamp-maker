@@ -706,7 +706,7 @@
       const pre = document.createElement("pre");
       pre.style.whiteSpace = "pre-wrap";
       pre.style.overflowWrap = "anywhere";
-      pre.textContent = source.cropReport.join("\\n");
+      pre.textContent = source.cropReport.join("\n");
       details.append(summary, pre);
       $("grid-controls").append(details);
     }
