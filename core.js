@@ -233,11 +233,10 @@
     };
     function line(axis, index, total, count) {
       const nominal = Math.round((index * total) / count);
-      const radius = Math.max(2, Math.round((total / count) * 0.16));
       const cross = axis === "x" ? height : width;
       const step = Math.max(1, Math.floor(cross / 600));
-      const start = Math.max(1, nominal - radius);
-      const end = Math.min(total - 2, nominal + radius);
+      const start = Math.max(1, nominal - Math.max(2, Math.round((total / count) * 0.16)));
+      const end = Math.min(total - 2, nominal + Math.max(2, Math.round((total / count) * 0.16)));
       const blank = [];
       for (let pos = start; pos <= end; pos++) {
         let ink = 0, samples = 0;
@@ -301,8 +300,8 @@
       for (let r = 1; r < rows; r++) {
         const nominal = Math.round(r * height / rows);
         // Search around the expected divider, not inside neighboring artwork.
-        const radius = Math.round(height / rows * 0.26);
-        const start = Math.max(1, nominal - radius), end = Math.min(height-2, nominal+radius);
+        const start = Math.max(1, nominal - Math.round(height / rows * 0.26));
+        const end = Math.min(height - 2, nominal + Math.round(height / rows * 0.26));
         const blank = [];
         const step = Math.max(1, Math.floor((x1-x0)/500));
         for (let y = start; y <= end; y++) {
