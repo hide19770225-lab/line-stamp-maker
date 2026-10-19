@@ -302,42 +302,54 @@
         // Search around the expected divider, not inside neighboring artwork.
         const start = Math.max(1, nominal - Math.round(height / rows * 0.26));
         const end = Math.min(height - 2, nominal + Math.round(height / rows * 0.26));
-        const blank = [];
-        const step = Math.max(1, Math.floor((x1-x0)/500));
+        // Count foreground pixels in each scanline. A true gutter must
+        // separate two foreground groups, not just pass through a letter.
+        const densities = [];
+        const step = Math.max(1, Math.floor((x1 - x0) / 500));
         for (let y = start; y <= end; y++) {
           let ink = 0, count = 0;
           for (let x = x0; x < x1; x += step) {
             const i = (y * width + x) * 4;
-            if (data[i+3] > 16 && Math.max(
-              Math.abs(data[i]-bg[0]), Math.abs(data[i+1]-bg[1]), Math.abs(data[i+2]-bg[2])
+            if (data[i + 3] > 16 && Math.max(
+              Math.abs(data[i] - bg[0]),
+              Math.abs(data[i + 1] - bg[1]),
+              Math.abs(data[i + 2] - bg[2])
             ) > 65) ink++;
             count++;
           }
-          blank.push(ink / Math.max(1,count) <= 0.003);
+          densities.push(ink / Math.max(1, count));
         }
+        const blank = densities.map((v) => v <= 0.003);
+        const minLength = Math.max(5, Math.round(height / rows * 0.018));
+        const maxDrift = Math.round(height / rows * 0.24);
+        const look = Math.max(8, Math.round(height / rows * 0.09));
         let best = null;
-        for (let i=0; i<blank.length;) {
+        for (let i = 0; i < blank.length;) {
           if (!blank[i]) { i++; continue; }
-          let j=i;
-          while (j+1<blank.length && blank[j+1]) j++;
-          const center = start + Math.round((i+j)/2);
-          const length = j-i+1;
-          // A few blank scanlines inside an illustration are not a gutter.
-          // Prefer the broadest full-column empty corridor, then proximity.
-          const minLength = Math.max(5,Math.round(height/rows*0.018));
-          // A narrow blank gap inside lettering can be closer to the nominal
-          // divider than the actual gap between two sticker groups.
-          // Only consider corridors reasonably close to the expected boundary,
-          // and prefer a genuinely wide empty band over a short internal gap.
-          const maxDrift = Math.round((height / rows) * 0.24);
+          let j = i;
+          while (j + 1 < blank.length && blank[j + 1]) j++;
+          const center = start + Math.round((i + j) / 2);
+          const length = j - i + 1;
           const distance = Math.abs(center - nominal);
           if (length >= minLength && distance <= maxDrift) {
-            const score = length - distance * 0.08;
-            if (!best || score > best.score)
-              best = {center, length, score};
+            // Inspect the image on both sides of the proposed boundary.
+            // An empty interior gap in a caption or drawing is unsafe.
+            const upper = densities.slice(Math.max(0, i - look), i);
+            const lower = densities.slice(j + 1, Math.min(densities.length, j + 1 + look));
+            const upperInk = upper.reduce((a, b) => a + b, 0);
+            const lowerInk = lower.reduce((a, b) => a + b, 0);
+            const hasBothGroups = upperInk >= 0.02 && lowerInk >= 0.02;
+            // Prefer a broad empty corridor between actual groups.
+            if (hasBothGroups) {
+              const score = length - distance * 0.08 +
+                Math.min(upperInk, lowerInk) * 4;
+              if (!best || score > best.score)
+                best = { center, length, score };
+            }
           }
-          i=j+1;
+          i = j + 1;
         }
+        // Never guess a boundary if there is no defensible separation.
         if (!best) return null;
         perColumn.push(best.center / height);
       }
