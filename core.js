@@ -223,13 +223,21 @@
             if(x+d<width && dark(y*width+x+d)) right=true;
             if(y-d>=0 && mask[(y-d)*width+x]>200) upper=true;
           }
-          // Require a nearby retained white region, not merely any dark
-          // caption or outline above the candidate.
+          // The surviving face may be diagonally above a fully erased paw,
+          // not in the exact same column. Search a bounded upper fan for
+          // retained near-white artwork, while requiring side ink barriers.
           let attached=false;
-          for(let d=1;d<=Math.min(pawRadius,10);d++) {
-            const q=(y-d)*width+x;
-            if(q<0)break;
-            if(mask[q]>200 && artworkWhite(q)) {attached=true;break;}
+          const maxRise=Math.min(pawRadius,24);
+          const maxOffset=Math.min(pawRadius,12);
+          for(let dy=1;dy<=maxRise && !attached;dy+=2) {
+            const yy=y-dy;
+            if(yy<0)break;
+            for(let dx=-maxOffset;dx<=maxOffset;dx+=2) {
+              const xx=x+dx;
+              if(xx<0||xx>=width)continue;
+              const q=yy*width+xx;
+              if(mask[q]>200 && artworkWhite(q)) {attached=true;break;}
+            }
           }
           if(left && right && upper && attached) pawSeeds[p]=1;
         }
