@@ -331,13 +331,23 @@
           const left=Math.max(0,y-Math.round(cell*0.12));
           const right=Math.min(height-1,y+Math.round(cell*0.12));
           const surrounding=Math.max(smooth[left],smooth[right]);
-          // A good gutter is pale and lies between two populated rows.
-          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
-              +Math.max(0,0.025-surrounding)*2;
-          options.push({y,score});
+          // A separator must be a continuous near-empty band, not a pale
+          // scanline inside letters or a character.
+          const limit=0.012;
+          if(density[y]>limit)continue;
+          let top=y,bottom=y;
+          while(top>low&&density[top-1]<=limit)top--;
+          while(bottom<high&&density[bottom+1]<=limit)bottom++;
+          const span=bottom-top+1;
+          if(span<Math.max(4,Math.round(cell*0.025)))continue;
+          const center=Math.round((top+bottom)/2);
+          const score=smooth[y]*9+Math.abs(center-nominal)/cell*0.2
+              +Math.max(0,0.025-surrounding)*2+1/span;
+          options.push({y:center,score});
         }
         options.sort((a,b)=>a.score-b.score);
-        candidates.push(options.slice(0,35));
+        if(!options.length)return null;
+        candidates.push(options.filter((v,i,a)=>a.findIndex(w=>w.y===v.y)===i).slice(0,35));
       }
       let states=[{cuts:[0],score:0}];
       for(let row=0;row<candidates.length;row++){
