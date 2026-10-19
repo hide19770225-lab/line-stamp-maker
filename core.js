@@ -85,8 +85,29 @@
           (data[i * 4 + 3] === 0 || data[i * 4 + 3] === 255) &&
           near(data, i * 4, color, safeTolerance)
         ) {
-          queue[tail++] = i;
-          mask[i] = 0;
+          // Do not let a thin antialiased break in a dark character outline
+          // turn a large white face or paw into transparent background.
+          // Narrow passages surrounded by colored ink are treated as
+          // uncertain artwork, not automatically erased.
+          const x = i % width, y = Math.floor(i / width);
+          let nearMatte = 0, sampled = 0, darkInk = 0;
+          if (x > 1 && x < width - 2 && y > 1 && y < height - 2) {
+            for (let dy = -1; dy <= 1; dy++)
+              for (let dx = -1; dx <= 1; dx++) {
+                const p = ((y + dy) * width + x + dx) * 4;
+                sampled++;
+                if (near(data, p, color, safeTolerance)) nearMatte++;
+                // Only dark outline pixels should act as a barrier. Pale
+                // antialiasing in ordinary background must not trap white.
+                if (data[p + 3] > 128 &&
+                    Math.max(data[p], data[p + 1], data[p + 2]) < 115)
+                  darkInk++;
+              }
+          }
+          if (!sampled || nearMatte >= 7 || darkInk === 0) {
+            queue[tail++] = i;
+            mask[i] = 0;
+          }
         }
       }
     }
@@ -105,6 +126,54 @@
       if (x + 1 < width) visit(i + 1);
       if (i >= width) visit(i - width);
       if (i + width < mask.length) visit(i + width);
+    }
+    // Restore white artwork with nearby dark contours on all four sides.
+    // This catches a face connected to the exterior through a tiny gap.
+    if (color.every(v => v >= 235)) {
+      const originalMask = mask.slice();
+      const radius = Math.round(Math.min(width, height) * 0.26);
+      const dark = (p) => data[p*4+3] > 128 &&
+        Math.max(data[p*4], data[p*4+1], data[p*4+2]) < 125;
+      const candidates = new Uint8Array(mask.length);
+      for (let y = 2; y < height-2; y += 2)
+        for (let x = 2; x < width-2; x += 2) {
+          const p = y*width+x;
+          if (originalMask[p] !== 0 || !near(data,p*4,color,safeTolerance)) continue;
+          let sides = 0;
+          for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+            for (let d = 1; d <= radius; d++) {
+              const xx=x+dx*d, yy=y+dy*d;
+              if (xx<0 || yy<0 || xx>=width || yy>=height) break;
+              if (dark(yy*width+xx)) { sides++; break; }
+            }
+          }
+          // Paws and panda cheeks often have an open edge in the source.
+          // Four enclosing rays misses those white regions entirely.
+          // Require opposing ink on one axis and a third contour instead.
+          // Keep the search local so distant text cannot enclose background.
+          if (sides >= 3) {
+            let left = false, right = false, up = false, down = false;
+            const reach = Math.max(8, Math.round(Math.min(width,height) * 0.14));
+            for (let d = 1; d <= reach; d++) {
+              if (x-d >= 0 && dark(y*width+x-d)) left = true;
+              if (x+d < width && dark(y*width+x+d)) right = true;
+              if (y-d >= 0 && dark((y-d)*width+x)) up = true;
+              if (y+d < height && dark((y+d)*width+x)) down = true;
+            }
+            if ((left && right && (up || down)) ||
+                (up && down && (left || right))) candidates[p] = 1;
+          }
+        }
+      for (let y=2; y<height-2; y++)
+        for (let x=2; x<width-2; x++) {
+          const p=y*width+x, bx=x-(x%2), by=y-(y%2);
+          if (originalMask[p] === 0 &&
+              near(data,p*4,color,safeTolerance) &&
+              (candidates[by*width+bx] ||
+               candidates[by*width+Math.min(width-1,bx+2)] ||
+               candidates[Math.min(height-1,by+2)*width+bx]))
+            mask[p]=data[p*4+3];
+        }
     }
     return mask;
   }
@@ -331,12 +400,51 @@
           const left=Math.max(0,y-Math.round(cell*0.12));
           const right=Math.min(height-1,y+Math.round(cell*0.12));
           const surrounding=Math.max(smooth[left],smooth[right]);
+          // Confirm this is a gap BETWEEN two stickers. White bands inside
+          // lettering, or empty margins before the next drawing, are not
+          // sufficient evidence for a row separator.
+          const band = Math.max(4, Math.round(cell * 0.10));
+          const reach = Math.max(band + 2, Math.round(cell * 0.32));
+          const inkAbove = Math.max(...smooth.subarray(
+            Math.max(0, y - reach), Math.max(1, y - band)));
+          const inkBelow = Math.max(...smooth.subarray(
+            Math.min(height - 1, y + band), Math.min(height, y + reach)));
+          if (inkAbove < 0.035 || inkBelow < 0.035) continue;
           // A good gutter is pale and lies between two populated rows.
-          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
-              +Math.max(0,0.025-surrounding)*2;
+          // The cut must lie in a sustained empty corridor, not merely a
+          // pale stripe inside a caption or at the top of the next sticker.
+          // Real 2x5 artwork sometimes leaves only 2-10 clean scanlines.
+          // Reject any cut through visible ink, but do not require a broad
+          // 3.5%-of-cell gutter (which rejects every row on such sheets).
+          const inkHere = density[y];
+          if (inkHere > 0.008) continue;
+          let clearUp = 0, clearDown = 0;
+          while (clearUp < cell * 0.10 && y - clearUp >= 0 &&
+                 density[y - clearUp] <= 0.008) clearUp++;
+          while (clearDown < cell * 0.10 && y + clearDown < height &&
+                 density[y + clearDown] <= 0.008) clearDown++;
+          const corridor = clearUp + clearDown - 1;
+          if (corridor < 2) continue;
+          // A long clear run near the expected boundary is preferred.
+          // The two-sided ink check above excludes blank image margins.
+          // The last 2x5 boundary often sits above its equal-height
+          // position. Penalize a late cut there: it can import the first
+          // pixels of row five into row four (07/08 contamination).
+          // For the final 2x5 junction, the fifth sticker can begin well
+          // before the equal-height grid line. Favor the FIRST clean
+          // corridor after row four rather than an empty stripe inside
+          // the artwork of row five.
+          const lateFinalRow = rows === 5 && row === rows - 1
+            ? Math.max(0, y - (nominal - cell * 0.12)) / cell * 1.5
+            : 0;
+          const score = Math.abs(y - nominal) / cell * 0.13 +
+            0.7 / (corridor + 3) + smooth[y] * 0.08 + lateFinalRow;
           options.push({y,score});
         }
         options.sort((a,b)=>a.score-b.score);
+        // An uncertain boundary must be reviewed, never guessed from an
+        // equal-height split that can include a neighbour's artwork.
+        if (!options.length) return null;
         candidates.push(options.slice(0,35));
       }
       let states=[{cuts:[0],score:0}];
@@ -355,7 +463,31 @@
       states=states.filter(st=>height-st.cuts[rows-1]>=cell*0.56);
       if(!states.length)return null;
       states.sort((a,b)=>a.score-b.score);
-      result.push([...states[0].cuts.map(y=>y/height),1]);
+      // Select the middle of the contiguous blank corridor instead of a
+      // nominal-biased edge. This maximizes clearance from both stickers,
+      // especially around the 07/08 -> 09/10 transition.
+      const selected = states[0].cuts.slice();
+      for (let i = 1; i < selected.length; i++) {
+        let lo = selected[i], hi = selected[i];
+        // Bound the corridor to the expected row junction. Otherwise a very
+        // large empty margin could shift a cut into an adjacent sticker.
+        const nominal = i * cell;
+        const minY = Math.max(1, Math.ceil(nominal - cell * 0.43));
+        const maxY = Math.min(height - 2, Math.floor(nominal + cell * 0.43));
+        while (lo > minY && density[lo - 1] <= 0.008) lo--;
+        while (hi < maxY && density[hi + 1] <= 0.008) hi++;
+        // On the fourth/fifth row boundary, keep the chosen clean cut.
+        // Re-centering a long pale run can cross the top of row-five artwork
+        // and then crop the corresponding 09/10 image.
+        const centered = rows === 5 && i === rows - 1
+          ? selected[i] : Math.round((lo + hi) / 2);
+        // Preserve the joint optimizer's minimum row height after centering.
+        const previous = selected[i - 1];
+        const next = i + 1 < selected.length ? states[0].cuts[i + 1] : height;
+        selected[i] = centered - previous >= cell * 0.56 &&
+          next - centered >= cell * 0.56 ? centered : states[0].cuts[i];
+      }
+      result.push([...selected.map(y=>y/height),1]);
     }
     return result;
   }
@@ -396,6 +528,38 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    // A neighbouring row can leak into the bottom of a tile even when the
+    // source-grid cut looks plausible. Find a genuinely empty horizontal
+    // corridor separating a compact bottom fragment from the main artwork.
+    // Never silently delete artwork: preserve pixels and require review.
+    const rowInk = new Uint32Array(original.height);
+    for (let y = 0; y < original.height; y++)
+      for (let x = 0; x < original.width; x++)
+        if (mask[y * original.width + x] > 32) rowInk[y]++;
+    const start = Math.floor(original.height * 0.68);
+    const end = Math.floor(original.height * 0.94);
+    const minGap = Math.max(3, Math.round(original.height * 0.025));
+    let bottomFragment = false;
+    for (let y = start; y < end;) {
+      if (rowInk[y] > 0) { y++; continue; }
+      let next = y;
+      while (next < end && rowInk[next] === 0) next++;
+      if (next - y >= minGap) {
+        let below = 0, above = 0;
+        for (let k = next; k < original.height; k++) below += rowInk[k];
+        for (let k = 0; k < y; k++) above += rowInk[k];
+        if (below >= Math.max(12, original.width * 0.12) &&
+            above >= below * 2 && next < original.height * 0.91) {
+          bottomFragment = true;
+          break;
+        }
+      }
+      y = next;
+    }
+    if (bottomFragment) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("detached-bottom-fragment");
+    }
     // Conservative signal only: do not certify tiles with suspiciously
     // large erased areas surrounded by colored artwork.
     const x0 = Math.floor(original.width * 0.3);
@@ -418,6 +582,34 @@
         erased / samples > 0.45) {
       boundaryReview.needsReview = true;
       boundaryReview.edges.push("possible-white-artwork-loss");
+    }
+    // A single aggregate erased percentage misses localized white paws and
+    // panda faces. Inspect small interior blocks individually; flag any
+    // opaque, near-white region that has dark outline ink on several sides.
+    if (mode !== "none") {
+      const block = Math.max(10, Math.round(Math.min(original.width, original.height) * 0.09));
+      let suspectBlocks = 0;
+      for (let by = block; by + block < original.height; by += block)
+        for (let bx = block; bx + block < original.width; bx += block) {
+          let lost = 0, dark = 0, eligible = 0;
+          for (let y = by; y < by + block; y++)
+            for (let x = bx; x < bx + block; x++) {
+              const p = y * original.width + x, k = p * 4;
+              if (original.data[k + 3] < 220) continue;
+              eligible++;
+              if (Math.min(original.data[k], original.data[k+1], original.data[k+2]) > 205 &&
+                  mask[p] === 0) lost++;
+              if (Math.max(original.data[k], original.data[k+1], original.data[k+2]) < 130)
+                dark++;
+            }
+          if (eligible && lost > block * block * 0.18 && dark > block * 0.8)
+            suspectBlocks++;
+        }
+      if (suspectBlocks >= 2) {
+        boundaryReview.needsReview = true;
+        if (!boundaryReview.edges.includes("possible-white-artwork-loss"))
+          boundaryReview.edges.push("possible-white-artwork-loss");
+      }
     }
     return {
       sourceRect: { ...rect },
