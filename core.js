@@ -131,7 +131,8 @@
     // This catches a face connected to the exterior through a tiny gap.
     if (color.every(v => v >= 235)) {
       const originalMask = mask.slice();
-      const radius = Math.round(Math.min(width, height) * 0.26);
+      // Never let distant lettering count as a face boundary.
+      const radius = Math.max(8, Math.round(Math.min(width, height) * 0.14));
       const dark = (p) => data[p*4+3] > 128 &&
         Math.max(data[p*4], data[p*4+1], data[p*4+2]) < 125;
       // JPEG compression makes white faces and paws slightly grey. The
@@ -164,8 +165,7 @@
           // Keep the search local so distant text cannot enclose background.
           if (sides >= 3) {
             let left = false, right = false, up = false, down = false;
-            const reach = Math.max(8, Math.round(Math.min(width,height) * 0.14));
-            for (let d = 1; d <= reach; d++) {
+            for (let d = 1; d <= radius; d++) {
               if (x-d >= 0 && dark(y*width+x-d)) left = true;
               if (x+d < width && dark(y*width+x+d)) right = true;
               if (y-d >= 0 && dark((y-d)*width+x)) up = true;
@@ -182,7 +182,9 @@
               artworkWhite(p) &&
               (candidates[by*width+bx] ||
                candidates[by*width+Math.min(width-1,bx+2)] ||
-               candidates[Math.min(height-1,by+2)*width+bx]))
+               candidates[Math.min(height-1,by+2)*width+bx] ||
+               (bx>=2 && candidates[by*width+bx-2]) ||
+               (by>=2 && candidates[(by-2)*width+bx])))
             mask[p]=data[p*4+3];
         }
     }
