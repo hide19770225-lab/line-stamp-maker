@@ -303,8 +303,8 @@
       for (let r = 1; r < rows; r++) {
         const nominal = Math.round(r * height / rows);
         // Search around the expected divider, not inside neighboring artwork.
-        const start = Math.max(1, nominal - Math.round(height / rows * 0.26));
-        const end = Math.min(height - 2, nominal + Math.round(height / rows * 0.26));
+        const start = Math.max(1, nominal - Math.round(height / rows * 0.70));
+        const end = Math.min(height - 2, nominal + Math.round(height / rows * 0.50));
         // Count foreground pixels in each scanline. A true gutter must
         // separate two foreground groups, not just pass through a letter.
         const densities = [];
@@ -322,9 +322,9 @@
           }
           densities.push(ink / Math.max(1, count));
         }
-        const blank = densities.map((v) => v <= 0.003);
-        const minLength = Math.max(5, Math.round(height / rows * 0.018));
-        const maxDrift = Math.round(height / rows * 0.24);
+        const blank = densities.map((v) => v <= 0.012);
+        const minLength = Math.max(7, Math.round(height / rows * 0.025));
+        const maxDrift = Math.round(height / rows * 0.68);
         const look = Math.max(8, Math.round(height / rows * 0.09));
         let best = null;
         for (let i = 0; i < blank.length;) {
@@ -344,7 +344,7 @@
             const hasBothGroups = upperInk >= 0.02 && lowerInk >= 0.02;
             // Prefer a broad empty corridor between actual groups.
             if (hasBothGroups) {
-              const score = length - distance * 0.08 +
+              const score = length - distance * 0.025 +
                 Math.min(upperInk, lowerInk) * 4;
               if (!best || score > best.score)
                 best = { center, length, score };
