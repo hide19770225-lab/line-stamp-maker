@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>10コマ回帰検査（開発用）</title>
+<style>body{font:16px system-ui,sans-serif;max-width:950px;margin:auto;padding:16px;background:#f4f5f5}section{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.cell{background:white;padding:8px;border:1px solid #aaa}.cell canvas{width:100%;height:auto;background:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 50%/20px 20px}.warn{color:#a42}button{padding:10px}small{display:block}</style>
+<script src="core.js" defer></script></head>
+<body><h1>10コマ分割・透過 回帰検査</h1>
+<p>開発用です。画像は送信されず、このブラウザ内で処理されます。表示は検査補助であり、合格の自動保証ではありません。</p>
+<label>元の2列×5段画像 <input id="file" type="file" accept="image/*"></label>
+<label>背景 <select id="mode"><option value="auto">自動判定</option><option value="white">白</option><option value="none">透過しない</option></select></label>
+<label>許容差 <input id="tol" type="number" min="0" max="100" value="24"></label>
+<button id="run">10枚を検査</button><p id="status" role="status"></p><section id="out"></section>
+<script>
+window.addEventListener("DOMContentLoaded",()=>{
+const $=id=>document.getElementById(id);
+$("run").onclick=async()=>{
+const file=$("file").files[0];if(!file){$("status").textContent="画像を選択してください";return}
+$("out").replaceChildren();$("status").textContent="検査中…";
+let url=URL.createObjectURL(file),img=new Image();
+try{
+await new Promise((ok,ng)=>{img.onload=ok;img.onerror=ng;img.src=url});
+const C=window.StampCore;if(!C)throw Error("core.jsが読み込めません");
+const xs=[0,.5,1],ys=[0,.2,.4,.6,.8,1];
+const proposed=C.suggestColumnRowLines(img,xs,5);
+const source={image:img,xs,ys,columnYs:proposed||undefined,insets:{left:0,right:0,top:0,bottom:0}};
+let flagged=0;
+for(let row=0;row<5;row++)for(let col=0;col<2;col++){
+const n=row*2+col+1;
+const tile=C.createTile(source,col,row,$("mode").value,Number($("tol").value),"#ffffff");
+const c=document.createElement("canvas");c.width=tile.original.width;c.height=tile.original.height;
+const context=c.getContext("2d");const output=context.createImageData(c.width,c.height);
+output.data.set(tile.original.data);
+for(let p=0;p<tile.mask.length;p++)output.data[p*4+3]=tile.mask[p];
+context.putImageData(output,0,0);
+const cell=document.createElement("div");cell.className="cell";
+const h=document.createElement("strong");h.textContent=String(n).padStart(2,"0")+" "+(tile.boundaryReview.needsReview?"要確認":"目視確認が必要");
+if(tile.boundaryReview.needsReview){h.className="warn";flagged++}
+const d=document.createElement("small");d.textContent="切り抜き位置 "+JSON.stringify(tile.sourceRect)+" / "+tile.boundaryReview.edges.join(",");
+cell.append(h,d,c);$("out").append(cell)
+}
+$("status").textContent="10枚表示完了。自動要確認 "+flagged+"枚。各画像の文字・装飾・白い顔・隣接混入を目視してください。";
+}catch(e){$("status").textContent="検査エラー: "+e.message}finally{URL.revokeObjectURL(url)}
+};
+});
+</script></body></html>
