@@ -899,20 +899,14 @@
       const columnLines = C.suggestColumnRowLines(
         source.image, source.xs, source.rows,
       );
-      if (columnLines) {
-        source.columnYs = columnLines;
-      } else {
-        source.columnYs = null;
-      }
-      const suggested = !columnLines && C.suggestGridLines(
-        source.image, source.columns, source.rows,
-      );
-      if (suggested) {
-        source.xs = suggested.xs;
-        source.ys = suggested.ys;
-        renderGridControls();
-        drawSplit();
-      }
+      source.columnYs = columnLines || null;
+      source.gutterUncertain = !columnLines;
+      // Never substitute a shared horizontal boundary for a failed
+      // column-specific search: it can cut off ears in staggered sheets.
+    }
+    if (!defaultGrid(source.xs) || !defaultGrid(source.ys)) {
+      source.columnYs = null;
+      source.gutterUncertain = false; // User explicitly chose manual grid lines.
     }
     const tiles = [],
       count = source.assignments.filter(Boolean).length;
@@ -937,6 +931,12 @@
         source.tolerance,
         source.color,
       );
+      if (source.gutterUncertain) {
+        stamp.boundaryReview = {
+          needsReview: true,
+          edges: ["分割位置未確定"],
+        };
+      }
       stamp.slot = number;
       stamp.cell = cell;
       stamp.maskKey = JSON.stringify([

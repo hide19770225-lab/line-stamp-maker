@@ -322,9 +322,13 @@
           while (j+1<blank.length && blank[j+1]) j++;
           const center = start + Math.round((i+j)/2);
           const length = j-i+1;
-          const minLength = Math.max(4,Math.round(height/rows*0.012));
+          // A few blank scanlines inside an illustration are not a gutter.
+          // Prefer the broadest full-column empty corridor, then proximity.
+          const minLength = Math.max(6,Math.round(height/rows*0.045));
           if (length >= minLength && (!best ||
-              Math.abs(center-nominal)<Math.abs(best.center-nominal)))
+              length > best.length ||
+              (length === best.length &&
+                Math.abs(center-nominal)<Math.abs(best.center-nominal))))
             best = {center,length};
           i=j+1;
         }
