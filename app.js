@@ -155,6 +155,7 @@
       s.rows,
       s.xs,
       s.ys,
+      s.columnYs || null,
       s.mode,
       s.tolerance,
       s.color,
@@ -937,6 +938,18 @@
           edges: ["分割位置未確定"],
         };
       }
+      // Display the actual pixel coordinates used, not just the suggested
+      // grid. These values are recorded by createTile -> tileRect.
+      const used = stamp.sourceRect;
+      if (used) {
+        const bottom = used.y + used.height;
+        const right = used.x + used.width;
+        stamp.cropDiagnostic =
+          `元画像切抜 #${String(number).padStart(2,"0")}: ` +
+          `x=${used.x}..${right}, y=${used.y}..${bottom}` +
+          ` (元画像 ${source.width}×${source.height})`;
+        console.info("[stamp-crop]", stamp.cropDiagnostic);
+      }
       stamp.slot = number;
       stamp.cell = cell;
       stamp.maskKey = JSON.stringify([
@@ -1160,6 +1173,9 @@
             rendered.textOverlap &&
             T.resolve(stamp.caption, stamp.style).autoPlace,
         });
+        if (stamp.cropDiagnostic && stamp.boundaryReview?.needsReview) {
+          report.warnings.push(stamp.cropDiagnostic);
+        }
         if (stamp.boundaryReview?.needsReview && !stamp.reviewed) {
           report.warnings.push(
             "元画像の分割境界に前景があります（" +
