@@ -725,6 +725,7 @@
       lines = s[axis];
     if (!Number.isFinite(value)) return;
     const gap = Math.max(0.004, 2 / (axis === "xs" ? s.width : s.height));
+    s.columnYs = null;
     lines[index] = Math.max(
       index ? lines[index - 1] + gap : 0,
       Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value),
@@ -893,7 +894,17 @@
         Math.abs(value - index / (values.length - 1)) < 0.0001,
       );
     if (defaultGrid(source.xs) && defaultGrid(source.ys)) {
-      const suggested = C.suggestGridLines(
+      // Use column-specific boundaries when each column has clear white gutters.
+      // Never silently fall back to a potentially destructive shared row line.
+      const columnLines = C.suggestColumnRowLines(
+        source.image, source.xs, source.rows,
+      );
+      if (columnLines) {
+        source.columnYs = columnLines;
+      } else {
+        source.columnYs = null;
+      }
+      const suggested = !columnLines && C.suggestGridLines(
         source.image, source.columns, source.rows,
       );
       if (suggested) {
@@ -931,6 +942,7 @@
       stamp.maskKey = JSON.stringify([
         source.fingerprint,
         signature(source),
+        source.columnYs?.[cell % source.columns] || null,
         cell,
         stamp.original.width,
         stamp.original.height,
