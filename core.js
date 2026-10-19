@@ -207,6 +207,35 @@
                (by>=2 && candidates[(by-2)*width+bx])))
             mask[p]=data[p*4+3];
         }
+      // Open-bottom paws (e.g. stamp 03) have dark ink at their sides
+      // but no lower enclosing contour. Restore a near-white pixel only
+      // when two side contours are close and a retained body/face touches
+      // its upper neighbourhood. This avoids restoring the open exterior.
+      const pawRadius = Math.max(6, Math.round(Math.min(width,height)*0.11));
+      const pawSeeds = new Uint8Array(mask.length);
+      for (let y=3; y<height-3; y+=2)
+        for (let x=3; x<width-3; x+=2) {
+          const p=y*width+x;
+          if (mask[p]!==0 || !artworkWhite(p)) continue;
+          let left=false,right=false,upper=false;
+          for(let d=1;d<=pawRadius;d++) {
+            if(x-d>=0 && dark(y*width+x-d)) left=true;
+            if(x+d<width && dark(y*width+x+d)) right=true;
+            if(y-d>=0 && mask[(y-d)*width+x]>200) upper=true;
+          }
+          if(left && right && upper) pawSeeds[p]=1;
+        }
+      // Fill seed neighbours without crossing dark strokes or restoring
+      // a whole white exterior region.
+      for(let y=3;y<height-3;y++)
+        for(let x=3;x<width-3;x++) {
+          const p=y*width+x,bx=x-(x%2),by=y-(y%2);
+          if(mask[p]===0 && artworkWhite(p) &&
+             (pawSeeds[by*width+bx] ||
+              pawSeeds[by*width+Math.min(width-1,bx+2)] ||
+              pawSeeds[Math.min(height-1,by+2)*width+bx]))
+            mask[p]=data[p*4+3];
+        }
       // A 2-pixel sample can leave thin transparent seams in otherwise
       // restored faces. Fill only near-white holes fully surrounded by
       // already retained pixels, never expand into an open background.
