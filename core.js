@@ -429,13 +429,18 @@
           // Real 2x5 artwork sometimes leaves only 2-10 clean scanlines.
           // Reject any cut through visible ink, but do not require a broad
           // 3.5%-of-cell gutter (which rejects every row on such sheets).
+          // The third/fourth row junction in real 2x5 JPEG sheets can
+          // contain a few compressed pixels even between distinct drawings.
+          // Allow a narrow low-ink corridor there, while still requiring
+          // populated artwork above and below.
+          const maxGutterInk = rows === 5 && row === 3 ? 0.02 : 0.008;
           const inkHere = density[y];
-          if (inkHere > 0.008) continue;
+          if (inkHere > maxGutterInk) continue;
           let clearUp = 0, clearDown = 0;
           while (clearUp < cell * 0.10 && y - clearUp >= 0 &&
-                 density[y - clearUp] <= 0.008) clearUp++;
+                 density[y - clearUp] <= maxGutterInk) clearUp++;
           while (clearDown < cell * 0.10 && y + clearDown < height &&
-                 density[y + clearDown] <= 0.008) clearDown++;
+                 density[y + clearDown] <= maxGutterInk) clearDown++;
           const corridor = clearUp + clearDown - 1;
           if (corridor < 2) continue;
           // A long clear run near the expected boundary is preferred.
@@ -508,7 +513,8 @@
         const before = density[Math.max(0, cut - 1)];
         const at = density[cut];
         const after = density[Math.min(height - 1, cut + 1)];
-        if (Math.max(before, at, after) > 0.008) return null;
+        const allowedInk = rows === 5 && i === 3 ? 0.02 : 0.008;
+        if (Math.max(before, at, after) > allowedInk) return null;
       }
       result.push([...selected.map(y=>y/height),1]);
     }
