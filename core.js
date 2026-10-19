@@ -300,7 +300,7 @@
       const perColumn = [0];
       for (let r = 1; r < rows; r++) {
         const nominal = Math.round(r * height / rows);
-        const radius = Math.round(height / rows * 0.36);
+        // Only search near the expected row divider. Wider searches can pick\n        // an empty band *inside* a neighboring sticker.\n        const radius = Math.round(height / rows * 0.14);
         const start = Math.max(1, nominal - radius), end = Math.min(height-2, nominal+radius);
         const blank = [];
         const step = Math.max(1, Math.floor((x1-x0)/500));
@@ -326,9 +326,9 @@
           // Prefer the broadest full-column empty corridor, then proximity.
           const minLength = Math.max(6,Math.round(height/rows*0.045));
           if (length >= minLength && (!best ||
-              length > best.length ||
-              (length === best.length &&
-                Math.abs(center-nominal)<Math.abs(best.center-nominal))))
+              Math.abs(center-nominal) < Math.abs(best.center-nominal) ||
+              (Math.abs(center-nominal) === Math.abs(best.center-nominal) &&
+                length > best.length)))
             best = {center,length};
           i=j+1;
         }
