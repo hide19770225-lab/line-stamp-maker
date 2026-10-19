@@ -108,6 +108,70 @@
     }
     return mask;
   }
+  // Protect pale artwork surrounded by a strong outline. A tiny break in the
+  // outline can let an exterior flood erase an entire white face or paw.
+  // Restore only pixels enclosed in BOTH directions by dark ink, away from
+  // the crop edge. Keep all other exterior-connected white pixels transparent.
+  function protectOutlinedWhite(image, mask) {
+    const { width: w, height: h, data } = image;
+    if (w < 32 || h < 32) return { mask, restored: 0 };
+    const dark = new Uint8Array(w * h);
+    for (let i = 0; i < dark.length; i++) {
+      const k = i * 4;
+      const r = data[k], g = data[k + 1], b = data[k + 2];
+      dark[i] = data[k + 3] > 180 && Math.max(r, g, b) < 135 ? 1 : 0;
+    }
+    const left = new Int32Array(w * h), right = new Int32Array(w * h);
+    const up = new Int32Array(w * h), down = new Int32Array(w * h);
+    left.fill(-1); right.fill(-1); up.fill(-1); down.fill(-1);
+    for (let y = 0; y < h; y++) {
+      let last = -1;
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (dark[i]) last = x;
+        left[i] = last;
+      }
+      last = -1;
+      for (let x = w - 1; x >= 0; x--) {
+        const i = y * w + x;
+        if (dark[i]) last = x;
+        right[i] = last;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let last = -1;
+      for (let y = 0; y < h; y++) {
+        const i = y * w + x;
+        if (dark[i]) last = y;
+        up[i] = last;
+      }
+      last = -1;
+      for (let y = h - 1; y >= 0; y--) {
+        const i = y * w + x;
+        if (dark[i]) last = y;
+        down[i] = last;
+      }
+    }
+    const result = mask.slice();
+    const minSpan = Math.max(12, Math.round(Math.min(w, h) * 0.13));
+    let restored = 0;
+    for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
+      const i = y * w + x, k = i * 4;
+      if (mask[i] !== 0 || data[k + 3] < 240) continue;
+      if (Math.min(data[k], data[k + 1], data[k + 2]) < 238) continue;
+      const l = left[i], r = right[i], t = up[i], b = down[i];
+      if (l < 0 || r < 0 || t < 0 || b < 0) continue;
+      if (r - l < minSpan || b - t < minSpan) continue;
+      if (r - l > w * 0.78 || b - t > h * 0.78) continue;
+      // Exclude gaps between disconnected lettering/decorations: require
+      // outline intersections fairly near the candidate on both axes.
+      if (Math.max(x - l, r - x) > w * 0.38 ||
+          Math.max(y - t, b - y) > h * 0.38) continue;
+      result[i] = data[k + 3];
+      restored++;
+    }
+    return { mask: result, restored };
+  }
   // Preview-only proposal. Change alpha on one exposed opaque matte rim;
   // never recolor artwork, flood further inward or modify existing partial alpha.
   function proposeMatteCleanup(
@@ -393,9 +457,17 @@
     ctx.drawImage(isolated, 0, 0, crop.width, crop.height);
     isolated.width = isolated.height = 1;
     const original = ctx.getImageData(0, 0, crop.width, crop.height);
-    const mask = floodMask(original, mode, tolerance, color);
+    const flooded = floodMask(original, mode, tolerance, color);
+    const protectedWhite = mode === "none"
+      ? { mask: flooded, restored: 0 }
+      : protectOutlinedWhite(original, flooded);
+    const mask = protectedWhite.mask;
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    if (protectedWhite.restored > 0) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("white-artwork-restored-review");
+    }
     // Conservative signal only: do not certify tiles with suspiciously
     // large erased areas surrounded by colored artwork.
     const x0 = Math.floor(original.width * 0.3);
