@@ -886,6 +886,23 @@
     if (!source.image)
       throw new Error(`${source.name}の元画像を再選択してください。`);
     captureSlots(true);
+    // Respect manually adjusted grid lines. Suggest gutters only on the
+    // untouched equal grid and only when every boundary has a clean corridor.
+    const defaultGrid = (values) =>
+      values.every((value, index) =>
+        Math.abs(value - index / (values.length - 1)) < 0.0001,
+      );
+    if (defaultGrid(source.xs) && defaultGrid(source.ys)) {
+      const suggested = C.suggestGridLines(
+        source.image, source.columns, source.rows,
+      );
+      if (suggested) {
+        source.xs = suggested.xs;
+        source.ys = suggested.ys;
+        renderGridControls();
+        drawSplit();
+      }
+    }
     const tiles = [],
       count = source.assignments.filter(Boolean).length;
     if (!count)
