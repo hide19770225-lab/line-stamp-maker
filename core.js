@@ -327,15 +327,32 @@
         const nominal=row*cell, options=[];
         const low=Math.max(1,Math.round(nominal-cell*0.43));
         const high=Math.min(height-2,Math.round(nominal+cell*0.43));
-        for(let y=low;y<=high;y+=2){
-          const left=Math.max(0,y-Math.round(cell*0.12));
-          const right=Math.min(height-1,y+Math.round(cell*0.12));
-          const surrounding=Math.max(smooth[left],smooth[right]);
-          // A good gutter is pale and lies between two populated rows.
-          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
-              +Math.max(0,0.025-surrounding)*2;
-          options.push({y,score});
+        // Find complete empty runs. Cutting at the beginning of a run
+        // leaves the following row's artwork attached to the previous tile.
+        const isBlank=y=>density[y]<=0.002;
+        const minRun=Math.max(7,Math.round(cell*0.045));
+        let y=low;
+        while(y<=high){
+          if(!isBlank(y)){y++;continue;}
+          const start=y;
+          while(y<=high&&isBlank(y))y++;
+          const end=y-1,span=end-start+1;
+          if(span<minRun)continue;
+          const center=Math.round((start+end)/2);
+          const side=Math.max(minRun,Math.round(cell*0.13));
+          const upperStart=Math.max(0,start-side);
+          const lowerEnd=Math.min(height-1,end+side);
+          let above=0,below=0;
+          for(let p=upperStart;p<start;p++)above=Math.max(above,smooth[p]);
+          for(let p=end+1;p<=lowerEnd;p++)below=Math.max(below,smooth[p]);
+          if(above<0.015||below<0.015)continue;
+          // Favor the widest truly empty corridor, not a small white gap
+          // inside a face, letter or outline.
+          const score=Math.abs(center-nominal)/cell*0.12
+            -Math.min(span/cell,0.2)*0.8;
+          options.push({y:center,score});
         }
+        if(!options.length)return null;
         options.sort((a,b)=>a.score-b.score);
         candidates.push(options.slice(0,35));
       }
