@@ -379,6 +379,7 @@
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
     return {
+      sourceRect: { ...rect },
       boundaryReview,
       original,
       mask,
