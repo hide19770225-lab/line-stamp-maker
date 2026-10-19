@@ -172,9 +172,10 @@
   function tileRect(source, column, row) {
     const { xs, ys, image } = source;
     const left = Math.round(xs[column] * image.width);
-    const top = Math.round(ys[row] * image.height);
+    const rowLines = source.columnYs?.[column] || ys;
+    const top = Math.round(rowLines[row] * image.height);
     const right = Math.round(xs[column + 1] * image.width);
-    const bottom = Math.round(ys[row + 1] * image.height);
+    const bottom = Math.round(rowLines[row + 1] * image.height);
     const inset = source.insets || { left: 0, right: 0, top: 0, bottom: 0 };
     const x = Math.min(
       right - 1,
@@ -279,6 +280,62 @@
     }
     xs.push(1); ys.push(1);
     return { xs, ys };
+  }
+  // Find a safe horizontal gutter separately in each column. Sticker artwork
+  // can be vertically staggered, so a single row boundary may cut another cat.
+  function suggestColumnRowLines(image, xs, rows) {
+    const width = image.width, height = image.height;
+    const sample = canvas(width, height);
+    const ctx = sample.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0);
+    const data = ctx.getImageData(0, 0, width, height).data;
+    sample.width = sample.height = 1;
+    const corners = [0, width - 1, width * (height - 1), width * height - 1];
+    const bg = [data[0], data[1], data[2]];
+    if (corners.some((p) => [0,1,2].some((k) => Math.abs(data[p*4+k]-bg[k]) > 18)))
+      return null;
+    const lines = [];
+    for (let c = 0; c < xs.length - 1; c++) {
+      const x0 = Math.round(xs[c] * width), x1 = Math.round(xs[c+1] * width);
+      const perColumn = [0];
+      for (let r = 1; r < rows; r++) {
+        const nominal = Math.round(r * height / rows);
+        const radius = Math.round(height / rows * 0.36);
+        const start = Math.max(1, nominal - radius), end = Math.min(height-2, nominal+radius);
+        const blank = [];
+        const step = Math.max(1, Math.floor((x1-x0)/500));
+        for (let y = start; y <= end; y++) {
+          let ink = 0, count = 0;
+          for (let x = x0; x < x1; x += step) {
+            const i = (y * width + x) * 4;
+            if (data[i+3] > 16 && Math.max(
+              Math.abs(data[i]-bg[0]), Math.abs(data[i+1]-bg[1]), Math.abs(data[i+2]-bg[2])
+            ) > 30) ink++;
+            count++;
+          }
+          blank.push(ink / Math.max(1,count) <= 0.003);
+        }
+        let best = null;
+        for (let i=0; i<blank.length;) {
+          if (!blank[i]) { i++; continue; }
+          let j=i;
+          while (j+1<blank.length && blank[j+1]) j++;
+          const center = start + Math.round((i+j)/2);
+          const length = j-i+1;
+          const minLength = Math.max(4,Math.round(height/rows*0.012));
+          if (length >= minLength && (!best ||
+              Math.abs(center-nominal)<Math.abs(best.center-nominal)))
+            best = {center,length};
+          i=j+1;
+        }
+        if (!best) return null;
+        perColumn.push(best.center / height);
+      }
+      perColumn.push(1);
+      if (perColumn.some((v,i)=>i>0 && v<=perColumn[i-1])) return null;
+      lines.push(perColumn);
+    }
+    return lines;
   }
   // A source-grid cut through visible artwork needs a human ownership check.
   // This is diagnostic only: never erase thin antennae, lettering or decorations.
@@ -795,6 +852,7 @@
     isolateRect,
     tileRect,
     suggestGridLines,
+    suggestColumnRowLines,
     tileBoundaryReview,
     stampCrop,
     maskBounds,
