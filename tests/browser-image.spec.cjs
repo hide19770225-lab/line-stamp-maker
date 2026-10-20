@@ -62,7 +62,7 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
     expect(img.transparent).toBeGreaterThan(0);
   }
 
-  if(count===8){
+  {
     // The automated inspection is not user approval: explicitly confirm the
     // synthetic artwork in this controlled test before exporting.
     await expect(page.locator("#bulk-visual")).toBeEnabled();
@@ -85,9 +85,9 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
       }
     }
     const file={name:download.suggestedFilename(),names};
-    expect(file.name).toBe("line-stamps-8.zip");
-    expect(file.names).toHaveLength(10);
-    for(let i=1;i<=8;i++)expect(file.names).toContain(String(i).padStart(2,"0")+".png");
+    expect(file.name).toBe(`line-stamps-${count}.zip`);
+    expect(file.names).toHaveLength(count+2);
+    for(let i=1;i<=count;i++)expect(file.names).toContain(String(i).padStart(2,"0")+".png");
     expect(file.names).toContain("main.png");
     expect(file.names).toContain("tab.png");
   }
