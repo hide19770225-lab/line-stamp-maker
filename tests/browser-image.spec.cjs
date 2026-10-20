@@ -285,3 +285,30 @@ test("diagonal arm retains attached white paw against white background",async ({
     expect(m.corner).toBe(0);
   }
 });
+
+test("review background selector updates both preview and audit without changing artwork",async ({page})=>{
+  await page.goto("http://127.0.0.1:8765/");
+  await page.locator("#production-mode").selectOption("easy");
+  await page.locator("#easy-target").selectOption("8");
+  const encoded=await page.evaluate(()=>{
+    const c=document.createElement("canvas");c.width=600;c.height=1000;
+    const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,1000);
+    for(let row=0;row<5;row++)for(let col=0;col<2;col++){
+      x.fillStyle="#a34f9c";x.beginPath();x.arc(col*300+150,row*200+100,50,0,Math.PI*2);x.fill();
+    }
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.locator("#easy-files").setInputFiles([{name:"background-review.png",mimeType:"image/png",buffer:Buffer.from(encoded,"base64")}]);
+  await expect(page.locator("#easy-state")).toContainText("読込済み1枚",{timeout:90000});
+  await page.locator("#easy-process").click();
+  await expect(page.locator("#easy-state")).toContainText("加工済み8個",{timeout:150000});
+  const original=await page.locator("#stamp-grid canvas").first().evaluate(c=>c.toDataURL("image/png"));
+  for(const [value,klass] of [["dark","dark"],["pink","pink"],["checker","checker"]]){
+    await page.locator("#preview-background").selectOption(value);
+    await expect(page.locator("#stamp-grid")).toHaveClass(new RegExp(klass));
+    await expect(page.locator("#bulk-results")).toHaveClass(new RegExp(klass));
+    const current=await page.locator("#stamp-grid canvas").first().evaluate(c=>c.toDataURL("image/png"));
+    expect(current).toBe(original);
+  }
+  await expect(page.locator("#bulk-visual")).toBeEnabled();
+});
