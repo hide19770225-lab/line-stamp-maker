@@ -80,7 +80,34 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
   await p.click('#process-all');await p.waitForFunction(()=>!document.body.classList.contains('busy'));
   assert.equal(await p.locator('.stamp-card').count(),10,await p.locator('#status').innerText());
   const outputs=await p.evaluate(()=>testTiles.map(s=>{const rendered=StampCore.renderStamp(s);return {rect:s.sourceRect,review:s.boundaryReview,autoRemoved:rendered.autoRemoved,png:rendered.canvas.toDataURL()}}));
-  for(let i=0;i<10;i++){writePng(`final/${String(i+1).padStart(2,'0')}.png`,outputs[i].png);delete outputs[i].png;assert.deepEqual(outputs[i].rect,result.after.tiles[i].rect);}
+  const residualDiagnostics=await p.evaluate(pngs=>Promise.all(pngs.map(async (url)=>{
+   const im=new Image();im.src=url;await im.decode();
+   const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+   const ctx=c.getContext('2d');ctx.drawImage(im,0,0);
+   const {data}=ctx.getImageData(0,0,c.width,c.height),w=c.width,h=c.height;
+   const seen=new Uint8Array(w*h),components=[];
+   for(let i=0;i<w*h;i++){
+    if(seen[i]||data[i*4+3]<32)continue;
+    const stack=[i];seen[i]=1;let pixels=0,minX=w,minY=h,maxX=0,maxY=0,alphaSum=0;
+    while(stack.length){
+     const q=stack.pop(),x=q%w,y=Math.floor(q/w);pixels++;alphaSum+=data[q*4+3];
+     minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
+     for(const n of [x>0?q-1:-1,x+1<w?q+1:-1,y>0?q-w:-1,y+1<h?q+w:-1]){
+      if(n>=0&&!seen[n]&&data[n*4+3]>=32){seen[n]=1;stack.push(n);}
+     }
+    }
+    components.push({pixels,x:minX,y:minY,width:maxX-minX+1,height:maxY-minY+1,meanAlpha:Math.round(alphaSum/pixels)});
+   }
+   components.sort((a,b)=>b.pixels-a.pixels);
+   return {componentCount:components.length,largest:components[0]||null,
+    smallIslands:components.slice(1).filter(v=>v.pixels<=150),
+    thinIslands:components.slice(1).filter(v=>v.width<=3||v.height<=3)};
+  }),outputs.map(x=>x.png)));
+  for(let i=0;i<10;i++){
+   writePng(`final/${String(i+1).padStart(2,'0')}.png`,outputs[i].png);
+   outputs[i].residualDiagnostics=residualDiagnostics[i];delete outputs[i].png;
+   assert.deepEqual(outputs[i].rect,result.after.tiles[i].rect);
+  }
   const download=p.waitForEvent('download');await p.click('#download-button');await(await download).saveAs(path.join(dir,'app-10.zip'));
   assert.deepEqual(errors,[]);
   result.provenance={baseline:baseRef,input,inputSha256:sha(fs.readFileSync(input)),mode:'auto',tolerance:24,layout:'2x5',insets:0,semanticAcceptance:'NOT PASSED: manual review required'};
@@ -91,14 +118,15 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    '',
    'This is an automated triage report. A green CI run does not mean every outline or caption is visually correct.',
    '',
-   '| Sticker | Review | Flagged boundaries | Source edge ink (T/B/L/R) |',
-   '|---|---|---|---|',
-   ...result.after.tiles.map(t=>`| ${String(t.n).padStart(2,'0')} | ${t.review?.needsReview?'REVIEW REQUIRED':'No boundary warning'} | ${(t.review?.edges||[]).join(', ')||'-'} | ${Object.values(t.sourceEdgeInk||{}).join('/')} |`),
+   '| Sticker | Review | Flagged boundaries | Source edge ink (T/B/L/R) | Small islands | Thin islands |',
+   '|---|---|---|---|---:|---:|',
+   ...result.after.tiles.map((t,i)=>`| ${String(t.n).padStart(2,'0')} | ${t.review?.needsReview?'REVIEW REQUIRED':'No boundary warning'} | ${(t.review?.edges||[]).join(', ')||'-'} | ${Object.values(t.sourceEdgeInk||{}).join('/')} | ${outputs[i].residualDiagnostics.smallIslands.length} | ${outputs[i].residualDiagnostics.thinIslands.length} |`),
    '',
    `**${reviewItems.length}/10 images require boundary review.**`,
    '',
    'Inspect source-NN.png, before-NN.png, after-NN.png, and final/NN.png at full resolution.',
    'The pixel-protection assertions do not establish correct crop placement or absence of white fringe.',
+   'Small or thin alpha islands are diagnostic candidates, not automatic deletion targets: punctuation, antennae and decorative marks may be intentional.',
    'Manual approval and real iPhone Safari operation remain outstanding.',
    ''
   ].join('\n');
