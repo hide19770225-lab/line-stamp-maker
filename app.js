@@ -799,30 +799,63 @@
     const source = state.sources[state.selectedSource];
     if (!source?.image) return;
     const grid = C.suggestGridLines(source.image, source.columns, source.rows);
-    const xs = grid?.xs || P.lines(source.columns);
-    const columnYs = C.suggestColumnRowLines(source.image, xs, source.rows);
-    if (!grid && !columnYs) throw new Error("安全な余白を自動検出できませんでした。現在の分割位置は保持しています。");
-    // An automatic suggestion is not a validated cut. Check every assigned
-    // tile before committing it; otherwise the success toast is misleading.
-    const previous = { xs: source.xs, ys: source.ys, columnYs: source.columnYs,
-      manualColumnYs: source.manualColumnYs, splitIssues: source.splitIssues };
-    source.xs = xs;
-    source.ys = grid?.ys || P.lines(source.rows);
-    source.columnYs = columnYs;
-    const issues = inspectSplit(source);
-    if (issues.length) {
-      source.xs = previous.xs;
-      source.ys = previous.ys;
-      source.columnYs = previous.columnYs;
-      source.manualColumnYs = previous.manualColumnYs;
-      source.splitIssues = previous.splitIssues;
-      renderSourceEditor();
-      throw new Error(`安全な自動配置はできませんでした（候補でも${issues.length}コマの境界に絵柄が重なります）。元の配置は保持しました。分割線を動かすだけでは解決しない可能性があります。`);
+    const original = {
+      xs: source.xs, ys: source.ys, columnYs: source.columnYs,
+      manualColumnYs: source.manualColumnYs, splitIssues: source.splitIssues,
+    };
+    // Some sheets have staggered captions: a single horizontal grid can
+    // cross artwork while column-specific row boundaries remain clear.
+    // Try several independent, non-destructive candidates. Never treat a
+    // suggested gutter as proof until every assigned tile passes inspection.
+    const candidates = [];
+    const seen = new Set();
+    const addCandidate = (xs, ys, columnYs, name) => {
+      if (!columnYs && !grid) return;
+      const key = JSON.stringify({ xs, ys, columnYs });
+      if (seen.has(key)) return;
+      seen.add(key);
+      candidates.push({ xs, ys, columnYs, name });
+    };
+    if (grid) {
+      const rowsForGrid = C.suggestColumnRowLines(source.image, grid.xs, source.rows);
+      if (rowsForGrid) addCandidate(grid.xs, grid.ys, rowsForGrid, "列別の余白");
+      addCandidate(grid.xs, grid.ys, null, "共通の余白");
     }
-    source.manualColumnYs = true;
+    const rowsForCurrent = C.suggestColumnRowLines(source.image, original.xs, source.rows);
+    if (rowsForCurrent)
+      addCandidate(original.xs, original.ys, rowsForCurrent, "現在の列位置＋列別の余白");
+    let selected = null, bestIssueCount = Infinity;
+    try {
+      for (const candidate of candidates) {
+        source.xs = candidate.xs;
+        source.ys = candidate.ys;
+        source.columnYs = candidate.columnYs;
+        const count = inspectSplit(source).length;
+        bestIssueCount = Math.min(bestIssueCount, count);
+        if (count === 0) { selected = candidate; break; }
+      }
+    } finally {
+      // Failed candidates must not mutate the user's current adjustments.
+      source.xs = original.xs;
+      source.ys = original.ys;
+      source.columnYs = original.columnYs;
+      source.manualColumnYs = original.manualColumnYs;
+      source.splitIssues = original.splitIssues;
+    }
+    if (!selected) {
+      renderSourceEditor();
+      throw new Error(candidates.length
+        ? `安全な自動配置は見つかりませんでした（候補の最少エラー数：${bestIssueCount}コマ）。元の設定は保持しました。赤い辺を確認してください。`
+        : "安全な余白を自動検出できませんでした。元の設定は保持しました。");
+    }
+    source.xs = selected.xs;
+    source.ys = selected.ys;
+    source.columnYs = selected.columnYs;
+    source.manualColumnYs = Boolean(selected.columnYs);
+    source.splitIssues = [];
     source.cropReport = []; source.cropMethod = null;
     invalidate(); renderSourceEditor();
-    notify("全採用コマの境界検査に合格した自動配置を適用しました。画像も目視確認してください。");
+    notify(`全採用コマの境界検査に合格した配置（${selected.name}）を適用しました。目視でも確認してください。`);
   });
   function renderGridControls() {
     const source = state.sources[state.selectedSource];
