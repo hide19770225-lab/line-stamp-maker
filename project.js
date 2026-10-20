@@ -313,6 +313,20 @@
         )
           fail();
       }
+      // Older project JSON files omit independent row/column gutters.
+      // Validate optional arrays before retaining them in the saved project.
+      const validLines = (lines, count, size) =>
+        Array.isArray(lines) && lines.length === count + 1 &&
+        lines.every((n, i) => number(n, 0, 1) &&
+          (!i || n - lines[i - 1] >= 2 / size - 1e-9));
+      if (s.rowXs != null && (
+        !Array.isArray(s.rowXs) || s.rowXs.length !== s.rows ||
+        !s.rowXs.every(lines => validLines(lines, s.columns, s.width))
+      )) fail();
+      if (s.columnYs != null && (
+        !Array.isArray(s.columnYs) || s.columnYs.length !== s.columns ||
+        !s.columnYs.every(lines => validLines(lines, s.rows, s.height))
+      )) fail();
       return {
         name: s.name,
         fingerprint: s.fingerprint,
@@ -322,6 +336,9 @@
         rows: s.rows,
         xs: s.xs.slice(),
         ys: s.ys.slice(),
+        rowXs: s.rowXs ? s.rowXs.map(lines => lines.slice()) : null,
+        columnYs: s.columnYs ? s.columnYs.map(lines => lines.slice()) : null,
+        manualColumnYs: Boolean(s.columnYs),
         insets: Object.fromEntries(sides.map((k) => [k, s.insets[k]])),
         assignments: s.assignments.slice(),
         mode: s.mode,
