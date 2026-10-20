@@ -728,6 +728,7 @@
       affected.add(row * source.columns + divider);
     }
     const unaffectedCount = currentIssues.filter(issue => !affected.has(issue.cell)).length;
+    const previouslyFlagged = new Set(currentIssues.map(issue => issue.cell));
     const baseline = currentIssues.length;
     let best = null;
     try {
@@ -739,7 +740,15 @@
         for (const cell of affected) {
           if (!source.assignments[cell]) continue;
           const rect = C.tileRect(source, cell % source.columns, Math.floor(cell / source.columns));
-          if (C.cropCrossings(source.image, rect, source.mode, source.tolerance, source.color).length) count++;
+          if (C.cropCrossings(source.image, rect, source.mode, source.tolerance, source.color).length) {
+            // A lower total is NOT safe if it introduces a new cut in a
+            // previously clean sticker. Never trade one damaged tile for another.
+            if (!previouslyFlagged.has(cell)) {
+              count = Infinity;
+              break;
+            }
+            count++;
+          }
           if (best && count > best.count) break;
         }
         if (count < baseline && (!best || count < best.count ||
