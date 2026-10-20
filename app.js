@@ -1210,9 +1210,12 @@
     if (!Number.isFinite(value)) return;
     const gap = Math.max(0.004, 2 / (axis === "xs" ? s.width : s.height));
     s.splitIssues = null;
-    s.columnYs = null;
-    s.manualColumnYs = false;
-    // Shared vertical edits intentionally reset row-specific overrides.
+    // Changing a shared vertical line must not discard independently edited
+    // horizontal gutters; changing a horizontal line must not discard rowXs.
+    if (axis === "ys") {
+      s.columnYs = null;
+      s.manualColumnYs = false;
+    }
     if (axis === "xs") s.rowXs = null;
     lines[index] = Math.max(
       index ? lines[index - 1] + gap : 0,
