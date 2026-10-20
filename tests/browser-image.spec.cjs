@@ -222,3 +222,54 @@ test("thin diagonal appendages remain attached after background removal",async (
     expect(m.largest).toBeGreaterThan(300);
   }
 });
+
+test("diagonal arm retains attached white paw against white background",async ({page})=>{
+  await page.goto("http://127.0.0.1:8765/");
+  await page.locator("#production-mode").selectOption("easy");
+  await page.locator("#easy-target").selectOption("8");
+  const encoded=await page.evaluate(()=>{
+    const c=document.createElement("canvas");c.width=600;c.height=1000;
+    const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,1000);
+    for(let row=0;row<5;row++)for(let col=0;col<2;col++){
+      const cx=col*300+150,cy=row*200+100;
+      x.strokeStyle="#394da8";x.lineWidth=18;x.lineCap="round";
+      x.beginPath();x.moveTo(cx+22,cy+10);x.lineTo(cx+64,cy-36);x.stroke();
+      x.fillStyle="#394da8";x.beginPath();x.arc(cx,cy,47,0,Math.PI*2);x.fill();
+      // White paw has a dark contour, connected to the diagonal arm.
+      x.fillStyle="#fff";x.strokeStyle="#394da8";x.lineWidth=7;
+      x.beginPath();x.arc(cx+67,cy-42,17,0,Math.PI*2);x.fill();x.stroke();
+      // Enclosed white eye should also survive.
+      x.beginPath();x.arc(cx-12,cy-12,9,0,Math.PI*2);x.fill();
+    }
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.locator("#easy-files").setInputFiles([{name:"diagonal-white-paw.png",mimeType:"image/png",buffer:Buffer.from(encoded,"base64")}]);
+  await expect(page.locator("#easy-state")).toContainText("読込済み1枚",{timeout:90000});
+  await page.locator("#easy-process").click();
+  await expect(page.locator("#easy-state")).toContainText("加工済み8個",{timeout:150000});
+  const metrics=await page.locator("#stamp-grid canvas").evaluateAll(canvases=>canvases.map(c=>{
+    const {data:d,width:w,height:h}=c.getContext("2d").getImageData(0,0,c.width,c.height);
+    let blue=0,white=0,whiteAdjacentBlue=0;
+    const isBlue=p=>{const i=p*4;return d[i+3]>170&&d[i]<130&&d[i+1]<160&&d[i+2]>90;};
+    for(let p=0;p<w*h;p++){
+      const i=p*4;if(d[i+3]<230)continue;
+      if(isBlue(p))blue++;
+      if(d[i]>245&&d[i+1]>245&&d[i+2]>245){
+        white++;
+        const x=p%w,y=Math.floor(p/w);
+        for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){
+          const xx=x+dx,yy=y+dy;
+          if(xx>=0&&xx<w&&yy>=0&&yy<h&&isBlue(yy*w+xx)){whiteAdjacentBlue++;dy=4;break;}
+        }
+      }
+    }
+    return {blue,white,whiteAdjacentBlue,corner:d[3]};
+  }));
+  expect(metrics).toHaveLength(8);
+  for(const m of metrics){
+    expect(m.blue).toBeGreaterThan(300);
+    expect(m.white).toBeGreaterThan(20);
+    expect(m.whiteAdjacentBlue).toBeGreaterThan(5);
+    expect(m.corner).toBe(0);
+  }
+});
