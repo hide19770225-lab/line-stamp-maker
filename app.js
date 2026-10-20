@@ -1159,12 +1159,31 @@
     );
     ctx.strokeStyle = "#21875c";
     ctx.lineWidth = 2;
-    for (const x of source.xs) {
-      const xx = Math.max(1, Math.min(c.width - 1, x * c.width));
-      ctx.beginPath();
-      ctx.moveTo(xx, 0);
-      ctx.lineTo(xx, c.height);
-      ctx.stroke();
+    if (source.rowXs) {
+      // Draw the actual row-specific crop edges instead of misleading
+      // full-height vertical lines from the shared grid.
+      for (let row = 0; row < source.rows; row++) {
+        const lines = source.rowXs[row] || source.xs;
+        const top = Math.min(...Array.from({ length: source.columns }, (_, col) =>
+          (source.columnYs?.[col] || source.ys)[row]));
+        const bottom = Math.max(...Array.from({ length: source.columns }, (_, col) =>
+          (source.columnYs?.[col] || source.ys)[row + 1]));
+        for (const x of lines) {
+          const xx = Math.max(1, Math.min(c.width - 1, x * c.width));
+          ctx.beginPath();
+          ctx.moveTo(xx, top * c.height);
+          ctx.lineTo(xx, bottom * c.height);
+          ctx.stroke();
+        }
+      }
+    } else {
+      for (const x of source.xs) {
+        const xx = Math.max(1, Math.min(c.width - 1, x * c.width));
+        ctx.beginPath();
+        ctx.moveTo(xx, 0);
+        ctx.lineTo(xx, c.height);
+        ctx.stroke();
+      }
     }
     if (source.columnYs) {
       for (let col = 0; col < source.columns; col++) {
