@@ -8,8 +8,12 @@
     detailed = false,
   ) {
     const { width, height, data } = image;
-    if (mask.length !== width * height)
+    if (!mask || !data || data.length !== width * height * 4 || mask.length !== width * height)
       throw new Error("画像と透明度の寸法が一致しません。");
+    if (!rect || ![rect.x, rect.y, rect.width, rect.height].every(Number.isInteger) ||
+        rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1 ||
+        rect.x + rect.width > width || rect.y + rect.height > height)
+      throw new Error("検査範囲が画像の外にはみ出しています。");
     const visited = new Uint32Array(mask.length),
       queue = new Uint32Array(mask.length),
       components = [];
