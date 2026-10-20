@@ -249,11 +249,11 @@ test("diagonal arm retains attached white paw against white background",async ({
   await expect(page.locator("#easy-state")).toContainText("加工済み8個",{timeout:150000});
   const metrics=await page.locator("#stamp-grid canvas").evaluateAll(canvases=>canvases.map(c=>{
     const {data:d,width:w,height:h}=c.getContext("2d").getImageData(0,0,c.width,c.height);
-    let blue=0,white=0,whiteAdjacentBlue=0;
+    let blue=0,white=0,whiteAdjacentBlue=0,blueX=0,blueY=0,whiteLeft=0,whiteRight=0,edgeWhite=0;
     const isBlue=p=>{const i=p*4;return d[i+3]>170&&d[i]<130&&d[i+1]<160&&d[i+2]>90;};
     for(let p=0;p<w*h;p++){
       const i=p*4;if(d[i+3]<230)continue;
-      if(isBlue(p))blue++;
+      if(isBlue(p)){blue++;blueX+=p%w;blueY+=Math.floor(p/w);}
       if(d[i]>245&&d[i+1]>245&&d[i+2]>245){
         white++;
         const x=p%w,y=Math.floor(p/w);
@@ -263,13 +263,25 @@ test("diagonal arm retains attached white paw against white background",async ({
         }
       }
     }
-    return {blue,white,whiteAdjacentBlue,corner:d[3]};
+    const centerX=blueX/blue;
+    for(let p=0;p<w*h;p++){
+      const i=p*4,x=p%w,y=Math.floor(p/w);
+      if(d[i+3]>230&&d[i]>245&&d[i+1]>245&&d[i+2]>245){
+        if(x<centerX-4)whiteLeft++;
+        if(x>centerX+12)whiteRight++;
+        if(x<3||x>=w-3||y<3||y>=h-3)edgeWhite++;
+      }
+    }
+    return {blue,white,whiteAdjacentBlue,whiteLeft,whiteRight,edgeWhite,corner:d[3]};
   }));
   expect(metrics).toHaveLength(8);
   for(const m of metrics){
     expect(m.blue).toBeGreaterThan(300);
     expect(m.white).toBeGreaterThan(20);
     expect(m.whiteAdjacentBlue).toBeGreaterThan(5);
+    expect(m.whiteLeft).toBeGreaterThan(5); // eye on the left
+    expect(m.whiteRight).toBeGreaterThan(5); // paw on the right
+    expect(m.edgeWhite).toBe(0); // no white sheet border
     expect(m.corner).toBe(0);
   }
 });
