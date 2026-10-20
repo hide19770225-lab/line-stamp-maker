@@ -1128,6 +1128,32 @@
       source.columnYs = null;
       source.gutterUncertain = false; // User explicitly chose manual grid lines.
     }
+    // For dense 5x8 sheets, try a safe gutter-based layout before blocking
+    // processing. Never overwrite user-adjusted boundaries, and only accept
+    // an automatically proposed layout when every assigned tile passes the
+    // same crossing inspection used for export.
+    if (source.columns === 5 && source.rows === 8 &&
+        !source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
+      const proposedGrid = C.suggestGridLines(source.image, source.columns, source.rows);
+      if (proposedGrid) {
+        const proposedColumnYs = C.suggestColumnRowLines(source.image, proposedGrid.xs, source.rows);
+        const previous = { xs: source.xs, ys: source.ys, columnYs: source.columnYs };
+        source.xs = proposedGrid.xs;
+        source.ys = proposedGrid.ys;
+        source.columnYs = proposedColumnYs;
+        const safe = inspectSplit(source).length === 0;
+        if (!safe) {
+          source.xs = previous.xs;
+          source.ys = previous.ys;
+          source.columnYs = previous.columnYs;
+          source.splitIssues = null;
+        } else {
+          source.cropReport = [];
+          source.cropMethod = null;
+          invalidate();
+        }
+      }
+    }
     const issues = inspectSplit(source);
     if (issues.length) {
       renderSourceEditor();
