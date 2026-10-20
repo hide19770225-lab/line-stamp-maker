@@ -32,5 +32,5 @@ with zipfile.ZipFile(zip_path) as z:
                 with Image.open(io.BytesIO(base64.b64decode(expected[name]))) as reference:
                     reference.load()
                     assert reference.size == img.size
-                    assert ImageChops.difference(img, reference.convert("RGBA")).getbbox() is None, f"{name}: pixel mismatch"
+                    assert all(channel.getbbox() is None for channel in ImageChops.difference(img, reference.convert("RGBA")).split()), f"{name}: pixel mismatch"
 print("PASS: 40/40 pixel-exact PNGs, dimensions, RGBA, margins, ZIP CRC, main and tab")
