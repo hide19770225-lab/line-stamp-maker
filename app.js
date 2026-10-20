@@ -760,8 +760,8 @@
       ? issues.length ? `境界に色の連続を検出 ${issues.length}コマ（切り抜き失敗とは限りません）：` + issues.map(issue => `コマ${issue.cell + 1}（${issue.edges.map(edge => edgeNames[edge]).join("・")}）`).join("、")
          : "全採用コマの境界検査：色の連続は検出されませんでした。画像も目視確認してください。"
       : "境界は未検査です。「境界を検査」で全採用コマを確認できます。";
-    // Offer a one-tap improvement only when scanning all rows proves that
-    // moving the shared divider strictly reduces the total warning count.
+    // Avoid hundreds of canvas probes during every editor redraw on iPhone.
+    // Run the expensive search only when the user explicitly requests it.
     if (issues.length && source.columns > 1) {
       const flagged = new Set();
       for (const issue of issues) {
@@ -770,20 +770,38 @@
         if (issue.edges.includes("left") && col > 0) flagged.add(col);
       }
       for (const divider of flagged) {
-        const suggestion = suggestSafeVerticalDivider(source, divider);
-        if (!suggestion) continue;
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = `${divider}列目と${divider + 1}列目の境界を改善（警告 ${issues.length}→${suggestion.count}コマ）`;
-        button.onclick = () => {
-          source.xs[divider] = suggestion.px / source.image.width;
-          source.cropReport = [];
-          source.cropMethod = null;
-          invalidate();
-          inspectSplit(source);
-          renderSourceEditor();
+        const searchButton = document.createElement("button");
+        searchButton.type = "button";
+        searchButton.textContent = `${divider}列目と${divider + 1}列目の境界改善位置を探す`;
+        searchButton.onclick = () => {
+          searchButton.disabled = true;
+          searchButton.textContent = "境界を検査中…";
+          // Yield once so the disabled state becomes visible before scanning.
+          requestAnimationFrame(() => {
+            try {
+              const suggestion = suggestSafeVerticalDivider(source, divider);
+              if (!suggestion) {
+                searchButton.textContent = "安全に警告を減らせる位置は見つかりませんでした";
+                return;
+              }
+              searchButton.textContent = `改善位置を適用（警告 ${issues.length}→${suggestion.count}コマ）`;
+              searchButton.disabled = false;
+              searchButton.onclick = () => {
+                source.xs[divider] = suggestion.px / source.image.width;
+                source.cropReport = [];
+                source.cropMethod = null;
+                invalidate();
+                inspectSplit(source);
+                renderSourceEditor();
+              };
+            } catch (error) {
+              searchButton.textContent = "検査できませんでした。再試行";
+              searchButton.disabled = false;
+              searchButton.onclick = () => renderSourceEditor();
+            }
+          });
         };
-        overview.append(button);
+        overview.append(searchButton);
       }
     }
     for (let cell = 0; cell < source.columns * source.rows; cell++) {
