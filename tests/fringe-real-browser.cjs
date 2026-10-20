@@ -103,8 +103,18 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
     smallIslands:components.slice(1).filter(v=>v.pixels<=150),
     thinIslands:components.slice(1).filter(v=>v.width<=3||v.height<=3)};
   })),outputs.map(x=>x.png));
+  const annotated=await p.evaluate(async ({pngs,boxes})=>Promise.all(pngs.map(async (url,i)=>{
+   const im=new Image();im.src=url;await im.decode();
+   const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+   const ctx=c.getContext('2d');ctx.drawImage(im,0,0);
+   ctx.lineWidth=2;ctx.strokeStyle='#e60000';
+   for(const box of boxes[i])ctx.strokeRect(Math.max(0,box.x-2),Math.max(0,box.y-2),box.width+4,box.height+4);
+   return c.toDataURL();
+  })),{pngs:outputs.map(x=>x.png),boxes:residualDiagnostics.map(x=>x.smallIslands)});
+  fs.mkdirSync(path.join(dir,'annotated'),{recursive:true});
   for(let i=0;i<10;i++){
    writePng(`final/${String(i+1).padStart(2,'0')}.png`,outputs[i].png);
+   writePng(`annotated/${String(i+1).padStart(2,'0')}.png`,annotated[i]);
    outputs[i].residualDiagnostics=residualDiagnostics[i];delete outputs[i].png;
    assert.deepEqual(outputs[i].rect,result.after.tiles[i].rect);
   }
@@ -124,9 +134,9 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    '',
    `**${reviewItems.length}/10 images require boundary review.**`,
    '',
-   'Inspect source-NN.png, before-NN.png, after-NN.png, and final/NN.png at full resolution.',
+   'Inspect source-NN.png, before-NN.png, after-NN.png, final/NN.png and annotated/NN.png at full resolution.',
    'The pixel-protection assertions do not establish correct crop placement or absence of white fringe.',
-   'Small or thin alpha islands are diagnostic candidates, not automatic deletion targets: punctuation, antennae and decorative marks may be intentional.',
+   'Red boxes in annotated/NN.png identify small alpha islands. They are diagnostic candidates, NOT proof of residue and NOT automatic deletion targets: punctuation, antennae and decorative marks may be intentional.',
    'Manual approval and real iPhone Safari operation remain outstanding.',
    ''
   ].join('\n');
