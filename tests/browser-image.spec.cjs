@@ -61,5 +61,36 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
     expect(img.transparent).toBeGreaterThan(0);
   }
 
+  if(count===8){
+    // The automated inspection is not user approval: explicitly confirm the
+    // synthetic artwork in this controlled test before exporting.
+    await expect(page.locator("#bulk-visual")).toBeEnabled();
+    await page.locator("#bulk-visual").check();
+    await expect(page.locator("#bulk-confirm")).toBeEnabled();
+    await page.locator("#bulk-confirm").click();
+    await page.locator("#easy-export").click();
+    await expect(page.locator("#download-link")).toBeVisible({timeout:60000});
+    const file=await page.locator("#download-link").evaluate(async a=>{
+      const blob=await (await fetch(a.href)).blob();
+      const bytes=new Uint8Array(await blob.arrayBuffer());
+      const decoder=new TextDecoder();
+      const names=[];
+      for(let i=0;i+30<bytes.length;i++){
+        if(bytes[i]===0x50&&bytes[i+1]===0x4b&&bytes[i+2]===3&&bytes[i+3]===4){
+          const n=bytes[i+26]|(bytes[i+27]<<8);
+          const extra=bytes[i+28]|(bytes[i+29]<<8);
+          const size=(bytes[i+18]|bytes[i+19]<<8|bytes[i+20]<<16|bytes[i+21]<<24)>>>0;
+          names.push(decoder.decode(bytes.slice(i+30,i+30+n)));
+          i+=29+n+extra+size;
+        }
+      }
+      return {name:a.download,names};
+    });
+    expect(file.name).toBe("line-stamps-8.zip");
+    expect(file.names).toHaveLength(10);
+    for(let i=1;i<=8;i++)expect(file.names).toContain(String(i).padStart(2,"0")+".png");
+    expect(file.names).toContain("main.png");
+    expect(file.names).toContain("tab.png");
+  }
   expect(errors).toEqual([]);
 });
