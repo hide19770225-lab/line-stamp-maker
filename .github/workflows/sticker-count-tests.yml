@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'project.js'
+      - 'core.js'
+      - 'tests/zip-counts.test.js'
       - 'tests/counts.test.js'
       - '.github/workflows/sticker-count-tests.yml'
   push:
@@ -21,4 +23,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/counts.test.js
+      - run: node --test tests/counts.test.js tests/zip-counts.test.js
