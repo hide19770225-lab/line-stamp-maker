@@ -156,6 +156,7 @@
       s.xs,
       s.ys,
       s.columnYs || null,
+      s.rowXs || null,
       s.mode,
       s.tolerance,
       s.color,
@@ -883,7 +884,7 @@
       input.type = "number"; input.inputMode = "decimal";
       input.min = "0"; input.max = "100"; input.step = "0.1";
       input.dataset.edge = edge;
-      const values = axis === "ys" ? source.columnYs?.[col] || source.ys : source.xs;
+      const values = axis === "ys" ? source.columnYs?.[col] || source.ys : source.rowXs?.[row] || source.xs;
       input.value = (values[index] * 100).toFixed(1);
       input.onchange = () => {
         const value = Number(input.value) / 100;
@@ -896,8 +897,9 @@
             Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value));
           source.manualColumnYs = true;
         } else {
-          // Moving a vertical line keeps independent horizontal adjustments.
-          const gap = 2 / source.width, lines = source.xs;
+          // Edit only this row; neighbouring rows retain their own gutters.
+          source.rowXs ||= Array.from({ length: source.rows }, () => source.xs.slice());
+          const gap = 2 / source.width, lines = source.rowXs[row];
           lines[index] = Math.max(index ? lines[index - 1] + gap : 0,
             Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value));
         }
@@ -912,7 +914,7 @@
       label.append(input); editor.append(label);
     }
     const hint = document.createElement("p");
-    hint.textContent = "横線はこの列、縦線は全段で共有します。隣接コマも一覧で確認してください。";
+    hint.textContent = "横線はこの列だけ、縦線はこの段だけを調整します。隣接コマも一覧で確認してください。";
     editor.append(hint);
     editor.scrollIntoView({ block: "nearest" });
   }
@@ -927,6 +929,7 @@
     const grid = C.suggestGridLines(source.image, source.columns, source.rows);
     const original = {
       xs: source.xs, ys: source.ys, columnYs: source.columnYs,
+      rowXs: source.rowXs,
       manualColumnYs: source.manualColumnYs, splitIssues: source.splitIssues,
     };
     // Some sheets have staggered captions: a single horizontal grid can
@@ -961,6 +964,7 @@
         source.xs = candidate.xs;
         source.ys = candidate.ys;
         source.columnYs = candidate.columnYs;
+        source.rowXs = null;
         const candidateIssues = inspectSplit(source);
         const count = candidateIssues.length;
         // Partial improvements must not create fresh warnings on previously
@@ -980,6 +984,7 @@
       source.xs = original.xs;
       source.ys = original.ys;
       source.columnYs = original.columnYs;
+      source.rowXs = original.rowXs;
       source.manualColumnYs = original.manualColumnYs;
       source.splitIssues = original.splitIssues;
     }
@@ -989,6 +994,7 @@
       source.xs = bestCandidate.xs;
       source.ys = bestCandidate.ys;
       source.columnYs = bestCandidate.columnYs;
+      source.rowXs = null;
       source.manualColumnYs = Boolean(bestCandidate.columnYs);
       source.cropReport = []; source.cropMethod = null;
       invalidate();
@@ -1006,6 +1012,7 @@
     source.xs = selected.xs;
     source.ys = selected.ys;
     source.columnYs = selected.columnYs;
+    source.rowXs = null;
     source.manualColumnYs = Boolean(selected.columnYs);
     source.splitIssues = [];
     source.cropReport = []; source.cropMethod = null;
@@ -1286,6 +1293,7 @@
     source.insets = P.blankInsets();
     $("cell-boundary-editor").replaceChildren();
     source.xs = P.lines(source.columns);
+    source.rowXs = null;
     source.ys = P.lines(source.rows);
     source.columnYs = null;
     source.manualColumnYs = false;
