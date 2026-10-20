@@ -122,3 +122,42 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
   }
   expect(errors).toEqual([]);
 });
+
+test("white facial detail survives while outer white background is removed",async ({page})=>{
+  await page.goto("http://127.0.0.1:8765/");
+  await page.locator("#production-mode").selectOption("easy");
+  await page.locator("#easy-target").selectOption("8");
+  const encoded=await page.evaluate(()=>{
+    const c=document.createElement("canvas");c.width=600;c.height=1000;
+    const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,1000);
+    for(let row=0;row<5;row++)for(let col=0;col<2;col++){
+      const cx=col*300+150,cy=row*200+100;
+      x.fillStyle="#cc5252";x.beginPath();x.arc(cx,cy,65,0,Math.PI*2);x.fill();
+      // White eye details are enclosed by colored artwork, not background.
+      x.fillStyle="#fff";x.beginPath();x.arc(cx-19,cy-12,12,0,Math.PI*2);x.fill();
+      x.beginPath();x.arc(cx+19,cy-12,12,0,Math.PI*2);x.fill();
+      x.fillStyle="#222";x.beginPath();x.arc(cx-19,cy-12,4,0,Math.PI*2);x.fill();
+      x.beginPath();x.arc(cx+19,cy-12,4,0,Math.PI*2);x.fill();
+    }
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.locator("#easy-files").setInputFiles([{name:"white-eye-sheet.png",mimeType:"image/png",buffer:Buffer.from(encoded,"base64")}]);
+  await expect(page.locator("#easy-state")).toContainText("読込済み1枚",{timeout:90000});
+  await page.locator("#easy-process").click();
+  await expect(page.locator("#easy-state")).toContainText("加工済み8個",{timeout:150000});
+  const metrics=await page.locator("#stamp-grid canvas").evaluateAll(canvases=>canvases.map(c=>{
+    const d=c.getContext("2d").getImageData(0,0,c.width,c.height).data;
+    let white=0,red=0;
+    for(let i=0;i<d.length;i+=4){
+      if(d[i+3]>240&&d[i]>245&&d[i+1]>245&&d[i+2]>245)white++;
+      if(d[i+3]>240&&d[i]>130&&d[i+1]<160&&d[i+2]<160)red++;
+    }
+    return {white,red,cornerAlpha:d[3]};
+  }));
+  expect(metrics).toHaveLength(8);
+  for(const m of metrics){
+    expect(m.red).toBeGreaterThan(100);
+    expect(m.white).toBeGreaterThan(10);
+    expect(m.cornerAlpha).toBe(0);
+  }
+});
