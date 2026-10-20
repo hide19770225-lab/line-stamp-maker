@@ -293,10 +293,13 @@
   }
   function tileRect(source, column, row) {
     const { xs, ys, image } = source;
-    const left = Math.round(xs[column] * image.width);
+    // Vertical dividers may need different positions on each row when text
+    // and antennae are staggered. Fall back to the shared grid for old files.
+    const columnLines = source.rowXs?.[row] || xs;
+    const left = Math.round(columnLines[column] * image.width);
     const rowLines = source.columnYs?.[column] || ys;
     const top = Math.round(rowLines[row] * image.height);
-    const right = Math.round(xs[column + 1] * image.width);
+    const right = Math.round(columnLines[column + 1] * image.width);
     const bottom = Math.round(rowLines[row + 1] * image.height);
     const inset = source.insets || { left: 0, right: 0, top: 0, bottom: 0 };
     const x = Math.min(
