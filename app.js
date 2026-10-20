@@ -714,8 +714,8 @@
     overview.replaceChildren();
     const issues = source.splitIssues || [];
     $("split-diagnostics").textContent = source.splitIssues
-      ? issues.length ? `要調整 ${issues.length}コマ：` + issues.map(issue => `コマ${issue.cell + 1}（${issue.edges.map(edge => edgeNames[edge]).join("・")}）`).join("、")
-        : "全採用コマの境界検査：重なりは検出されませんでした。画像も目視確認してください。"
+      ? issues.length ? `境界に色の連続を検出 ${issues.length}コマ（切り抜き失敗とは限りません）：` + issues.map(issue => `コマ${issue.cell + 1}（${issue.edges.map(edge => edgeNames[edge]).join("・")}）`).join("、")
+         : "全採用コマの境界検査：色の連続は検出されませんでした。画像も目視確認してください。"
       : "境界は未検査です。「境界を検査」で全採用コマを確認できます。";
     for (let cell = 0; cell < source.columns * source.rows; cell++) {
       const rect = C.tileRect(source, cell % source.columns, Math.floor(cell / source.columns));
@@ -742,7 +742,7 @@
       }
       const info = document.createElement("small");
       info.textContent = `x=${rect.x}–${rect.x + rect.width}, y=${rect.y}–${rect.y + rect.height}` +
-        (issue ? ` / ${issue.edges.map(edge => edgeNames[edge]).join("・")}を調整` : "");
+        (issue ? ` / ${issue.edges.map(edge => edgeNames[edge]).join("・")}に色の連続（目視確認）` : "");
       button.append(title, thumb, info);
       button.onclick = () => renderCellBoundaries(source, cell);
       overview.append(button);
