@@ -709,6 +709,34 @@
     }
     return source.splitIssues;
   }
+  // Search nearby vertical divider positions against EVERY assigned tile.
+  // A line shared by all rows must never be optimized for just one pair.
+  function suggestSafeVerticalDivider(source, divider) {
+    if (divider <= 0 || divider >= source.columns) return null;
+    const original = source.xs[divider];
+    const center = Math.round(original * source.image.width);
+    const radius = Math.max(4, Math.round(source.image.width / source.columns * 0.12));
+    const leftLimit = Math.round(source.xs[divider - 1] * source.image.width) + 3;
+    const rightLimit = Math.round(source.xs[divider + 1] * source.image.width) - 3;
+    const baseline = inspectSplit(source).length;
+    let best = null;
+    try {
+      for (let offset = -radius; offset <= radius; offset++) {
+        const px = center + offset;
+        if (px <= leftLimit || px >= rightLimit || offset === 0) continue;
+        source.xs[divider] = px / source.image.width;
+        const count = inspectSplit(source).length;
+        if (count < baseline && (!best || count < best.count ||
+            (count === best.count && Math.abs(offset) < Math.abs(best.offset)))) {
+          best = { px, count, offset };
+        }
+      }
+    } finally {
+      source.xs[divider] = original;
+      inspectSplit(source);
+    }
+    return best;
+  }
   function renderCropOverview(source) {
     const overview = $("crop-overview");
     overview.replaceChildren();
@@ -717,6 +745,32 @@
       ? issues.length ? `境界に色の連続を検出 ${issues.length}コマ（切り抜き失敗とは限りません）：` + issues.map(issue => `コマ${issue.cell + 1}（${issue.edges.map(edge => edgeNames[edge]).join("・")}）`).join("、")
          : "全採用コマの境界検査：色の連続は検出されませんでした。画像も目視確認してください。"
       : "境界は未検査です。「境界を検査」で全採用コマを確認できます。";
+    // Offer a one-tap improvement only when scanning all rows proves that
+    // moving the shared divider strictly reduces the total warning count.
+    if (issues.length && source.columns > 1) {
+      const flagged = new Set();
+      for (const issue of issues) {
+        const col = issue.cell % source.columns;
+        if (issue.edges.includes("right") && col + 1 < source.columns) flagged.add(col + 1);
+        if (issue.edges.includes("left") && col > 0) flagged.add(col);
+      }
+      for (const divider of flagged) {
+        const suggestion = suggestSafeVerticalDivider(source, divider);
+        if (!suggestion) continue;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = `${divider}列目と${divider + 1}列目の境界を改善（警告 ${issues.length}→${suggestion.count}コマ）`;
+        button.onclick = () => {
+          source.xs[divider] = suggestion.px / source.image.width;
+          source.cropReport = [];
+          source.cropMethod = null;
+          invalidate();
+          inspectSplit(source);
+          renderSourceEditor();
+        };
+        overview.append(button);
+      }
+    }
     for (let cell = 0; cell < source.columns * source.rows; cell++) {
       const rect = C.tileRect(source, cell % source.columns, Math.floor(cell / source.columns));
       const issue = issues.find(issue => issue.cell === cell);
