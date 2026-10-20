@@ -9,7 +9,7 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || "/tmp/stamp-single40";
 if (!image) throw new Error("Set STAMP_TEST_IMAGE to a 5-column, 8-row sheet PNG");
 (async () => {
   await fs.mkdir(dir, {recursive:true});
-  const browser = await chromium.launch({executablePath:"/usr/bin/chromium",args:["--no-sandbox"]});
+  const browser = await chromium.launch({args:["--no-sandbox"]});
   try {
     const p = await browser.newPage({...devices["iPhone 13"],acceptDownloads:true});
     const errors=[]; p.on("pageerror", e=>errors.push(e.message)); p.on("dialog",d=>d.accept());
