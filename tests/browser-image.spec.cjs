@@ -377,6 +377,10 @@ test("project JSON round-trip restores target and source settings without embedd
       return original(blob);
     };
   });
+  // Project JSON controls live in normal mode, not the easy-mode panel.
+  await page.locator("#production-mode").selectOption("normal");
+  await expect(page.locator("#save-project")).toBeVisible();
+  await expect(page.locator("#save-project")).toBeEnabled();
   console.log("[project] clicking save");
   await page.locator("#save-project").click();
   console.log("[project] clicked save");
