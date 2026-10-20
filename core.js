@@ -597,7 +597,10 @@
     }
     return result;
   }
-  // One background sample per original sheet, rather than 40-80 repeated\n  // canvas allocations during auto-placement and boundary inspection.\n  const cropBackgroundCache = new WeakMap();\n  function cropCrossings(image, rect, mode, tolerance, color) {
+  // One background sample per original sheet, rather than repeated
+  // canvas allocations during boundary inspection.
+  const cropBackgroundCache = new WeakMap();
+  function cropCrossings(image, rect, mode, tolerance, color) {
     if (mode === "none") return [];
     const x = Math.max(0, rect.x - 2), y = Math.max(0, rect.y - 2);
     const w = Math.min(image.width, rect.x + rect.width + 2) - x;
