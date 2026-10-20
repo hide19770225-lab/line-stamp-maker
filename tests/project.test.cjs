@@ -197,3 +197,37 @@ test("JSON rejects split lines that crop away source edges, including per-column
   }
   assert.deepEqual(P.readProject(base).sources[0].assignments, [1,2,3,4,5,6,7,8]);
 });
+
+test("40 slots retain their captions and assignments across swaps, exclusion, and JSON restore", () => {
+  const p = project(40);
+  const sources = Array.from({length:4}, (_,i) => {
+    const s = source(p, 2, 5);
+    s.name = `sheet-${i+1}.png`;
+    s.fingerprint = String(i+1).repeat(64);
+    return s;
+  });
+  p.slots.forEach((slot,i) => {
+    slot.caption = `セリフ${String(i+1).padStart(2,'0')}`;
+    slot.style.x = 20 + i;
+  });
+  P.assignSlot(p,sources[0],0,40);
+  P.assignSlot(p,sources[2],4,2);
+  P.assignSlot(p,sources[1],1,0);
+  P.assignSlot(p,sources[1],1,12);
+  const before = p.sources.flatMap(s=>s.assignments);
+  assert.equal(new Set(before.filter(Boolean)).size,before.filter(Boolean).length);
+  const restored = P.readProject(JSON.parse(JSON.stringify(p)));
+  assert.deepEqual(restored.sources.map(s=>s.assignments),p.sources.map(s=>s.assignments));
+  for(let i=0;i<40;i++){
+    assert.equal(restored.slots[i].caption,`セリフ${String(i+1).padStart(2,'0')}`);
+    assert.equal(restored.slots[i].style.x,20+i);
+  }
+  assert.equal(restored.sources[0].assignments[0],40);
+  assert.equal(restored.sources[1].assignments[1],12);
+});
+test("invalid duplicate numbers across multiple sources cannot be restored",()=>{
+  const p=project(40);
+  const a=source(p,2,5), b=source(p,2,5);
+  b.assignments[3]=a.assignments[0];
+  assert.throws(()=>P.readProject(p));
+});
