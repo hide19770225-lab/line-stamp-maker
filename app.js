@@ -801,14 +801,28 @@
     const grid = C.suggestGridLines(source.image, source.columns, source.rows);
     const xs = grid?.xs || P.lines(source.columns);
     const columnYs = C.suggestColumnRowLines(source.image, xs, source.rows);
-    if (!grid && !columnYs) throw new Error("安全な余白を自動検出できませんでした。均等配置に戻すか、一覧から該当コマを選んで微調整してください。現在の設定は保持しました。");
+    if (!grid && !columnYs) throw new Error("安全な余白を自動検出できませんでした。現在の分割位置は保持しています。");
+    // An automatic suggestion is not a validated cut. Check every assigned
+    // tile before committing it; otherwise the success toast is misleading.
+    const previous = { xs: source.xs, ys: source.ys, columnYs: source.columnYs,
+      manualColumnYs: source.manualColumnYs, splitIssues: source.splitIssues };
     source.xs = xs;
     source.ys = grid?.ys || P.lines(source.rows);
     source.columnYs = columnYs;
+    const issues = inspectSplit(source);
+    if (issues.length) {
+      source.xs = previous.xs;
+      source.ys = previous.ys;
+      source.columnYs = previous.columnYs;
+      source.manualColumnYs = previous.manualColumnYs;
+      source.splitIssues = previous.splitIssues;
+      renderSourceEditor();
+      throw new Error(`安全な自動配置はできませんでした（候補でも${issues.length}コマの境界に絵柄が重なります）。元の配置は保持しました。分割線を動かすだけでは解決しない可能性があります。`);
+    }
     source.manualColumnYs = true;
     source.cropReport = []; source.cropMethod = null;
-    invalidate(); inspectSplit(source); renderSourceEditor();
-    notify("余白から自動配置しました。全コマの切り抜き位置を確認してください。");
+    invalidate(); renderSourceEditor();
+    notify("全採用コマの境界検査に合格した自動配置を適用しました。画像も目視確認してください。");
   });
   function renderGridControls() {
     const source = state.sources[state.selectedSource];
