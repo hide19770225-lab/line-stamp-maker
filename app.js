@@ -824,14 +824,20 @@
     const rowsForCurrent = C.suggestColumnRowLines(source.image, original.xs, source.rows);
     if (rowsForCurrent)
       addCandidate(original.xs, original.ys, rowsForCurrent, "現在の列位置＋列別の余白");
-    let selected = null, bestIssueCount = Infinity;
+    let selected = null, bestCandidate = null, bestIssueCount = Infinity;
+    // An imperfect candidate is useful for review only when it strictly
+    // improves the existing layout. Never mistake this for export approval.
+    const currentIssueCount = inspectSplit(source).length;
     try {
       for (const candidate of candidates) {
         source.xs = candidate.xs;
         source.ys = candidate.ys;
         source.columnYs = candidate.columnYs;
         const count = inspectSplit(source).length;
-        bestIssueCount = Math.min(bestIssueCount, count);
+        if (count < bestIssueCount) {
+          bestIssueCount = count;
+          bestCandidate = candidate;
+        }
         if (count === 0) { selected = candidate; break; }
       }
     } finally {
@@ -841,6 +847,20 @@
       source.columnYs = original.columnYs;
       source.manualColumnYs = original.manualColumnYs;
       source.splitIssues = original.splitIssues;
+    }
+    if (!selected && bestCandidate && bestIssueCount < currentIssueCount) {
+      // Explicit auto-layout request: apply the best partial improvement,
+      // retain visible warnings and keep the export safety gate in place.
+      source.xs = bestCandidate.xs;
+      source.ys = bestCandidate.ys;
+      source.columnYs = bestCandidate.columnYs;
+      source.manualColumnYs = Boolean(bestCandidate.columnYs);
+      source.cropReport = []; source.cropMethod = null;
+      invalidate();
+      inspectSplit(source);
+      renderSourceEditor();
+      notify(`自動配置で境界警告を${currentIssueCount}→${bestIssueCount}コマに減らしました。残る赤い辺は要調整です。安全確認まで書き出しません。`);
+      return;
     }
     if (!selected) {
       renderSourceEditor();
