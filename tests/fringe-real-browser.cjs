@@ -12,7 +12,7 @@ const sha=b=>createHash('sha256').update(b).digest('hex');
 const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.split(',')[1],'base64'));
 (async()=>{
  fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(path.join(dir,'final'),{recursive:true});
- const b=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
+ const b=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||chromium.executablePath(),args:['--no-sandbox']});
  try{
   const p=await b.newPage({...devices['iPhone 13'],acceptDownloads:true});
   await p.goto('about:blank');await p.addScriptTag({content:execFileSync('git',['show',`${baseRef}:core.js`],{encoding:'utf8'})});
