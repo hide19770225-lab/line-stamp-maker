@@ -303,6 +303,8 @@
         if (
           !Array.isArray(s[key]) ||
           s[key].length !== count + 1 ||
+          s[key][0] !== 0 ||
+          s[key][count] !== 1 ||
           s[key].some(
             (n, i) =>
               !number(n, 0, 1) ||
@@ -317,6 +319,7 @@
       // Validate optional arrays before retaining them in the saved project.
       const validLines = (lines, count, size) =>
         Array.isArray(lines) && lines.length === count + 1 &&
+        lines[0] === 0 && lines[count] === 1 &&
         lines.every((n, i) => number(n, 0, 1) &&
           (!i || n - lines[i - 1] >= 2 / size - 1e-9));
       if (s.rowXs != null && (
