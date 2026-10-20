@@ -62,7 +62,11 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
      sourceEdgeInk.bottom=Array.from({length:w},(_,x)=>isInk(x,h-1)).filter(Boolean).length;
      sourceEdgeInk.left=Array.from({length:h},(_,y)=>isInk(0,y)).filter(Boolean).length;
      sourceEdgeInk.right=Array.from({length:h},(_,y)=>isInk(w-1,y)).filter(Boolean).length;
-     results[name].tiles.push({n:n+1,rect,error,diagnosticOnly:!!error,review:tile.boundaryReview,sourceEdgeInk,
+     const sourceEdgeRemoved=new Set();
+     for(let x=0;x<w;x++)for(const y of [0,h-1])if(isInk(x,y)&&tile.mask[y*w+x]===0)sourceEdgeRemoved.add(y*w+x);
+     for(let y=0;y<h;y++)for(const x of [0,w-1])if(isInk(x,y)&&tile.mask[y*w+x]===0)sourceEdgeRemoved.add(y*w+x);
+     if(name==='after')assert.equal(sourceEdgeRemoved.size,0,`source edge ink removed from tile ${n+1}`);
+     results[name].tiles.push({n:n+1,rect,error,diagnosticOnly:!!error,review:tile.boundaryReview,sourceEdgeInk,sourceEdgeRemoved:sourceEdgeRemoved.size,
       whiteChanged,darkChanged,alphaRemoved,unmatted:(tile.matte||[]).length,strong,strongChanged,chromatic,chromaticChanged,png:c.toDataURL(),original:original.toDataURL()});
     }
    }
@@ -139,7 +143,7 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    `**${reviewItems.length}/10 images require boundary review.**`,
    '',
    'Inspect source-NN.png, before-NN.png, after-NN.png, final/NN.png and annotated/NN.png at full resolution.',
-   'The pixel-protection assertions do not establish correct crop placement or absence of white fringe.',
+   'The test asserts that dark/colorful source-edge pixels are not made fully transparent. This does not establish correct crop placement or absence of white fringe.',
    'Red boxes in annotated/NN.png identify small alpha islands. They are diagnostic candidates, NOT proof of residue and NOT automatic deletion targets: punctuation, antennae and decorative marks may be intentional.',
    'Boundary flags must be compared with source pixels: an already-open character silhouette at the source tile edge is not evidence that background removal deleted the body.',
    'Do not automatically reconstruct missing lower bodies or remove intentional decorative islands.',
