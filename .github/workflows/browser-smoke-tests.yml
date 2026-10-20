@@ -62,3 +62,30 @@ jobs:
           name: chromium-image-failure-${{ matrix.group }}
           path: test-results/
           if-no-files-found: ignore
+
+  real-fixture-evidence:
+    name: real fixture cutout evidence (10 stickers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - name: Produce real-fixture PNGs and ZIP with pixel diagnostics
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/stamp-fixture-http.log 2>&1 &
+          node tests/fringe-real-browser.cjs
+      - name: Upload real-fixture image evidence for visual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-fixture-10-cutout-evidence
+          path: work/cutout-comparison/
+          if-no-files-found: warn
