@@ -83,9 +83,10 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
   await p.waitForFunction(()=>document.querySelectorAll('.source-card').length===1&&!document.body.classList.contains('busy'));
   await p.click('#process-all');await p.waitForFunction(()=>!document.body.classList.contains('busy'));
   assert.equal(await p.locator('.stamp-card').count(),10,await p.locator('#status').innerText());
-  const outputs=await p.evaluate(()=>testTiles.map(s=>{const rendered=StampCore.renderStamp(s),canvas=rendered.canvas,ctx=canvas.getContext('2d');const {data}=ctx.getImageData(0,0,canvas.width,canvas.height);const alpha=(x,y)=>data[(y*canvas.width+x)*4+3];const corners=[alpha(0,0),alpha(canvas.width-1,0),alpha(0,canvas.height-1),alpha(canvas.width-1,canvas.height-1)];let opaque=0,transparent=0;for(let i=3;i<data.length;i+=4){if(data[i]===255)opaque++;if(data[i]===0)transparent++;}return {rect:s.sourceRect,review:s.boundaryReview,autoRemoved:rendered.autoRemoved,png:canvas.toDataURL(),alphaEvidence:{corners,opaque,transparent}}}));
+  const outputs=await p.evaluate(()=>testTiles.map(s=>{const rendered=StampCore.renderStamp(s),canvas=rendered.canvas,ctx=canvas.getContext('2d');const {data}=ctx.getImageData(0,0,canvas.width,canvas.height);const alpha=(x,y)=>data[(y*canvas.width+x)*4+3];const corners=[alpha(0,0),alpha(canvas.width-1,0),alpha(0,canvas.height-1),alpha(canvas.width-1,canvas.height-1)];let opaque=0,transparent=0;for(let i=3;i<data.length;i+=4){if(data[i]===255)opaque++;if(data[i]===0)transparent++;}return {rect:s.sourceRect,review:s.boundaryReview,autoRemoved:rendered.autoRemoved,png:canvas.toDataURL(),alphaEvidence:{width:canvas.width,height:canvas.height,corners,opaque,transparent}}}));
   assert.equal(outputs.length,10,'expected 10 rendered real-image stickers');
   for(const [i,out] of outputs.entries()){
+   assert.deepEqual([out.alphaEvidence.width,out.alphaEvidence.height],[370,320],`sticker ${i+1}: wrong rendered canvas size`);
    assert.deepEqual(out.alphaEvidence.corners,[0,0,0,0],`sticker ${i+1}: nontransparent corner`);
    assert.ok(out.alphaEvidence.opaque>0&&out.alphaEvidence.transparent>0,`sticker ${i+1}: missing foreground or transparent background`);
    assert.ok(out.alphaEvidence.opaque+out.alphaEvidence.transparent<=370*320,`sticker ${i+1}: impossible alpha counts`);
