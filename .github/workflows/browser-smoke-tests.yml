@@ -18,4 +18,4 @@ jobs:
       - name: Start local server and run browser tests
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/stamp-http.log 2>&1 &
-          npx playwright test tests/browser-counts.spec.cjs --workers=1 --reporter=line
+          npx playwright test tests/browser-counts.spec.cjs tests/browser-image.spec.cjs --workers=1 --reporter=line
