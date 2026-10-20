@@ -176,3 +176,24 @@ test("changing 2x5 to 5x8 discards automatic and manual column gutters", () => {
     assert.deepEqual(s.assignments, Array.from({length:10}, (_,i)=>i+1));
   }
 });
+
+test("JSON rejects split lines that crop away source edges, including per-column and per-row gutters", () => {
+  const base = project(8);
+  source(base, 2, 4);
+  const variants = [
+    v => { v.sources[0].xs[0] = 0.1; },
+    v => { v.sources[0].xs[2] = 0.9; },
+    v => { v.sources[0].ys[0] = 0.1; },
+    v => { v.sources[0].ys[4] = 0.9; },
+    v => { v.sources[0].columnYs = [P.lines(4), P.lines(4)]; v.sources[0].columnYs[1][0] = 0.1; },
+    v => { v.sources[0].columnYs = [P.lines(4), P.lines(4)]; v.sources[0].columnYs[1][4] = 0.9; },
+    v => { v.sources[0].rowXs = Array.from({length:4},()=>P.lines(2)); v.sources[0].rowXs[0][0] = 0.1; },
+    v => { v.sources[0].rowXs = Array.from({length:4},()=>P.lines(2)); v.sources[0].rowXs[0][2] = 0.9; },
+  ];
+  for (const mutate of variants) {
+    const invalid = structuredClone(base);
+    mutate(invalid);
+    assert.throws(() => P.readProject(invalid));
+  }
+  assert.deepEqual(P.readProject(base).sources[0].assignments, [1,2,3,4,5,6,7,8]);
+});
