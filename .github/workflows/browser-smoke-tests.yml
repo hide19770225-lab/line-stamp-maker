@@ -27,6 +27,17 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
   browser-images:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: small-8-16
+            grep: '^(8|16) stickers:'
+          - group: large-24-40
+            grep: '^(24|32|40) stickers:'
+          - group: visual-and-restore
+            grep: '^(?![0-9]+ stickers:)'
+    name: browser-images (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -41,11 +52,11 @@ jobs:
       - name: Test image processing and ZIP export
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/stamp-http.log 2>&1 &
-          npx playwright test tests/browser-image.spec.cjs --workers=1 --reporter=line --timeout=240000
+          npx playwright test tests/browser-image.spec.cjs --workers=1 --reporter=line --timeout=240000 --grep "${{ matrix.grep }}"
       - name: Upload image failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: chromium-image-failure
+          name: chromium-image-failure-${{ matrix.group }}
           path: test-results/
           if-no-files-found: ignore
