@@ -344,3 +344,39 @@ test("changing main image invalidates prior bulk visual approval",async ({page})
   await page.locator("#easy-export").click();
   await expect(page.locator("#download-link")).toBeHidden();
 });
+
+test("project JSON round-trip restores target and source settings without embedded images",async ({page})=>{
+  await page.goto("http://127.0.0.1:8765/");
+  await page.locator("#production-mode").selectOption("easy");
+  await page.locator("#easy-target").selectOption("16");
+  const encoded=await page.evaluate(()=>{
+    const c=document.createElement("canvas");c.width=600;c.height=1000;
+    const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,1000);
+    for(let row=0;row<5;row++)for(let col=0;col<2;col++){
+      x.fillStyle="#a34f9c";x.beginPath();x.arc(col*300+150,row*200+100,50,0,Math.PI*2);x.fill();
+    }
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.locator("#easy-files").setInputFiles([{name:"restore-source.png",mimeType:"image/png",buffer:Buffer.from(encoded,"base64")}]);
+  await expect(page.locator("#easy-state")).toContainText("読込済み1枚",{timeout:90000});
+  const downloadPromise=page.waitForEvent("download");
+  await page.locator("#save-project").click();
+  const download=await downloadPromise;
+  expect(download.suggestedFilename()).toBe("stamp-atelier-project.json");
+  const json=JSON.parse(fs.readFileSync(await download.path(),"utf8"));
+  expect(json.format).toBe("stamp-atelier-project");
+  expect(json.target).toBe(16);
+  expect(json.imageDataIncluded).toBe(false);
+  expect(json.sources).toHaveLength(1);
+  expect(json.sources[0].name).toBe("restore-source.png");
+  expect(json.sources[0].image).toBeUndefined();
+  await page.reload();
+  await page.locator("#load-project").setInputFiles({
+    name:"stamp-atelier-project.json",mimeType:"application/json",
+    buffer:Buffer.from(JSON.stringify(json))
+  });
+  await expect(page.locator("#project-status")).toContainText("元画像1枚を再選択",{timeout:30000});
+  await expect(page.locator("#target-count")).toHaveValue("16");
+  // A restored project cannot export finished art until sources are reselected.
+  await expect(page.locator("#download-link")).toBeHidden();
+});
