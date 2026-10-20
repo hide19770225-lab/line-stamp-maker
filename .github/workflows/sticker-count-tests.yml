@@ -18,4 +18,5 @@ jobs:
           for f in core.js residue.js typography.js project.js audit.js easy.js caption-references.js caption-vision.js suggestions.js build-info.js version.js app.js; do
             node --check "$f"
           done
-      - run: node --test tests/counts.test.js tests/zip-counts.test.js
+      - name: Run sticker count and all module regression tests
+        run: node --test tests/counts.test.js tests/zip-counts.test.js tests/*.test.cjs
