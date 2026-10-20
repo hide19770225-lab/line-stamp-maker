@@ -594,7 +594,7 @@
     }
     return result;
   }
-  function cropCrossings(image, rect, mode, tolerance, color) {
+  // One background sample per original sheet, rather than 40-80 repeated\n  // canvas allocations during auto-placement and boundary inspection.\n  const cropBackgroundCache = new WeakMap();\n  function cropCrossings(image, rect, mode, tolerance, color) {
     if (mode === "none") return [];
     const x = Math.max(0, rect.x - 2), y = Math.max(0, rect.y - 2);
     const w = Math.min(image.width, rect.x + rect.width + 2) - x;
@@ -608,22 +608,26 @@
     // background and white gutters can be flagged as cut artwork.
     let crossingMode = mode, crossingColor = color;
     if (mode === "auto") {
-      const corners = canvas(4, 1);
-      const cornerContext = corners.getContext("2d", { willReadFrequently: true });
-      const positions = [
-        [0, 0], [image.width - 1, 0],
-        [0, image.height - 1], [image.width - 1, image.height - 1],
-      ];
-      for (let i = 0; i < positions.length; i++) {
-        const [cx, cy] = positions[i];
-        cornerContext.drawImage(image, cx, cy, 1, 1, i, 0, 1, 1);
+      let bgColor = cropBackgroundCache.get(image);
+      if (!bgColor) {
+        const corners = canvas(4, 1);
+        const cornerContext = corners.getContext("2d", { willReadFrequently: true });
+        const positions = [
+          [0, 0], [image.width - 1, 0],
+          [0, image.height - 1], [image.width - 1, image.height - 1],
+        ];
+        for (let i = 0; i < positions.length; i++) {
+          const [cx, cy] = positions[i];
+          cornerContext.drawImage(image, cx, cy, 1, 1, i, 0, 1, 1);
+        }
+        const samples = cornerContext.getImageData(0, 0, 4, 1);
+        const bg = backgroundColor(samples.data, 4, 1);
+        corners.width = corners.height = 1;
+        bgColor = "#" + bg.map(channel => channel.toString(16).padStart(2, "0")).join("");
+        cropBackgroundCache.set(image, bgColor);
       }
-      const samples = cornerContext.getImageData(0, 0, 4, 1);
-      const bg = backgroundColor(samples.data, 4, 1);
-      corners.width = corners.height = 1;
-      const rgb = bg.map(channel => channel.toString(16).padStart(2, "0")).join("");
       crossingMode = "custom";
-      crossingColor = "#" + rgb;
+      crossingColor = bgColor;
     }
     return pixelCropCrossings(pixels, { ...rect, x: rect.x - x, y: rect.y - y }, crossingMode, tolerance, crossingColor);
   }
