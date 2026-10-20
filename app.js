@@ -842,7 +842,7 @@
     if (source.columnYs) {
       for (let col = 0; col < source.columns; col++) {
         ctx.strokeStyle = col % 2 ? "#dc542c" : "#21875c";
-        for (const y of source.columnYs[col]) {
+        for (const y of source.columnYs[col] || source.ys) {
           const yy = Math.max(1, Math.min(c.height - 1, y * c.height));
           ctx.beginPath();
           ctx.moveTo(source.xs[col] * c.width, yy);

@@ -6,10 +6,10 @@ const dest = path.resolve(process.env.STAMP_BUILD_DIR || path.join(root, "dist")
 if (dest === root || root.startsWith(dest + path.sep)) throw new Error("Unsafe build directory");
 const version = fs.readFileSync(path.join(root, "VERSION"), "utf8").trim();
 if (!/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(version)) throw new Error("Invalid VERSION");
-let commit = process.env.BUILD_COMMIT || process.env.GITHUB_SHA || null;
+let commit = process.env.BUILD_COMMIT || process.env.GITHUB_SHA || process.env.COMMIT_REF || null;
 if (!commit) { try { commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch {} }
 if (!/^[a-f0-9]{40}$/i.test(commit || "")) commit = null;
-const environment = process.env.DEPLOY_ENVIRONMENT?.trim() || null;
+const environment = process.env.DEPLOY_ENVIRONMENT?.trim() || process.env.CONTEXT?.trim() || null;
 const files = fs.readdirSync(root).filter(f => /\.(js|css|html)$/.test(f) && !["build-info.js", "regression-10.html"].includes(f));
 const hash = crypto.createHash("sha256");
 for (const f of [...files, "VERSION"].sort()) hash.update(f).update(fs.readFileSync(path.join(root, f)));

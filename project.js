@@ -63,6 +63,12 @@
     source.rows = rows;
     source.xs = lines(columns);
     source.ys = lines(rows);
+    // Column gutters and crop diagnostics belong to the previous grid.
+    source.columnYs = null;
+    source.manualColumnYs = false;
+    source.gutterUncertain = false;
+    source.cropReport = [];
+    source.cropMethod = null;
     source.assignments = Array.from(
       { length: columns * rows },
       (_, i) => source.assignments[i] || 0,

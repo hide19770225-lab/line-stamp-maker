@@ -17,5 +17,13 @@ try {
   const unknown = JSON.parse(fs.readFileSync(path.join(dest,"build-info.json")));
   assert.equal(unknown.commit,null); assert.equal(unknown.environment,null);
   assert.notEqual(unknown.buildId,a.buildId);
+  const netlify = { ...env, BUILD_COMMIT:"", GITHUB_SHA:"", COMMIT_REF:"d".repeat(40), DEPLOY_ENVIRONMENT:"", CONTEXT:"deploy-preview" };
+  execFileSync(process.execPath, ["scripts/build.cjs"], { env:netlify });
+  const preview = JSON.parse(fs.readFileSync(path.join(dest,"build-info.json")));
+  assert.equal(preview.commit, netlify.COMMIT_REF);
+  assert.equal(preview.environment, "deploy-preview");
+  const config = fs.readFileSync("netlify.toml", "utf8");
+  assert(config.includes('command = "node scripts/build.cjs"'));
+  assert(config.includes('publish = "dist"'));
   console.log("PASS build artifact metadata, cache keys, unavailable values");
 } finally { fs.rmSync(dest,{recursive:true,force:true}); }

@@ -1,0 +1,6 @@
+[build]
+  command = "node scripts/build.cjs"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

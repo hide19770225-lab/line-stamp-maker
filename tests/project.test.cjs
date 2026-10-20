@@ -151,3 +151,24 @@ test("automatic cleanup defaults on for old JSON, preserves per-slot OFF and rej
   p.slots[0].cleanupEnabled = "yes";
   assert.throws(() => P.readProject(p));
 });
+
+test("changing 2x5 to 5x8 discards automatic and manual column gutters", () => {
+  for (const manual of [false, true]) {
+    const p = project(), s = source(p, 2, 5);
+    s.columnYs = [P.lines(5), P.lines(5)];
+    s.manualColumnYs = manual;
+    s.gutterUncertain = true;
+    s.cropReport = ["old coordinates"]; s.cropMethod = "old";
+    p.slots[0].caption = "ありがとう";
+    P.setGrid(p, s, 5, 8);
+    assert.equal(s.columnYs, null);
+    assert.equal(s.manualColumnYs, false);
+    assert.equal(s.gutterUncertain, false);
+    assert.deepEqual(s.cropReport, []);
+    assert.deepEqual(s.xs, P.lines(5)); assert.deepEqual(s.ys, P.lines(8));
+    assert.deepEqual(s.assignments, Array.from({length:40}, (_,i)=>i+1));
+    assert.equal(p.slots[0].caption, "ありがとう");
+    P.setGrid(p, s, 2, 5);
+    assert.deepEqual(s.assignments, Array.from({length:10}, (_,i)=>i+1));
+  }
+});
