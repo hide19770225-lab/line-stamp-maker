@@ -52,7 +52,17 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
      if(name==='after'){if(whiteChanged||darkChanged||alphaRemoved) throw Error('protected pixels changed');}
 
      const original=C.canvas(c.width,c.height);original.getContext('2d').putImageData(tile.original,0,0);
-     results[name].tiles.push({n:n+1,rect,error,diagnosticOnly:!!error,review:tile.boundaryReview,
+     const sourceEdgeInk={};
+     const isInk=(x,y)=>{
+      const k=(y*tile.original.width+x)*4,d=tile.original.data;
+      return Math.min(d[k],d[k+1],d[k+2])<205||Math.max(d[k],d[k+1],d[k+2])-Math.min(d[k],d[k+1],d[k+2])>35;
+     };
+     const w=tile.original.width,h=tile.original.height;
+     sourceEdgeInk.top=Array.from({length:w},(_,x)=>isInk(x,0)).filter(Boolean).length;
+     sourceEdgeInk.bottom=Array.from({length:w},(_,x)=>isInk(x,h-1)).filter(Boolean).length;
+     sourceEdgeInk.left=Array.from({length:h},(_,y)=>isInk(0,y)).filter(Boolean).length;
+     sourceEdgeInk.right=Array.from({length:h},(_,y)=>isInk(w-1,y)).filter(Boolean).length;
+     results[name].tiles.push({n:n+1,rect,error,diagnosticOnly:!!error,review:tile.boundaryReview,sourceEdgeInk,
       whiteChanged,darkChanged,alphaRemoved,unmatted:(tile.matte||[]).length,strong,strongChanged,chromatic,chromaticChanged,png:c.toDataURL(),original:original.toDataURL()});
     }
    }
@@ -81,9 +91,9 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    '',
    'This is an automated triage report. A green CI run does not mean every outline or caption is visually correct.',
    '',
-   '| Sticker | Review | Flagged boundaries |',
-   '|---|---|---|',
-   ...result.after.tiles.map(t=>`| ${String(t.n).padStart(2,'0')} | ${t.review?.needsReview?'REVIEW REQUIRED':'No boundary warning'} | ${(t.review?.edges||[]).join(', ')||'-'} |`),
+   '| Sticker | Review | Flagged boundaries | Source edge ink (T/B/L/R) |',
+   '|---|---|---|---|',
+   ...result.after.tiles.map(t=>`| ${String(t.n).padStart(2,'0')} | ${t.review?.needsReview?'REVIEW REQUIRED':'No boundary warning'} | ${(t.review?.edges||[]).join(', ')||'-'} | ${Object.values(t.sourceEdgeInk||{}).join('/')} |`),
    '',
    `**${reviewItems.length}/10 images require boundary review.**`,
    '',
