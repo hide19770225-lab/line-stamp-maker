@@ -602,7 +602,30 @@
     const probe = isolateRect(image, { x, y, width: w, height: h });
     const pixels = probe.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, w, h);
     probe.width = probe.height = 1;
-    return pixelCropCrossings(pixels, { ...rect, x: rect.x - x, y: rect.y - y }, mode, tolerance, color);
+    // The four corners of a tiny probe may all belong to the artwork.
+    // In auto mode, infer the background from the ORIGINAL sheet corners,
+    // not the cropped probe. Otherwise dark lettering can be mistaken for
+    // background and white gutters can be flagged as cut artwork.
+    let crossingMode = mode, crossingColor = color;
+    if (mode === "auto") {
+      const corners = canvas(4, 1);
+      const cornerContext = corners.getContext("2d", { willReadFrequently: true });
+      const positions = [
+        [0, 0], [image.width - 1, 0],
+        [0, image.height - 1], [image.width - 1, image.height - 1],
+      ];
+      for (let i = 0; i < positions.length; i++) {
+        const [cx, cy] = positions[i];
+        cornerContext.drawImage(image, cx, cy, 1, 1, i, 0, 1, 1);
+      }
+      const samples = cornerContext.getImageData(0, 0, 4, 1);
+      const bg = backgroundColor(samples.data, 4, 1);
+      corners.width = corners.height = 1;
+      const rgb = bg.map(channel => channel.toString(16).padStart(2, "0")).join("");
+      crossingMode = "custom";
+      crossingColor = "#" + rgb;
+    }
+    return pixelCropCrossings(pixels, { ...rect, x: rect.x - x, y: rect.y - y }, crossingMode, tolerance, crossingColor);
   }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
