@@ -89,3 +89,31 @@ jobs:
           name: real-fixture-10-cutout-evidence
           path: work/cutout-comparison/
           if-no-files-found: warn
+
+  constructed-40-sheet:
+    name: constructed 5x8 sheet 40-editor and ZIP flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m pip install pillow
+      - name: Generate constructed 40-cell sheet from 10 real poses
+        run: python3 tests/prepare_40_sheet.py tests/fixtures/BBE9DC5F-F70D-490D-B5E3-40E2D682218B.png /tmp/stamp-constructed-40.png
+      - name: Exercise all 40 editors and ZIP download in emulated iPhone Chromium
+        run: |
+          python3 -m http.server 4174 --bind 127.0.0.1 >/tmp/stamp-40-http.log 2>&1 &
+          STAMP_TEST_IMAGE=/tmp/stamp-constructed-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-40-evidence node tests/single-sheet-40-browser.cjs
+      - name: Upload constructed-sheet diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: constructed-40-sheet-evidence
+          path: /tmp/stamp-40-evidence/
+          if-no-files-found: warn
