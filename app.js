@@ -958,6 +958,49 @@
       };
       label.append(input); editor.append(label);
     }
+    const flagged = (source.splitIssues || []).find(issue => issue.cell === cell);
+    const boundaries = [];
+    if (flagged?.edges.includes("left") && col > 0) boundaries.push(col);
+    if (flagged?.edges.includes("right") && col < source.columns - 1) boundaries.push(col + 1);
+    for (const divider of boundaries) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "この段の縦境界を自動調整";
+      button.onclick = () => {
+        button.disabled = true;
+        button.textContent = "検査中…";
+        requestAnimationFrame(() => {
+          const proposed = suggestSafeRowDivider(source, row, divider);
+          if (!proposed) {
+            button.textContent = "安全な改善位置なし";
+            return;
+          }
+          const before = inspectSplit(source).map(issue => ({cell: issue.cell, edges: issue.edges.slice()}));
+          const previous = new Map(before.map(issue => [issue.cell, new Set(issue.edges)]));
+          const oldRows = source.rowXs;
+          const rows = oldRows ? oldRows.map(line => line.slice()) :
+            Array.from({length: source.rows}, () => source.xs.slice());
+          rows[row][divider] = proposed.px / source.image.width;
+          source.rowXs = rows;
+          const after = inspectSplit(source);
+          if (after.length >= before.length || after.some(issue =>
+            !previous.has(issue.cell) || issue.edges.some(edge => !previous.get(issue.cell).has(edge)))) {
+            source.rowXs = oldRows;
+            inspectSplit(source);
+            button.textContent = "安全性を確認できず変更なし";
+            return;
+          }
+          source.cropReport = [];
+          source.cropMethod = null;
+          invalidate();
+          inspectSplit(source);
+          drawSplit();
+          renderGridControls();
+          renderCellBoundaries(source, cell);
+        });
+      };
+      editor.append(button);
+    }
     const hint = document.createElement("p");
     hint.textContent = "横線はこの列だけ、縦線はこの段だけを調整します。隣接コマも一覧で確認してください。";
     editor.append(hint);
