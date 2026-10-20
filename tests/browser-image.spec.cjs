@@ -47,12 +47,17 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
     canvases.map(c=>{
       const ctx=c.getContext("2d");
       const {data}=ctx.getImageData(0,0,c.width,c.height);
-      let opaque=0,transparent=0;
+      let opaque=0,transparent=0,nearWhiteOpaque=0;
       for(let i=3;i<data.length;i+=4){
         if(data[i]===0) transparent++;
-        if(data[i]>0) opaque++;
+        if(data[i]>0){
+          opaque++;
+          const j=i-3;
+          if(data[i]>240&&data[j]>245&&data[j+1]>245&&data[j+2]>245)nearWhiteOpaque++;
+        }
       }
-      return {width:c.width,height:c.height,opaque,transparent};
+      const cornerAlpha=[0, c.width-1, (c.height-1)*c.width, c.width*c.height-1].map(p=>data[p*4+3]);
+      return {width:c.width,height:c.height,opaque,transparent,nearWhiteOpaque,cornerAlpha};
     })
   );
   for(const img of images){
@@ -60,6 +65,10 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
     expect(img.height).toBe(320);
     expect(img.opaque).toBeGreaterThan(0);
     expect(img.transparent).toBeGreaterThan(0);
+    expect(img.cornerAlpha).toEqual([0,0,0,0]);
+    // Synthetic sheets have white backgrounds, but no white artwork.
+    // Catch incomplete background removal leaving visible white patches.
+    expect(img.nearWhiteOpaque/img.opaque).toBeLessThan(0.05);
   }
 
   {
