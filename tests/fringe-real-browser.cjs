@@ -166,6 +166,7 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    'The alpha corners column must be 0/0/0/0, and both opaque and transparent pixel counts must be positive. Edge ink removed must be 0. These are automated safeguards, not a substitute for visual acceptance.',
    'For a boundary warning, first compare source-NN.png to after-NN.png. If the source already touches the crop edge, do not automatically blame the background remover. Verify the original sheet and intended grid split.',
    'For a 40-sticker acceptance run, provide a real 40-sticker source fixture. A 10-sticker fixture and synthetic 40-count smoke test cannot establish 40-sticker visual quality.',
+   'Acceptance checklist: inspect all 40 source-to-final pairs for missing limbs/antennae, Japanese caption clipping, residual edge strokes, unwanted white matte, and intentional isolated decorations. Record findings per sticker before merging.',
    'Boundary flags must be compared with source pixels: an already-open character silhouette at the source tile edge is not evidence that background removal deleted the body.',
    'Do not automatically reconstruct missing lower bodies or remove intentional decorative islands.',
    'Manual approval and real iPhone Safari operation remain outstanding.',
