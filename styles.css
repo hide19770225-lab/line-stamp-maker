@@ -1900,8 +1900,7 @@ body.modal-open {
 body.easy-mode .steps {
   display: none;
 }
-body.easy-mode:not(.easy-details-open) .project-panel,
-body.easy-mode:not(.easy-details-open) .workspace-grid {
+body.easy-mode:not(.easy-details-open) .project-panel {
   display: none;
 }
 #easy-progress.error {
@@ -1968,4 +1967,27 @@ body.easy-mode:not(.easy-details-open) .workspace-grid {
 }
 .audit-component-overlay[hidden] {
   display: none;
+}
+
+/* Both production modes share source and individual adjustment controls. */
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+#version-button { min-height: 44px; white-space: nowrap; font-size: 14px; }
+#version-dialog { width: min(520px, calc(100% - 24px)); }
+.version-content { padding: 20px; }
+.version-content dt { font-weight: 600; margin-top: 16px; }
+.version-content dd { margin: 4px 0; overflow-wrap: anywhere; }
+.version-update { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; margin: 0; padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: #fff1cf; color: #403017; }
+.stamp-navigation { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 12px 20px; }
+.stamp-navigation label, .stamp-navigation select { margin-bottom: 0; }
+.stamp-navigation button { min-height: 46px; }
+.edit-save-note { padding: 0 20px; }
+#stamp-dialog .image-controls, #stamp-dialog .individual-crop { margin-top: 16px; }
+#stamp-dialog input[type="range"] { min-height: 44px; touch-action: pan-y; }
+@media (max-width: 600px) {
+  .topbar { height: auto; min-height: 60px; gap: 8px; padding: 8px 14px; }
+  .topbar-actions { gap: 6px; }
+  .topbar-actions .free-badge { display: none; }
+  .stamp-navigation { padding: 12px; gap: 8px; }
+  .stamp-navigation button { padding: 10px; }
+  #stamp-dialog .edit-preview { position: static; }
 }

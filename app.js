@@ -1098,6 +1098,7 @@
     $("stamp-grid").replaceChildren();
     all.forEach((stamp, i) => {
       const button = document.createElement("button");
+      button.dataset.slot = stamp.slot;
       button.className = `stamp-card${stamp.reviewed ? " reviewed" : ""}`;
       button.setAttribute(
         "aria-label",
@@ -1557,11 +1558,20 @@
     return stamps()[state.selectedStamp];
   }
   function openEditor(index) {
+    if (!stamps()[index]) return;
+    endPaint();
+    captureSlots(true);
     state.selectedStamp = index;
     residueScan = null;
     const stamp = selected();
     state.brush = "none";
     $("edit-canvas").style.cursor = "default";
+    $("edit-stamp-select").replaceChildren();
+    stamps().forEach((item, i) => $("edit-stamp-select").add(
+      new Option(`${String(item.slot).padStart(2, "0")}.png`, String(i))));
+    $("edit-stamp-select").value = String(index);
+    $("previous-stamp").disabled = index === 0;
+    $("next-stamp").disabled = index === stamps().length - 1;
     syncLayoutControls();
     insetControls("stamp-insets", stamp.crop, 40, changedImage);
     C.renderBefore(stamp, $("before-canvas"));
@@ -1914,6 +1924,7 @@
   };
   function syncLayoutControls() {
     const stamp = selected();
+    $("image-margin").value = String(stamp.style.safeMargin === 20 ? 20 : 10);
     for (const [id, key] of [
       ["image-scale", "scale"],
       ["image-x", "x"],
@@ -1923,6 +1934,19 @@
       $(`${id}-value`).textContent = stamp.layout[key];
     }
   }
+  $("edit-stamp-select").onchange = () => openEditor(Number($("edit-stamp-select").value));
+  $("previous-stamp").onclick = () => openEditor(state.selectedStamp - 1);
+  $("next-stamp").onclick = () => openEditor(state.selectedStamp + 1);
+  $("save-stamp-adjustments").onclick = () => {
+    captureSlots(true);
+    closeEditor();
+    notify("この番号の位置・切り抜き範囲・余白を保存しました。端末に残すには設定JSONを保存してください。");
+  };
+  $("image-margin").onchange = () => {
+    selected().style = { ...selected().style, safeMargin: Number($("image-margin").value) };
+    syncCaptionControls();
+    changedImage();
+  };
   function changedImage() {
     selected().reviewed = false;
     $("reviewed-checkbox").checked = false;
@@ -1971,6 +1995,7 @@
   $("stamp-dialog").addEventListener("close", () => {
     endPaint();
     document.body.classList.remove("modal-open");
+    captureSlots(true);
     renderResults();
     $("bulk-captions").value = state.slots
       .map((slot) => slot.caption)
@@ -2014,6 +2039,7 @@
         autoPlace: $("safe-layout").checked ? true : stamp.style.autoPlace,
       };
       syncCaptionControls();
+      syncLayoutControls();
       changedImage();
     };
   for (const [id, key] of [
@@ -3049,7 +3075,7 @@
     $("easy-details").setAttribute("aria-expanded", String(open));
     $("easy-details").textContent = open
       ? "通常の詳細設定を隠す"
-      : "画像ごとの分割・通常の詳細設定を表示";
+      : "セリフ・設定JSONの保存を表示";
   };
   $("easy-files").onchange = (event) => importFiles(event.target.files, true);
   $("easy-target").onchange = () => {

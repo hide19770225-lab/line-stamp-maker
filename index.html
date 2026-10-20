@@ -8,7 +8,7 @@
     />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="STAMP atelier" />
@@ -23,7 +23,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%231c7754'/%3E%3Cpath d='M16 18h32v23H32l-9 7v-7h-7z' fill='white'/%3E%3C/svg%3E"
     />
     <title>STAMP atelier — LINEスタンプ制作ツール</title>
-    <link rel="stylesheet" href="styles.css?v=pose-confidence-1" />
+    <link rel="stylesheet" href="styles.css?v=individual-adjustments-1" />
     <script src="core.js?v=exterior-unmatte-20261020-1" defer></script>
     <script src="residue.js?v=pose-confidence-1" defer></script>
     <script src="typography.js?v=pose-confidence-1" defer></script>
@@ -33,7 +33,9 @@
     <script src="caption-references.js?v=pose-confidence-1" defer></script>
     <script src="caption-vision.js?v=pose-confidence-1" defer></script>
     <script src="suggestions.js?v=pose-confidence-1" defer></script>
-    <script src="app.js?v=exterior-unmatte-20261020-1" defer></script>
+    <script src="build-info.js?v=individual-adjustments-1" defer></script>
+    <script src="version.js?v=individual-adjustments-1" defer></script>
+    <script src="app.js?v=individual-adjustments-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -65,7 +67,8 @@
         <span
           >ワークスペース
           <span class="breadcrumb">/ 新しいスタンプセット</span></span
-        ><span class="free-badge"><i></i> ずっと無料・API不要</span>
+        ><div class="topbar-actions"><span class="free-badge"><i></i> ずっと無料・API不要</span>
+        <button id="version-button" class="text-button" aria-haspopup="dialog">Ver. 不明</button></div>
       </header>
       <main>
         <div class="page-heading">
@@ -255,7 +258,7 @@
             class="text-button wide"
             aria-expanded="false"
           >
-            画像ごとの分割・通常の詳細設定を表示
+            セリフ・設定JSONの保存を表示
           </button>
         </section>
         <ol class="steps" aria-label="制作の流れ">
@@ -578,7 +581,7 @@
           </div>
           <div class="result-toolbar">
             <p class="hint">
-              画像をタップして編集。チェック柄の部分が透明になります。
+              全画像を番号順に表示します。画像をタップすると、位置・切り抜き範囲・余白を個別に調節できます。チェック柄は透明部分です。
             </p>
             <label class="compact-label"
               >確認用背景<select id="preview-background">
@@ -728,6 +731,22 @@
         </footer>
       </main>
     </div>
+    <dialog id="version-dialog" aria-labelledby="version-title">
+      <div class="dialog-header"><h2 id="version-title">この画面のビルド情報</h2>
+        <button id="close-version" class="icon-button" aria-label="バージョン情報を閉じる">×</button></div>
+      <div class="version-content">
+        <dl><dt>バージョン</dt><dd id="build-version">不明</dd>
+          <dt>最終更新日時（日本時間・ビルド時刻）</dt><dd id="build-time">不明</dd>
+          <dt>GitHubコミットID</dt><dd id="build-commit">不明</dd>
+          <dt>デプロイ環境</dt><dd id="build-environment">不明</dd></dl>
+        <p class="hint">この画面を生成したビルドの情報です。PRの保存だけでは公開サイトは更新されません。</p>
+        <p id="version-status" role="status" aria-live="polite"></p>
+        <button id="check-version" class="button secondary wide">公開ビルドの更新を確認</button>
+        <p class="hint">古い画面が残る場合は、加工設定をJSON保存してから再読み込みしてください。再読み込みで元画像の再選択が必要になります。</p>
+        <button id="reload-version" class="button secondary wide">最新の画面を読み込む</button>
+      </div>
+    </dialog>
+    <p id="version-update" class="version-update" role="status" hidden>公開ビルドが更新されています。設定を保存してから、バージョン情報の「最新の画面を読み込む」を使ってください。</p>
     <dialog id="stamp-dialog" aria-labelledby="dialog-title">
       <div class="dialog-header">
         <div>
@@ -738,6 +757,12 @@
           ×
         </button>
       </div>
+      <div class="stamp-navigation">
+        <button id="previous-stamp" class="button secondary" aria-label="前のスタンプ">← 前</button>
+        <label for="edit-stamp-select">編集する番号<select id="edit-stamp-select"></select></label>
+        <button id="next-stamp" class="button secondary" aria-label="次のスタンプ">次 →</button>
+      </div>
+      <p class="hint edit-save-note">調節はこの番号だけに自動保存します。端末に残す場合は設定JSONを保存してください。</p>
       <div class="dialog-content">
         <div>
           <div class="edit-preview checker" id="edit-preview">
@@ -748,6 +773,51 @@
               aria-label="透過・文字プレビュー。修正モードではドラッグで描けます。"
             ></canvas>
           </div>
+          <fieldset class="image-controls">
+            <legend>キャラクターの大きさ・位置</legend>
+            <p class="hint">
+              透明な余白を除いて大きく配置します。縦横比と外周10pxの余白は維持。上下左右へ動かす余地がない場合は、少し縮小してください。
+            </p>
+            <label for="image-scale"
+              >大きさ <output id="image-scale-value">90</output> %</label
+            >
+            <input
+              id="image-scale"
+              type="range"
+              min="20"
+              max="100"
+              value="90"
+            />
+            <div class="size-buttons">
+              <button class="button secondary" id="image-smaller">− 縮小</button
+              ><button class="button secondary" id="image-larger">
+                ＋ 拡大
+              </button>
+            </div>
+            <label for="image-x"
+              >左右の位置 <output id="image-x-value">50</output> %</label
+            >
+            <input id="image-x" type="range" min="0" max="100" value="50" />
+            <label for="image-y"
+              >上下の位置 <output id="image-y-value">50</output> %</label
+            >
+            <input id="image-y" type="range" min="0" max="100" value="50" />
+            <button class="button secondary wide" id="reset-layout">
+              大きく中央に配置する
+            </button>
+          </fieldset>
+          <details class="crop-controls individual-crop" open>
+            <summary>このスタンプの切り抜き範囲</summary>
+            <p class="hint">
+              各辺から除く割合です。不要な線・影を除けます。消しゴム修正は維持され、値を0に戻すと範囲を戻せます。
+            </p>
+            <div id="stamp-insets"></div>
+            <button class="text-button" id="reset-stamp-crop">
+              切り抜き範囲を戻す
+            </button>
+          </details>
+          <label for="image-margin">画像の安全余白<select id="image-margin"><option value="10">10px（標準）</option><option value="20">20px</option></select></label>
+          <button id="save-stamp-adjustments" class="button primary wide">この画像の調節を保存して一覧へ</button>
           <label class="check-label"
             ><input
               id="auto-cleanup-enabled"
@@ -922,49 +992,6 @@
           </fieldset>
         </div>
         <div class="caption-settings">
-          <fieldset class="image-controls">
-            <legend>キャラクターの大きさ・位置</legend>
-            <p class="hint">
-              透明な余白を除いて大きく配置します。縦横比と外周10pxの余白は維持。上下左右へ動かす余地がない場合は、少し縮小してください。
-            </p>
-            <label for="image-scale"
-              >大きさ <output id="image-scale-value">90</output> %</label
-            >
-            <input
-              id="image-scale"
-              type="range"
-              min="20"
-              max="100"
-              value="90"
-            />
-            <div class="size-buttons">
-              <button class="button secondary" id="image-smaller">− 縮小</button
-              ><button class="button secondary" id="image-larger">
-                ＋ 拡大
-              </button>
-            </div>
-            <label for="image-x"
-              >左右の位置 <output id="image-x-value">50</output> %</label
-            >
-            <input id="image-x" type="range" min="0" max="100" value="50" />
-            <label for="image-y"
-              >上下の位置 <output id="image-y-value">50</output> %</label
-            >
-            <input id="image-y" type="range" min="0" max="100" value="50" />
-            <button class="button secondary wide" id="reset-layout">
-              大きく中央に配置する
-            </button>
-          </fieldset>
-          <details class="crop-controls individual-crop">
-            <summary>このスタンプの切り抜き範囲</summary>
-            <p class="hint">
-              各辺から除く割合です。不要な線・影を除けます。消しゴム修正は維持され、値を0に戻すと範囲を戻せます。
-            </p>
-            <div id="stamp-insets"></div>
-            <button class="text-button" id="reset-stamp-crop">
-              切り抜き範囲を戻す
-            </button>
-          </details>
           <label for="caption-text">セリフ</label
           ><textarea
             id="caption-text"
