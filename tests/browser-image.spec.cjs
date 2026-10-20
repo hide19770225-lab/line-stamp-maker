@@ -75,15 +75,35 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
     await expect(page.locator("#download-link")).toBeVisible({timeout:60000});
     const bytes=fs.readFileSync(await download.path());
     const names=[];
+    const pngs=new Map();
     for(let i=0;i+30<bytes.length;i++){
       if(bytes[i]===0x50&&bytes[i+1]===0x4b&&bytes[i+2]===3&&bytes[i+3]===4){
+        const method=bytes.readUInt16LE(i+8);
         const n=bytes.readUInt16LE(i+26);
         const extra=bytes.readUInt16LE(i+28);
         const size=bytes.readUInt32LE(i+18);
-        names.push(bytes.subarray(i+30,i+30+n).toString("utf8"));
+        const name=bytes.subarray(i+30,i+30+n).toString("utf8");
+        const payload=bytes.subarray(i+30+n+extra,i+30+n+extra+size);
+        names.push(name);
+        // This app creates ZIP entries without compressing PNGs.
+        expect(method).toBe(0);
+        expect(payload.length).toBe(size);
+        expect(payload.subarray(0,8).toString("hex")).toBe("89504e470d0a1a0a");
+        expect(payload.subarray(12,16).toString("ascii")).toBe("IHDR");
+        const width=payload.readUInt32BE(16),height=payload.readUInt32BE(20);
+        const colorType=payload[25];
+        expect(colorType===4||colorType===6).toBeTruthy();
+        expect(size).toBeLessThan(1024*1024);
+        pngs.set(name,{width,height});
         i+=29+n+extra+size;
       }
     }
+    expect(pngs.size).toBe(count+2);
+    for(let n=1;n<=count;n++){
+      expect(pngs.get(String(n).padStart(2,"0")+".png")).toEqual({width:370,height:320});
+    }
+    expect(pngs.get("main.png")).toEqual({width:240,height:240});
+    expect(pngs.get("tab.png")).toEqual({width:96,height:74});
     const file={name:download.suggestedFilename(),names};
     expect(file.name).toBe(`line-stamps-${count}.zip`);
     expect(file.names).toHaveLength(count+2);
