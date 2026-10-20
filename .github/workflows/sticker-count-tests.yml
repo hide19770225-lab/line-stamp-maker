@@ -1,18 +1,8 @@
 name: Sticker count regression tests
 on:
   pull_request:
-    paths:
-      - 'project.js'
-      - 'core.js'
-      - 'tests/zip-counts.test.js'
-      - 'tests/counts.test.js'
-      - '.github/workflows/sticker-count-tests.yml'
   push:
     branches: [main]
-    paths:
-      - 'project.js'
-      - 'tests/counts.test.js'
-      - '.github/workflows/sticker-count-tests.yml'
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,4 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Check JavaScript syntax in every browser module
+        run: |
+          for f in core.js residue.js typography.js project.js audit.js easy.js caption-references.js caption-vision.js suggestions.js build-info.js version.js app.js; do
+            node --check "$f"
+          done
       - run: node --test tests/counts.test.js tests/zip-counts.test.js
