@@ -110,7 +110,7 @@ jobs:
         run: |
           python3 -m http.server 4174 --bind 127.0.0.1 >/tmp/stamp-40-http.log 2>&1 &
           STAMP_TEST_IMAGE=/tmp/stamp-constructed-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-40-evidence node tests/single-sheet-40-browser.cjs
-      - name: Upload constructed-sheet diagnostics
+      - name: Verify all 40 exported PNGs match browser render pixels\n        run: python3 tests/verify_40_zip.py /tmp/stamp-40-evidence/40.zip /tmp/stamp-40-evidence/expected.json\n      - name: Upload constructed-sheet diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
