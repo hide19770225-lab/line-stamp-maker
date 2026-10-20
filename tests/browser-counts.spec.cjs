@@ -7,7 +7,7 @@ for (const count of [8,16,24,32,40]) {
     page.on("pageerror", e=>errors.push(e.message));
     await page.goto("http://127.0.0.1:8765/");
     await expect(page.locator("#target-count")).toBeVisible();
-    await page.locator("#target-count").selectOption(String(count));
+    await page.locator("#easy-target").selectOption(String(count));
     await expect(page.locator("#target-count")).toHaveValue(String(count));
     await expect(page.locator("#easy-target")).toHaveValue(String(count));
     await expect(page.locator("#file-input")).toHaveCount(1);
