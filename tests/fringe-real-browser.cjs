@@ -92,6 +92,10 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    assert.ok(out.alphaEvidence.opaque+out.alphaEvidence.transparent<=370*320,`sticker ${i+1}: impossible alpha counts`);
   }
   assert.equal(new Set(outputs.map(o=>o.png)).size,10,'duplicate rendered PNGs: possible repeated crop');
+  assert.equal(new Set(outputs.map(o=>JSON.stringify(o.rect))).size,10,'duplicate source rectangles: possible repeated crop');
+  for(const [i,out] of outputs.entries()){
+   assert.ok(out.rect&&out.rect.width>0&&out.rect.height>0,`sticker ${i+1}: empty source crop`);
+  }
   const residualDiagnostics=await p.evaluate(pngs=>Promise.all(pngs.map(async (url)=>{
    const im=new Image();im.src=url;await im.decode();
    const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
