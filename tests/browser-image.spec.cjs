@@ -161,3 +161,64 @@ test("white facial detail survives while outer white background is removed",asyn
     expect(m.cornerAlpha).toBe(0);
   }
 });
+
+test("thin diagonal appendages remain attached after background removal",async ({page})=>{
+  await page.goto("http://127.0.0.1:8765/");
+  await page.locator("#production-mode").selectOption("easy");
+  await page.locator("#easy-target").selectOption("8");
+  const encoded=await page.evaluate(()=>{
+    const c=document.createElement("canvas");c.width=600;c.height=1000;
+    const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,1000);
+    for(let row=0;row<5;row++)for(let col=0;col<2;col++){
+      const cx=col*300+150,cy=row*200+100;
+      x.strokeStyle="#a42e7d";x.lineWidth=9;x.lineCap="round";
+      x.beginPath();x.moveTo(cx-25,cy-22);x.lineTo(cx-65,cy-66);x.stroke();
+      x.beginPath();x.moveTo(cx+25,cy-22);x.lineTo(cx+65,cy-66);x.stroke();
+      x.fillStyle="#a42e7d";x.beginPath();x.arc(cx,cy,45,0,Math.PI*2);x.fill();
+      x.fillStyle="#ffb32c";x.beginPath();x.arc(cx-65,cy-66,9,0,Math.PI*2);x.fill();
+      x.beginPath();x.arc(cx+65,cy-66,9,0,Math.PI*2);x.fill();
+    }
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.locator("#easy-files").setInputFiles([{name:"thin-appendage-sheet.png",mimeType:"image/png",buffer:Buffer.from(encoded,"base64")}]);
+  await expect(page.locator("#easy-state")).toContainText("読込済み1枚",{timeout:90000});
+  await page.locator("#easy-process").click();
+  await expect(page.locator("#easy-state")).toContainText("加工済み8個",{timeout:150000});
+  const results=await page.locator("#stamp-grid canvas").evaluateAll(canvases=>canvases.map(c=>{
+    const {data,width,height}=c.getContext("2d").getImageData(0,0,c.width,c.height);
+    const mask=new Uint8Array(width*height);let magenta=0,gold=0;
+    for(let p=0;p<mask.length;p++){
+      const i=p*4;
+      if(data[i+3]<180)continue;
+      const r=data[i],g=data[i+1],b=data[i+2];
+      if(r>90&&r<210&&g<125&&b>70){mask[p]=1;magenta++;}
+      if(r>175&&g>90&&g<225&&b<110){mask[p]=1;gold++;}
+    }
+    // A single 8-connected component must contain the body, both
+    // antennae, and their tips; disconnected fragments indicate clipping.
+    const seen=new Uint8Array(mask.length);
+    let largest=0,components=0;
+    for(let p=0;p<mask.length;p++){
+      if(!mask[p]||seen[p])continue;
+      components++;let size=0,queue=[p];seen[p]=1;
+      for(let q=0;q<queue.length;q++){
+        const at=queue[q],x=at%width,y=Math.floor(at/width);size++;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          const nx=x+dx,ny=y+dy;
+          if(nx<0||ny<0||nx>=width||ny>=height)continue;
+          const next=ny*width+nx;
+          if(mask[next]&&!seen[next]){seen[next]=1;queue.push(next);}
+        }
+      }
+      largest=Math.max(largest,size);
+    }
+    return {magenta,gold,components,largest};
+  }));
+  expect(results).toHaveLength(8);
+  for(const m of results){
+    expect(m.magenta).toBeGreaterThan(100);
+    expect(m.gold).toBeGreaterThan(20);
+    expect(m.components).toBe(1);
+    expect(m.largest).toBeGreaterThan(300);
+  }
+});
