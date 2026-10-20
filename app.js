@@ -970,6 +970,13 @@
         button.disabled = true;
         button.textContent = "検査中…";
         requestAnimationFrame(() => {
+          try {
+          // Reject stale clicks after switching images or changing the grid.
+          if (state.sources[state.selectedSource] !== source ||
+              cell >= source.columns * source.rows) {
+            button.textContent = "画像が変更されました。再選択してください";
+            return;
+          }
           const proposed = suggestSafeRowDivider(source, row, divider);
           if (!proposed) {
             button.textContent = "安全な改善位置なし";
@@ -997,6 +1004,10 @@
           drawSplit();
           renderGridControls();
           renderCellBoundaries(source, cell);
+          } catch (error) {
+            button.textContent = "検査に失敗しました。もう一度お試しください";
+            button.disabled = false;
+          }
         });
       };
       editor.append(button);
