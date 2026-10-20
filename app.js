@@ -728,7 +728,7 @@
       affected.add(row * source.columns + divider);
     }
     const unaffectedCount = currentIssues.filter(issue => !affected.has(issue.cell)).length;
-    const previouslyFlagged = new Set(currentIssues.map(issue => issue.cell));
+    const previousEdges = new Map(currentIssues.map(issue => [issue.cell, new Set(issue.edges)]));
     const baseline = currentIssues.length;
     let best = null;
     try {
@@ -740,10 +740,12 @@
         for (const cell of affected) {
           if (!source.assignments[cell]) continue;
           const rect = C.tileRect(source, cell % source.columns, Math.floor(cell / source.columns));
-          if (C.cropCrossings(source.image, rect, source.mode, source.tolerance, source.color).length) {
-            // A lower total is NOT safe if it introduces a new cut in a
-            // previously clean sticker. Never trade one damaged tile for another.
-            if (!previouslyFlagged.has(cell)) {
+          const edges = C.cropCrossings(source.image, rect, source.mode, source.tolerance, source.color);
+          if (edges.length) {
+            // Reject new cut directions even in a tile that was already flagged.
+            // For example, fixing its right edge must not newly cut its top.
+            const existing = previousEdges.get(cell);
+            if (!existing || edges.some(edge => !existing.has(edge))) {
               count = Infinity;
               break;
             }
