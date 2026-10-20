@@ -3,7 +3,30 @@ on:
   pull_request:
   workflow_dispatch:
 jobs:
-  browser:
+  browser-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - name: Test sticker count selection in browser
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/stamp-http.log 2>&1 &
+          npx playwright test tests/browser-counts.spec.cjs --workers=1 --reporter=line
+      - name: Upload UI failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-ui-failure
+          path: test-results/
+          if-no-files-found: ignore
+  browser-images:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -15,16 +38,14 @@ jobs:
           node-version: '22'
       - run: npm install --no-save --no-package-lock @playwright/test
       - run: npx playwright install --with-deps chromium
-      - name: Start local server and run browser tests
+      - name: Test image processing and ZIP export
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/stamp-http.log 2>&1 &
-          npx playwright test tests/browser-counts.spec.cjs tests/browser-image.spec.cjs --workers=1 --reporter=line --timeout=240000
-      - name: Upload browser failure diagnostics
+          npx playwright test tests/browser-image.spec.cjs --workers=1 --reporter=line --timeout=240000
+      - name: Upload image failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: chromium-failure-diagnostics
-          path: |
-            test-results/
-            playwright-report/
+          name: chromium-image-failure
+          path: test-results/
           if-no-files-found: ignore
