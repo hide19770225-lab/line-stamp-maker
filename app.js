@@ -774,7 +774,7 @@
       : "境界は未検査です。「境界を検査」で全採用コマを確認できます。";
     // Avoid hundreds of canvas probes during every editor redraw on iPhone.
     // Run the expensive search only when the user explicitly requests it.
-    if (issues.length && source.columns > 1) {
+    if (issues.length && source.columns > 1 && !source.rowXs) {
       const flagged = new Set();
       for (const issue of issues) {
         const col = issue.cell % source.columns;
@@ -1113,6 +1113,8 @@
     s.splitIssues = null;
     s.columnYs = null;
     s.manualColumnYs = false;
+    // Shared vertical edits intentionally reset row-specific overrides.
+    if (axis === "xs") s.rowXs = null;
     lines[index] = Math.max(
       index ? lines[index - 1] + gap : 0,
       Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value),
