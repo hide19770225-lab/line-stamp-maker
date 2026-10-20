@@ -96,6 +96,8 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
   assert.deepEqual(outputs.map(o=>o.rect),result.after.tiles.map(t=>t.rect),'UI crop rectangles differ from core extraction');
   for(const [i,out] of outputs.entries()){
    assert.ok(out.rect&&out.rect.width>0&&out.rect.height>0,`sticker ${i+1}: empty source crop`);
+   assert.ok(Number.isFinite(out.rect.x)&&Number.isFinite(out.rect.y),`sticker ${i+1}: nonfinite crop coordinates`);
+   assert.ok(out.rect.x>=0&&out.rect.y>=0,`sticker ${i+1}: negative crop coordinates`);
   }
   const residualDiagnostics=await p.evaluate(pngs=>Promise.all(pngs.map(async (url)=>{
    const im=new Image();im.src=url;await im.decode();
