@@ -231,3 +231,12 @@ test("invalid duplicate numbers across multiple sources cannot be restored",()=>
   b.assignments[3]=a.assignments[0];
   assert.throws(()=>P.readProject(p));
 });
+
+test("mask differences reject missing or mismatched mask lengths instead of saving corrupt data", () => {
+  const a = new Uint8ClampedArray([0,255,255,0]);
+  const b = new Uint8ClampedArray([0,255,255]);
+  assert.throws(()=>P.encodeMask(a,b),/サイズが一致/);
+  assert.throws(()=>P.encodeMask(null,a),/サイズが一致/);
+  assert.throws(()=>P.encodeMask(a,null),/サイズが一致/);
+  assert.deepEqual(P.encodeMask(a,a),[]);
+});
