@@ -158,12 +158,16 @@ test("changing 2x5 to 5x8 discards automatic and manual column gutters", () => {
     s.columnYs = [P.lines(5), P.lines(5)];
     s.manualColumnYs = manual;
     s.gutterUncertain = true;
+    s.insets = { left: 3, right: 4, top: 5, bottom: 6 };
+    s.splitIssues = [{ cell: 0, edges: ["right"] }];
     s.cropReport = ["old coordinates"]; s.cropMethod = "old";
     p.slots[0].caption = "ありがとう";
     P.setGrid(p, s, 5, 8);
     assert.equal(s.columnYs, null);
     assert.equal(s.manualColumnYs, false);
     assert.equal(s.gutterUncertain, false);
+    assert.deepEqual(s.insets, P.blankInsets());
+    assert.equal(s.splitIssues, null);
     assert.deepEqual(s.cropReport, []);
     assert.deepEqual(s.xs, P.lines(5)); assert.deepEqual(s.ys, P.lines(8));
     assert.deepEqual(s.assignments, Array.from({length:40}, (_,i)=>i+1));

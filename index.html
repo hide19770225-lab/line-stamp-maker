@@ -507,7 +507,18 @@
               <p class="hint">
                 緑の線をドラッグ、または下の数値で位置を調整。外周も動かせます。
               </p>
-              <div id="grid-controls" class="grid-controls"></div>
+              <div class="project-toolbar">
+                <button type="button" class="button secondary" id="auto-grid">余白から自動配置</button>
+                <button type="button" class="button secondary" id="inspect-grid">境界を検査</button>
+              </div>
+              <p id="split-diagnostics" role="status" aria-live="polite"></p>
+              <details><summary>分割線を数値で調整する</summary>
+                <div id="grid-controls" class="grid-controls"></div>
+              </details>
+              <h3>全コマの切り抜き位置</h3>
+              <p class="hint">コマをタップすると、そのコマの四辺を微調整できます。赤い辺は絵柄との重なりです。</p>
+              <div id="cell-boundary-editor"></div>
+              <div id="crop-overview"></div>
               <details class="cell-details">
                 <summary>コマの採用・番号を調整する</summary>
                 <p class="hint">
@@ -519,7 +530,7 @@
                 </button>
               </details>
               <button class="button secondary" id="reset-grid">
-                分割位置をリセット
+                画像全体に均等配置（余白もリセット）
               </button>
             </div>
             <div class="split-settings">

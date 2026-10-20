@@ -579,6 +579,7 @@
     $("split-section").hidden = !source;
     if (!source) return;
     $("source-select").value = String(state.selectedSource);
+    $("cell-boundary-editor").replaceChildren();
     $("grid-columns").value = source.columns;
     $("grid-rows").value = source.rows;
     const preset = `${source.columns}x${source.rows}`;
@@ -597,6 +598,7 @@
     $("tolerance-value").textContent = source.tolerance;
     renderGridControls();
     insetControls("source-insets", source.insets, 20, () => {
+      source.splitIssues = null;
       invalidate();
       drawSplit();
     });
@@ -644,6 +646,7 @@
         return;
       captureSlots(true);
       P.setGrid(state, source, columns, rows);
+      $("cell-boundary-editor").replaceChildren();
       invalidate();
       renderSourceEditor();
       renderResults();
@@ -695,6 +698,118 @@
       $(id).append(label, input);
     }
   }
+  const edgeNames = { top: "上辺", bottom: "下辺", left: "左辺", right: "右辺" };
+  function inspectSplit(source) {
+    source.splitIssues = [];
+    for (let cell = 0; cell < source.columns * source.rows; cell++) {
+      if (!source.assignments[cell]) continue;
+      const rect = C.tileRect(source, cell % source.columns, Math.floor(cell / source.columns));
+      const edges = C.cropCrossings(source.image, rect, source.mode, source.tolerance, source.color);
+      if (edges.length) source.splitIssues.push({ cell, edges });
+    }
+    return source.splitIssues;
+  }
+  function renderCropOverview(source) {
+    const overview = $("crop-overview");
+    overview.replaceChildren();
+    const issues = source.splitIssues || [];
+    $("split-diagnostics").textContent = source.splitIssues
+      ? issues.length ? `要調整 ${issues.length}コマ：` + issues.map(issue => `コマ${issue.cell + 1}（${issue.edges.map(edge => edgeNames[edge]).join("・")}）`).join("、")
+        : "全採用コマの境界検査：重なりは検出されませんでした。画像も目視確認してください。"
+      : "境界は未検査です。「境界を検査」で全採用コマを確認できます。";
+    for (let cell = 0; cell < source.columns * source.rows; cell++) {
+      const rect = C.tileRect(source, cell % source.columns, Math.floor(cell / source.columns));
+      const issue = issues.find(issue => issue.cell === cell);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "crop-preview" + (issue ? " crop-error" : "");
+      button.dataset.cell = cell;
+      const title = document.createElement("span");
+      title.textContent = `コマ${cell + 1} · ${source.assignments[cell] ? String(source.assignments[cell]).padStart(2, "0") + ".png" : "除外"}`;
+      const thumb = C.canvas(120, 100), ctx = thumb.getContext("2d");
+      ctx.drawImage(source.image, rect.x, rect.y, rect.width, rect.height, 0, 0, 120, 100);
+      if (issue) {
+        ctx.strokeStyle = "#c91c35"; ctx.lineWidth = 6;
+        for (const edge of issue.edges) {
+          ctx.beginPath();
+          if (edge === "left" || edge === "right") {
+            const x = edge === "left" ? 3 : 117; ctx.moveTo(x, 0); ctx.lineTo(x, 100);
+          } else {
+            const y = edge === "top" ? 3 : 97; ctx.moveTo(0, y); ctx.lineTo(120, y);
+          }
+          ctx.stroke();
+        }
+      }
+      const info = document.createElement("small");
+      info.textContent = `x=${rect.x}–${rect.x + rect.width}, y=${rect.y}–${rect.y + rect.height}` +
+        (issue ? ` / ${issue.edges.map(edge => edgeNames[edge]).join("・")}を調整` : "");
+      button.append(title, thumb, info);
+      button.onclick = () => renderCellBoundaries(source, cell);
+      overview.append(button);
+    }
+  }
+  function renderCellBoundaries(source, cell) {
+    const editor = $("cell-boundary-editor");
+    editor.replaceChildren();
+    const title = document.createElement("strong");
+    title.textContent = `コマ${cell + 1}の境界を微調整（元画像に対する%）`;
+    editor.append(title);
+    const col = cell % source.columns, row = Math.floor(cell / source.columns);
+    for (const [edge, axis, index] of [["left", "xs", col], ["right", "xs", col + 1], ["top", "ys", row], ["bottom", "ys", row + 1]]) {
+      const label = document.createElement("label"), input = document.createElement("input");
+      label.textContent = edgeNames[edge];
+      input.type = "number"; input.inputMode = "decimal";
+      input.min = "0"; input.max = "100"; input.step = "0.1";
+      input.dataset.edge = edge;
+      const values = axis === "ys" ? source.columnYs?.[col] || source.ys : source.xs;
+      input.value = (values[index] * 100).toFixed(1);
+      input.onchange = () => {
+        const value = Number(input.value) / 100;
+        if (!Number.isFinite(value)) return;
+        if (axis === "ys") {
+          source.columnYs ||= Array.from({ length: source.columns }, () => source.ys.slice());
+          const lines = source.columnYs[col];
+          const gap = 2 / source.height;
+          lines[index] = Math.max(index ? lines[index - 1] + gap : 0,
+            Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value));
+          source.manualColumnYs = true;
+        } else {
+          // Moving a vertical line keeps independent horizontal adjustments.
+          const gap = 2 / source.width, lines = source.xs;
+          lines[index] = Math.max(index ? lines[index - 1] + gap : 0,
+            Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value));
+        }
+        source.splitIssues = null;
+        invalidate(); drawSplit(); renderGridControls();
+        renderCellBoundaries(source, cell);
+      };
+      label.append(input); editor.append(label);
+    }
+    const hint = document.createElement("p");
+    hint.textContent = "横線はこの列、縦線は全段で共有します。隣接コマも一覧で確認してください。";
+    editor.append(hint);
+    editor.scrollIntoView({ block: "nearest" });
+  }
+  $("inspect-grid").onclick = () => task(async () => {
+    const source = state.sources[state.selectedSource];
+    if (!source?.image) return;
+    inspectSplit(source); drawSplit();
+  });
+  $("auto-grid").onclick = () => task(async () => {
+    const source = state.sources[state.selectedSource];
+    if (!source?.image) return;
+    const grid = C.suggestGridLines(source.image, source.columns, source.rows);
+    const xs = grid?.xs || P.lines(source.columns);
+    const columnYs = C.suggestColumnRowLines(source.image, xs, source.rows);
+    if (!grid && !columnYs) throw new Error("安全な余白を自動検出できませんでした。均等配置に戻すか、一覧から該当コマを選んで微調整してください。現在の設定は保持しました。");
+    source.xs = xs;
+    source.ys = grid?.ys || P.lines(source.rows);
+    source.columnYs = columnYs;
+    source.manualColumnYs = true;
+    source.cropReport = []; source.cropMethod = null;
+    invalidate(); inspectSplit(source); renderSourceEditor();
+    notify("余白から自動配置しました。全コマの切り抜き位置を確認してください。");
+  });
   function renderGridControls() {
     const source = state.sources[state.selectedSource];
     $("grid-controls").replaceChildren();
@@ -711,13 +826,14 @@
       $("grid-controls").append(details);
     }
 
-    if (source.columns === 2 && source.rows === 5) {
+    if (source.rows > 1) {
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.textContent = source.manualColumnYs
-        ? "左右別の横線調整を終了"
-        : "左右の列ごとに横線を調整";
+        ? "列ごとの横線調整を終了"
+        : "列ごとに横線を調整";
       toggle.onclick = () => {
+        source.splitIssues = null;
         source.manualColumnYs = !source.manualColumnYs;
         if (source.manualColumnYs) {
           source.columnYs = source.columnYs ||
@@ -734,7 +850,7 @@
         for (let col = 0; col < source.columns; col++) {
           for (let row = 1; row < source.rows; row++) {
             const label = document.createElement("label");
-            label.textContent = `${col === 0 ? "左" : "右"}列・${row}段目の下（%）`;
+            label.textContent = `${col + 1}列・${row}段目の下（%）`;
             const input = document.createElement("input");
             input.type = "number";
             input.inputMode = "decimal";
@@ -748,6 +864,7 @@
               lines[row] = Math.max(lines[row-1]+gap,
                 Math.min(lines[row+1]-gap, value));
               input.value = (lines[row] * 100).toFixed(1);
+              source.splitIssues = null;
               invalidate(); drawSplit();
             };
             label.append(input);
@@ -784,6 +901,7 @@
       lines = s[axis];
     if (!Number.isFinite(value)) return;
     const gap = Math.max(0.004, 2 / (axis === "xs" ? s.width : s.height));
+    s.splitIssues = null;
     s.columnYs = null;
     s.manualColumnYs = false;
     lines[index] = Math.max(
@@ -879,10 +997,11 @@
     for (let r = 0; r < source.rows; r++)
       for (let col = 0; col < source.columns; col++) {
         const slot = source.assignments[r * source.columns + col];
+        const rowY = (source.columnYs?.[col] || source.ys)[r];
         ctx.fillStyle = slot ? "#217653" : "#9c7565";
         ctx.fillRect(
           source.xs[col] * c.width + 5,
-          source.ys[r] * c.height + 5,
+          rowY * c.height + 5,
           22,
           20,
         );
@@ -891,9 +1010,28 @@
         ctx.fillText(
           slot ? String(slot).padStart(2, "0") : "×",
           source.xs[col] * c.width + 9,
-          source.ys[r] * c.height + 19,
+          rowY * c.height + 19,
         );
       }
+    for (const issue of source.splitIssues || []) {
+      const rect = C.tileRect(source, issue.cell % source.columns, Math.floor(issue.cell / source.columns));
+      ctx.strokeStyle = "#c91c35";
+      ctx.lineWidth = 5;
+      for (const edge of issue.edges) {
+        const x = rect.x * ratio, y = rect.y * ratio;
+        const right = (rect.x + rect.width) * ratio, bottom = (rect.y + rect.height) * ratio;
+        ctx.beginPath();
+        if (edge === "left" || edge === "right") {
+          const xx = edge === "left" ? x : right;
+          ctx.moveTo(xx, y); ctx.lineTo(xx, bottom);
+        } else {
+          const yy = edge === "top" ? y : bottom;
+          ctx.moveTo(x, yy); ctx.lineTo(right, yy);
+        }
+        ctx.stroke();
+      }
+    }
+    renderCropOverview(source);
   }
   $("split-canvas").onpointerdown = (e) => {
     if (state.busy || !state.sources[state.selectedSource]?.image) return;
@@ -941,6 +1079,10 @@
   $("split-canvas").onpointercancel = endGridDrag;
   $("reset-grid").onclick = () => {
     const source = state.sources[state.selectedSource];
+    source.splitIssues = null;
+    source.cropReport = []; source.cropMethod = null;
+    source.insets = P.blankInsets();
+    $("cell-boundary-editor").replaceChildren();
     source.xs = P.lines(source.columns);
     source.ys = P.lines(source.rows);
     source.columnYs = null;
@@ -952,11 +1094,12 @@
     $(id).addEventListener("input", () => {
       const source = state.sources[state.selectedSource];
       if (!source) return;
+      source.splitIssues = null;
       source.mode = $("background-mode").value;
       source.color = $("background-color").value;
       source.tolerance = Number($("tolerance").value);
       $("tolerance-value").textContent = source.tolerance;
-      invalidate();
+      invalidate(); drawSplit();
     });
   async function processSource(source) {
     if (!source.image)
@@ -968,7 +1111,7 @@
       values.every((value, index) =>
         Math.abs(value - index / (values.length - 1)) < 0.0001,
       );
-    if (source.rows > 1 && !source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
+    if (source.columns === 2 && source.rows === 5 && !source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
       // Use column-specific boundaries when each column has clear white gutters.
       // Never silently fall back to a potentially destructive shared row line.
       const columnLines = C.suggestColumnRowLines(
@@ -979,11 +1122,17 @@
       // A failed search must stop processing. Falling through to tileRect()
       // would silently use the equal-height grid and cut neighbouring art.
       if (!columnLines)
-        throw new Error("安全な分割線を自動検出できませんでした。元画像の『左右の列ごとに横線を調整』で境界を確認・調整してから、再実行してください。画像はまだ書き出していません。");
+        throw new Error("安全な分割線を自動検出できませんでした。元画像の『列ごとに横線を調整』で境界を確認・調整してから、再実行してください。画像はまだ書き出していません。");
     }
     if (!source.manualColumnYs && (!defaultGrid(source.xs) || !defaultGrid(source.ys))) {
       source.columnYs = null;
       source.gutterUncertain = false; // User explicitly chose manual grid lines.
+    }
+    const issues = inspectSplit(source);
+    if (issues.length) {
+      renderSourceEditor();
+      $("split-diagnostics").scrollIntoView({ block: "center" });
+      throw new Error(`分割境界に絵柄が重なるコマが${issues.length}個あります。赤い辺と切り抜き一覧を確認してください。`);
     }
     const tiles = [],
       count = source.assignments.filter(Boolean).length;

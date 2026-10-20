@@ -67,6 +67,8 @@
     source.columnYs = null;
     source.manualColumnYs = false;
     source.gutterUncertain = false;
+    source.insets = blankInsets();
+    source.splitIssues = null;
     source.cropReport = [];
     source.cropMethod = null;
     source.assignments = Array.from(
