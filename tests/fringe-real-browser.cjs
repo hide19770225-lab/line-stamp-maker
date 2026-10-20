@@ -75,6 +75,26 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
   assert.deepEqual(errors,[]);
   result.provenance={baseline:baseRef,input,inputSha256:sha(fs.readFileSync(input)),mode:'auto',tolerance:24,layout:'2x5',insets:0,semanticAcceptance:'NOT PASSED: manual review required'};
   result.app={errors,tiles:outputs};
+  const reviewItems=result.after.tiles.filter(t=>t.review?.needsReview);
+  const reviewReport=[
+   '# Real-image cutout review (not semantic acceptance)',
+   '',
+   'This is an automated triage report. A green CI run does not mean every outline or caption is visually correct.',
+   '',
+   '| Sticker | Review | Flagged boundaries |',
+   '|---|---|---|',
+   ...result.after.tiles.map(t=>`| ${String(t.n).padStart(2,'0')} | ${t.review?.needsReview?'REVIEW REQUIRED':'No boundary warning'} | ${(t.review?.edges||[]).join(', ')||'-'} |`),
+   '',
+   `**${reviewItems.length}/10 images require boundary review.**`,
+   '',
+   'Inspect source-NN.png, before-NN.png, after-NN.png, and final/NN.png at full resolution.',
+   'The pixel-protection assertions do not establish correct crop placement or absence of white fringe.',
+   'Manual approval and real iPhone Safari operation remain outstanding.',
+   ''
+  ].join('\\n');
+  fs.writeFileSync(path.join(dir,'review-report.md'),reviewReport);
+  console.log(`BOUNDARY REVIEW: ${reviewItems.length}/10 require manual inspection; see review-report.md`);
+  fs.writeFileSync(process.env.GITHUB_STEP_SUMMARY||path.join(dir,'ci-summary.md'),reviewReport,{flag:'a'});
   fs.writeFileSync(path.join(dir,'evidence.json'),JSON.stringify(result,null,2));
   console.log('PASS mechanical checks: 10 source tiles; white/dark alpha unchanged; no new transparent pixels; chromatic alpha unchanged; 10 app outputs and ZIP. This does not certify visual quality.');
  }finally{await b.close()}
