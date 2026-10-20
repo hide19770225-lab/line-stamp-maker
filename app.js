@@ -2980,6 +2980,8 @@
             "rows",
             "xs",
             "ys",
+            "rowXs",
+            "columnYs",
             "insets",
             "assignments",
             "mode",
