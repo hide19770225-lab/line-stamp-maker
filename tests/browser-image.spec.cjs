@@ -312,3 +312,35 @@ test("review background selector updates both preview and audit without changing
   }
   await expect(page.locator("#bulk-visual")).toBeEnabled();
 });
+
+test("changing main image invalidates prior bulk visual approval",async ({page})=>{
+  await page.goto("http://127.0.0.1:8765/");
+  await page.locator("#production-mode").selectOption("easy");
+  await page.locator("#easy-target").selectOption("8");
+  const encoded=await page.evaluate(()=>{
+    const c=document.createElement("canvas");c.width=600;c.height=1000;
+    const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,1000);
+    for(let row=0;row<5;row++)for(let col=0;col<2;col++){
+      x.fillStyle="#a34f9c";x.beginPath();x.arc(col*300+150,row*200+100,50,0,Math.PI*2);x.fill();
+    }
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.locator("#easy-files").setInputFiles([{name:"approval-invalidation.png",mimeType:"image/png",buffer:Buffer.from(encoded,"base64")}]);
+  await expect(page.locator("#easy-state")).toContainText("読込済み1枚",{timeout:90000});
+  await page.locator("#easy-process").click();
+  await expect(page.locator("#easy-state")).toContainText("加工済み8個",{timeout:150000});
+  await page.locator("#bulk-visual").check();
+  await page.locator("#bulk-confirm").click();
+  await expect(page.locator("#bulk-summary")).toContainText("目視確認を保存しました");
+  const initial=await page.locator("#main-select").inputValue();
+  const options=await page.locator("#main-select option").evaluateAll(opts=>opts.map(o=>o.value).filter(Boolean));
+  const changed=options.find(v=>v!==initial);
+  expect(changed).toBeTruthy();
+  await page.locator("#main-select").selectOption(changed);
+  await expect(page.locator("#bulk-visual")).toBeDisabled();
+  await expect(page.locator("#bulk-confirm")).toBeDisabled();
+  await expect(page.locator("#bulk-summary")).toContainText("一括検査を実行してください");
+  // No new review: ZIP must not be exported.
+  await page.locator("#easy-export").click();
+  await expect(page.locator("#download-link")).toBeHidden();
+});
