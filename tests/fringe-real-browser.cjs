@@ -141,6 +141,8 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    'Inspect source-NN.png, before-NN.png, after-NN.png, final/NN.png and annotated/NN.png at full resolution.',
    'The pixel-protection assertions do not establish correct crop placement or absence of white fringe.',
    'Red boxes in annotated/NN.png identify small alpha islands. They are diagnostic candidates, NOT proof of residue and NOT automatic deletion targets: punctuation, antennae and decorative marks may be intentional.',
+   'Boundary flags must be compared with source pixels: an already-open character silhouette at the source tile edge is not evidence that background removal deleted the body.',
+   'Do not automatically reconstruct missing lower bodies or remove intentional decorative islands.',
    'Manual approval and real iPhone Safari operation remain outstanding.',
    ''
   ].join('\n');
