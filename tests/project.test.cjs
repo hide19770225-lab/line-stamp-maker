@@ -110,7 +110,7 @@ test("JSON round trip preserves captions, individual settings, cell assignments 
   };
   const restored = P.readProject(JSON.parse(JSON.stringify(p)));
   assert.deepEqual(restored.slots, p.slots);
-  assert.deepEqual(restored.sources, p.sources);
+  assert.deepEqual(restored.sources, p.sources.map(s => ({...s, rowXs: null, columnYs: null, manualColumnYs: false})));
   assert(!("image" in restored.sources[0]));
 });
 test("invalid JSON is rejected before application state can change", () => {
