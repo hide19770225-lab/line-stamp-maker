@@ -123,6 +123,23 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    assert.deepEqual(outputs[i].rect,result.after.tiles[i].rect);
   }
   const download=p.waitForEvent('download');await p.click('#download-button');await(await download).saveAs(path.join(dir,'app-10.zip'));
+  // Verify the actual downloadable ZIP, not just in-memory canvases.
+  const zipCheck=execFileSync('python3',['-c',[
+   'import sys,zipfile,struct,json',
+   'p=sys.argv[1]',
+   'expected={**{f"{i:02}.png":(370,320) for i in range(1,11)},"main.png":(240,240),"tab.png":(96,74)}',
+   'with zipfile.ZipFile(p) as z:',
+   '  names=set(z.namelist())',
+   '  assert names==set(expected),f"ZIP entries mismatch: {names ^ set(expected)}"',
+   '  for name,size in expected.items():',
+   '    data=z.read(name)',
+   '    assert len(data)<1024*1024,f"{name} exceeds 1 MB"',
+   '    assert data[:8]==b"\\x89PNG\\r\\n\\x1a\\n",f"{name} not PNG"',
+   '    assert struct.unpack(">II",data[16:24])==size,f"{name} dimensions"',
+   '    assert data[25]==6,f"{name} not RGBA PNG"',
+   'print("ZIP validation: 10 sticker PNGs + main + tab; sizes, alpha mode, byte limits OK")'
+  ].join('\\n'),path.join(dir,'app-10.zip')],{encoding:'utf8'});
+  console.log(zipCheck.trim());
   assert.deepEqual(errors,[]);
   result.provenance={baseline:baseRef,input,inputSha256:sha(fs.readFileSync(input)),mode:'auto',tolerance:24,layout:'2x5',insets:0,semanticAcceptance:'NOT PASSED: manual review required'};
   result.app={errors,tiles:outputs};
