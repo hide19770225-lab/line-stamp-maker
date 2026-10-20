@@ -953,14 +953,23 @@
     let selected = null, bestCandidate = null, bestIssueCount = Infinity;
     // An imperfect candidate is useful for review only when it strictly
     // improves the existing layout. Never mistake this for export approval.
-    const currentIssueCount = inspectSplit(source).length;
+    const currentIssues = inspectSplit(source);
+    const currentIssueCount = currentIssues.length;
+    const oldEdges = new Map(currentIssues.map(issue => [issue.cell, new Set(issue.edges)]));
     try {
       for (const candidate of candidates) {
         source.xs = candidate.xs;
         source.ys = candidate.ys;
         source.columnYs = candidate.columnYs;
-        const count = inspectSplit(source).length;
-        if (count < bestIssueCount) {
+        const candidateIssues = inspectSplit(source);
+        const count = candidateIssues.length;
+        // Partial improvements must not create fresh warnings on previously
+        // clean tiles or new edge directions on already flagged tiles.
+        const introducesCuts = candidateIssues.some(issue =>
+          !oldEdges.has(issue.cell) ||
+          issue.edges.some(edge => !oldEdges.get(issue.cell).has(edge))
+        );
+        if (!introducesCuts && count < bestIssueCount) {
           bestIssueCount = count;
           bestCandidate = candidate;
         }
