@@ -40,5 +40,26 @@ for(const count of [8,16,24,32,40]) test(`${count} stickers: import PNG sheets a
   await page.locator("#easy-process").click();
   await expect(page.locator("#easy-state")).toContainText(`加工済み${count}個`,{timeout:150000});
   await expect(page.locator("#easy-failure")).toBeHidden();
+  // Inspect the actual rendered canvases, not just the status counter.
+  await expect(page.locator("#stamp-grid canvas")).toHaveCount(count);
+  const images=await page.locator("#stamp-grid canvas").evaluateAll(canvases=>
+    canvases.map(c=>{
+      const ctx=c.getContext("2d");
+      const {data}=ctx.getImageData(0,0,c.width,c.height);
+      let opaque=0,transparent=0;
+      for(let i=3;i<data.length;i+=4){
+        if(data[i]===0) transparent++;
+        if(data[i]>0) opaque++;
+      }
+      return {width:c.width,height:c.height,opaque,transparent};
+    })
+  );
+  for(const img of images){
+    expect(img.width).toBe(370);
+    expect(img.height).toBe(320);
+    expect(img.opaque).toBeGreaterThan(0);
+    expect(img.transparent).toBeGreaterThan(0);
+  }
+
   expect(errors).toEqual([]);
 });
