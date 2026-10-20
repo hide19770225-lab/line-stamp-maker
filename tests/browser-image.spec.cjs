@@ -359,8 +359,9 @@ test("project JSON round-trip restores target and source settings without embedd
   });
   await page.locator("#easy-files").setInputFiles([{name:"restore-source.png",mimeType:"image/png",buffer:Buffer.from(encoded,"base64")}]);
   await expect(page.locator("#easy-state")).toContainText("読込済み1枚",{timeout:90000});
-  const downloadPromise=page.waitForEvent("download");
+  const downloadPromise=page.waitForEvent("download",{timeout:15000});
   await page.locator("#save-project").click();
+  await expect(page.locator("#project-status")).toContainText("設定JSONを作成しました",{timeout:5000});
   const download=await downloadPromise;
   expect(download.suggestedFilename()).toBe("stamp-atelier-project.json");
   const json=JSON.parse(fs.readFileSync(await download.path(),"utf8"));
