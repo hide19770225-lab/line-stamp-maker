@@ -137,6 +137,15 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    '    assert data[:8]==b"\\x89PNG\\r\\n\\x1a\\n",f"{name} not PNG"',
    '    assert struct.unpack(">II",data[16:24])==size,f"{name} dimensions"',
    '    assert data[25]==6,f"{name} not RGBA PNG"',
+   '    import zlib',
+   '    chunks=[];pos=8',
+   '    while pos<len(data):',
+   '      n=struct.unpack(">I",data[pos:pos+4])[0];kind=data[pos+4:pos+8];payload=data[pos+8:pos+8+n];pos+=12+n',
+   '      if kind==b"IDAT":chunks.append(payload)',
+   '      if kind==b"IEND":break',
+   '    raw=zlib.decompress(b"".join(chunks))',
+   '    w,h=size;assert len(raw)==h*(1+4*w),f"{name} unexpected PNG scanline layout"',
+   '    assert any(raw[y*(1+4*w)+1+4*x+3]==0 for y in range(h) for x in range(w)),f"{name} has no fully transparent pixels"',
    'print("ZIP validation: 10 sticker PNGs + main + tab; sizes, alpha mode, byte limits OK")'
   ].join(String.fromCharCode(10)),path.join(dir,'app-10.zip')],{encoding:'utf8'});
   console.log(zipCheck.trim());
