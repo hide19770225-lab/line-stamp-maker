@@ -91,7 +91,7 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    'The pixel-protection assertions do not establish correct crop placement or absence of white fringe.',
    'Manual approval and real iPhone Safari operation remain outstanding.',
    ''
-  ].join('\\n');
+  ].join('\n');
   fs.writeFileSync(path.join(dir,'review-report.md'),reviewReport);
   console.log(`BOUNDARY REVIEW: ${reviewItems.length}/10 require manual inspection; see review-report.md`);
   fs.writeFileSync(process.env.GITHUB_STEP_SUMMARY||path.join(dir,'ci-summary.md'),reviewReport,{flag:'a'});
