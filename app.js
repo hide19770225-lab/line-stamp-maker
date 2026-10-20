@@ -779,8 +779,12 @@
           lines[index] = Math.max(index ? lines[index - 1] + gap : 0,
             Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value));
         }
-        source.splitIssues = null;
-        invalidate(); drawSplit(); renderGridControls();
+        // Refresh the full 40-tile diagnosis immediately after a manual
+        // boundary edit; otherwise stale red cards remain until another click.
+        invalidate();
+        inspectSplit(source);
+        drawSplit();
+        renderGridControls();
         renderCellBoundaries(source, cell);
       };
       label.append(input); editor.append(label);
