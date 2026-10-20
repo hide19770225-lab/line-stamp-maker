@@ -65,7 +65,7 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
      const sourceEdgeRemoved=new Set();
      for(let x=0;x<w;x++)for(const y of [0,h-1])if(isInk(x,y)&&tile.mask[y*w+x]===0)sourceEdgeRemoved.add(y*w+x);
      for(let y=0;y<h;y++)for(const x of [0,w-1])if(isInk(x,y)&&tile.mask[y*w+x]===0)sourceEdgeRemoved.add(y*w+x);
-     if(name==='after')assert.equal(sourceEdgeRemoved.size,0,`source edge ink removed from tile ${n+1}`);
+     if(name==='after'&&sourceEdgeRemoved.size)throw Error(`source edge ink removed from tile ${n+1}: ${sourceEdgeRemoved.size} pixels`);
      results[name].tiles.push({n:n+1,rect,error,diagnosticOnly:!!error,review:tile.boundaryReview,sourceEdgeInk,sourceEdgeRemoved:sourceEdgeRemoved.size,
       whiteChanged,darkChanged,alphaRemoved,unmatted:(tile.matte||[]).length,strong,strongChanged,chromatic,chromaticChanged,png:c.toDataURL(),original:original.toDataURL()});
     }
