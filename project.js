@@ -100,6 +100,8 @@
     source.assignments[cell] = value;
   }
   function encodeMask(mask, autoMask) {
+    if (!mask || !autoMask || mask.length !== autoMask.length)
+      throw new Error("切り抜きマスクのサイズが一致しません。元画像を再読み込みしてください。");
     const runs = [];
     for (let i = 0; i < mask.length;) {
       if (mask[i] === autoMask[i]) {
