@@ -65,6 +65,7 @@
     source.ys = lines(rows);
     // Column gutters and crop diagnostics belong to the previous grid.
     source.columnYs = null;
+    source.rowXs = null;
     source.manualColumnYs = false;
     source.gutterUncertain = false;
     source.insets = blankInsets();
