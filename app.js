@@ -764,6 +764,51 @@
     }
     return best;
   }
+  // Unlike the shared-divider search, this adjusts only one row. It is
+  // useful when captions or antennae are staggered between rows.
+  function suggestSafeRowDivider(source, row, divider) {
+    if (row < 0 || row >= source.rows || divider <= 0 || divider >= source.columns) return null;
+    const lines = source.rowXs?.[row] || source.xs;
+    const original = lines[divider];
+    const center = Math.round(original * source.image.width);
+    const radius = Math.max(4, Math.round(source.image.width / source.columns * 0.12));
+    const min = Math.round(lines[divider - 1] * source.image.width) + 3;
+    const max = Math.round(lines[divider + 1] * source.image.width) - 3;
+    const affected = [row * source.columns + divider - 1, row * source.columns + divider];
+    const baseline = source.splitIssues || inspectSplit(source);
+    const before = new Map(baseline.map(issue => [issue.cell, new Set(issue.edges)]));
+    const existing = baseline.filter(issue => affected.includes(issue.cell)).length;
+    const trial = lines.slice();
+    const previousRows = source.rowXs;
+    let best = null;
+    try {
+      source.rowXs = previousRows ? previousRows.slice() :
+        Array.from({ length: source.rows }, () => source.xs.slice());
+      source.rowXs[row] = trial;
+      for (let offset = -radius; offset <= radius; offset++) {
+        const px = center + offset;
+        if (offset === 0 || px <= min || px >= max) continue;
+        trial[divider] = px / source.image.width;
+        let count = 0, safe = true;
+        for (const cell of affected) {
+          if (!source.assignments[cell]) continue;
+          const rect = C.tileRect(source, cell % source.columns, row);
+          const edges = C.cropCrossings(source.image, rect, source.mode, source.tolerance, source.color);
+          if (!edges.length) continue;
+          const prior = before.get(cell);
+          if (!prior || edges.some(edge => !prior.has(edge))) { safe = false; break; }
+          count++;
+        }
+        if (safe && count < existing && (!best || count < best.count ||
+          (count === best.count && Math.abs(offset) < Math.abs(best.offset)))) {
+          best = { px, count, offset };
+        }
+      }
+    } finally {
+      source.rowXs = previousRows;
+    }
+    return best;
+  }
   function renderCropOverview(source) {
     const overview = $("crop-overview");
     overview.replaceChildren();
