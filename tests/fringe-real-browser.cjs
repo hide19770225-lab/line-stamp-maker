@@ -100,6 +100,7 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    assert.ok(out.rect.x>=0&&out.rect.y>=0,`sticker ${i+1}: negative crop coordinates`);
    assert.ok(Number.isFinite(out.rect.width)&&Number.isFinite(out.rect.height),`sticker ${i+1}: nonfinite crop dimensions`);
    assert.ok(Number.isInteger(out.rect.width)&&Number.isInteger(out.rect.height),`sticker ${i+1}: noninteger crop dimensions`);
+   assert.ok(Number.isInteger(out.rect.x)&&Number.isInteger(out.rect.y),`sticker ${i+1}: noninteger crop coordinates`);
   }
   const residualDiagnostics=await p.evaluate(pngs=>Promise.all(pngs.map(async (url)=>{
    const im=new Image();im.src=url;await im.decode();
