@@ -32,11 +32,11 @@ jobs:
       matrix:
         include:
           - group: small-8-16
-            grep: '^(8|16) stickers:'
+            grep: '(8|16) stickers:'
           - group: large-24-40
-            grep: '^(24|32|40) stickers:'
+            grep: '(24|32|40) stickers:'
           - group: visual-and-restore
-            grep: '^(?![0-9]+ stickers:)'
+            grep: '(white facial|thin diagonal|diagonal arm|review background|changing main image|project JSON)'
     name: browser-images (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
