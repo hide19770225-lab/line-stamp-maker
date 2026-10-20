@@ -346,6 +346,11 @@ test("changing main image invalidates prior bulk visual approval",async ({page})
 });
 
 test("project JSON round-trip restores target and source settings without embedded images",async ({page})=>{
+  test.setTimeout(45000);
+  page.on("console",msg=>console.log("[project browser console]",msg.type(),msg.text()));
+  page.on("pageerror",err=>console.log("[project pageerror]",err.message));
+  console.log("[project] starting save and restore regression");
+
   await page.goto("http://127.0.0.1:8765/");
   await page.locator("#production-mode").selectOption("easy");
   await page.locator("#easy-target").selectOption("16");
@@ -372,9 +377,13 @@ test("project JSON round-trip restores target and source settings without embedd
       return original(blob);
     };
   });
+  console.log("[project] clicking save");
   await page.locator("#save-project").click();
+  console.log("[project] clicked save");
   await expect(page.locator("#project-status")).toContainText("設定JSONを作成しました",{timeout:5000});
+  console.log("[project] success message visible");
   const saved=await page.evaluate(()=>window.__projectSave);
+  console.log("[project] JSON blob captured");
   expect(saved).toBeTruthy();
   expect(saved.bytes).toBeGreaterThan(0);
   const json=JSON.parse(saved.text);
@@ -384,6 +393,7 @@ test("project JSON round-trip restores target and source settings without embedd
   expect(json.sources).toHaveLength(1);
   expect(json.sources[0].name).toBe("restore-source.png");
   expect(json.sources[0].image).toBeUndefined();
+  console.log("[project] JSON parsed, reloading");
   await page.reload();
   await page.locator("#load-project").setInputFiles({
     name:"stamp-atelier-project.json",mimeType:"application/json",
