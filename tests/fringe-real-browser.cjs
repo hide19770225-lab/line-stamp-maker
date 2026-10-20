@@ -83,13 +83,14 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
   await p.waitForFunction(()=>document.querySelectorAll('.source-card').length===1&&!document.body.classList.contains('busy'));
   await p.click('#process-all');await p.waitForFunction(()=>!document.body.classList.contains('busy'));
   assert.equal(await p.locator('.stamp-card').count(),10,await p.locator('#status').innerText());
-  const outputs=await p.evaluate(()=>testTiles.map(s=>{const rendered=StampCore.renderStamp(s),canvas=rendered.canvas,ctx=canvas.getContext('2d');const {data}=ctx.getImageData(0,0,canvas.width,canvas.height);const alpha=(x,y)=>data[(y*canvas.width+x)*4+3];const corners=[alpha(0,0),alpha(canvas.width-1,0),alpha(0,canvas.height-1),alpha(canvas.width-1,canvas.height-1)];let opaque=0,transparent=0;for(let i=3;i<data.length;i+=4){if(data[i]===255)opaque++;if(data[i]===0)transparent++;}return {rect:s.sourceRect,review:s.boundaryReview,autoRemoved:rendered.autoRemoved,png:canvas.toDataURL(),alphaEvidence:{width:canvas.width,height:canvas.height,corners,opaque,transparent}}}));
+  const outputs=await p.evaluate(()=>testTiles.map(s=>{const rendered=StampCore.renderStamp(s),canvas=rendered.canvas,ctx=canvas.getContext('2d');const {data}=ctx.getImageData(0,0,canvas.width,canvas.height);const alpha=(x,y)=>data[(y*canvas.width+x)*4+3];const corners=[alpha(0,0),alpha(canvas.width-1,0),alpha(0,canvas.height-1),alpha(canvas.width-1,canvas.height-1)];let opaque=0,transparent=0,minX=canvas.width,minY=canvas.height,maxX=-1,maxY=-1;for(let i=3;i<data.length;i+=4){const pixel=(i-3)/4,x=pixel%canvas.width,y=Math.floor(pixel/canvas.width);if(data[i]===255)opaque++;if(data[i]===0)transparent++;if(data[i]>0){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}}const margins=[minX,minY,canvas.width-1-maxX,canvas.height-1-maxY];return {rect:s.sourceRect,review:s.boundaryReview,autoRemoved:rendered.autoRemoved,png:canvas.toDataURL(),alphaEvidence:{width:canvas.width,height:canvas.height,corners,opaque,transparent}}}));
   assert.equal(outputs.length,10,'expected 10 rendered real-image stickers');
   for(const [i,out] of outputs.entries()){
    assert.deepEqual([out.alphaEvidence.width,out.alphaEvidence.height],[370,320],`sticker ${i+1}: wrong rendered canvas size`);
    assert.deepEqual(out.alphaEvidence.corners,[0,0,0,0],`sticker ${i+1}: nontransparent corner`);
    assert.ok(out.alphaEvidence.opaque>0&&out.alphaEvidence.transparent>0,`sticker ${i+1}: missing foreground or transparent background`);
    assert.ok(out.alphaEvidence.opaque+out.alphaEvidence.transparent<=370*320,`sticker ${i+1}: impossible alpha counts`);
+   assert.ok(out.alphaEvidence.margins.every(v=>v>=20),`sticker ${i+1}: artwork too close to output edge: ${out.alphaEvidence.margins}`);
   }
   assert.equal(new Set(outputs.map(o=>o.png)).size,10,'duplicate rendered PNGs: possible repeated crop');
   assert.equal(new Set(outputs.map(o=>JSON.stringify(o.rect))).size,10,'duplicate source rectangles: possible repeated crop');
