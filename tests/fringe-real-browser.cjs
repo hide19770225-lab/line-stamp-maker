@@ -102,7 +102,7 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    return {componentCount:components.length,largest:components[0]||null,
     smallIslands:components.slice(1).filter(v=>v.pixels<=150),
     thinIslands:components.slice(1).filter(v=>v.width<=3||v.height<=3)};
-  }),outputs.map(x=>x.png)));
+  })),outputs.map(x=>x.png));
   for(let i=0;i<10;i++){
    writePng(`final/${String(i+1).padStart(2,'0')}.png`,outputs[i].png);
    outputs[i].residualDiagnostics=residualDiagnostics[i];delete outputs[i].png;
