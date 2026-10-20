@@ -1791,7 +1791,7 @@
         label.className = "check-label";
         label.append(
           checkbox,
-          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""} · 左${component.x}／上${component.y}px · 不透明度${component.alphaMin}〜${component.alphaMax}/255${component.nearBoundary ? "・切り抜き境界付近（線・番号か要確認）" : ""}${component.protected ? "・装飾候補として保護" : ""}${component.automatic ? "・完成画像では自動除去済み" : ""}`,
+          `候補${index + 1} · ${component.width}×${component.height}px${component.whiteFraction > 0.8 ? "・白系" : ""} · 左${component.x}／上${component.y}px · 不透明度${component.alphaMin}〜${component.alphaMax}/255 · ${component.automatic ? "削除（完成画像では自動除去済み）" : component.protected ? "保持" : "要確認"} · ${component.reason}`,
         );
         button.className = "button secondary";
         button.textContent = "拡大";
