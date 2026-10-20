@@ -718,14 +718,30 @@
     const radius = Math.max(4, Math.round(source.image.width / source.columns * 0.12));
     const leftLimit = Math.round(source.xs[divider - 1] * source.image.width) + 3;
     const rightLimit = Math.round(source.xs[divider + 1] * source.image.width) - 3;
-    const baseline = inspectSplit(source).length;
+    // Only the two columns touching this divider can change. Checking all 40
+    // cells for every candidate is slow on an iPhone and allocates many canvases.
+    // Keep the warning count for all other cells unchanged.
+    const currentIssues = source.splitIssues || inspectSplit(source);
+    const affected = new Set();
+    for (let row = 0; row < source.rows; row++) {
+      affected.add(row * source.columns + divider - 1);
+      affected.add(row * source.columns + divider);
+    }
+    const unaffectedCount = currentIssues.filter(issue => !affected.has(issue.cell)).length;
+    const baseline = currentIssues.length;
     let best = null;
     try {
       for (let offset = -radius; offset <= radius; offset++) {
         const px = center + offset;
         if (px <= leftLimit || px >= rightLimit || offset === 0) continue;
         source.xs[divider] = px / source.image.width;
-        const count = inspectSplit(source).length;
+        let count = unaffectedCount;
+        for (const cell of affected) {
+          if (!source.assignments[cell]) continue;
+          const rect = C.tileRect(source, cell % source.columns, Math.floor(cell / source.columns));
+          if (C.cropCrossings(source.image, rect, source.mode, source.tolerance, source.color).length) count++;
+          if (best && count > best.count) break;
+        }
         if (count < baseline && (!best || count < best.count ||
             (count === best.count && Math.abs(offset) < Math.abs(best.offset)))) {
           best = { px, count, offset };
@@ -733,7 +749,6 @@
       }
     } finally {
       source.xs[divider] = original;
-      inspectSplit(source);
     }
     return best;
   }
