@@ -798,11 +798,35 @@
               searchButton.textContent = `改善位置を適用（警告 ${issues.length}→${suggestion.count}コマ）`;
               searchButton.disabled = false;
               searchButton.onclick = () => {
-                source.xs[divider] = suggestion.px / source.image.width;
+                // Recheck against the CURRENT image and boundaries. Another
+                // adjustment may have invalidated the earlier suggestion.
+                const fresh = suggestSafeVerticalDivider(source, divider);
+                if (!fresh || fresh.px !== suggestion.px) {
+                  inspectSplit(source);
+                  renderSourceEditor();
+                  notify("境界の状態が変わりました。改善位置をもう一度探してください。");
+                  return;
+                }
+                const original = source.xs[divider];
+                const before = (source.splitIssues || inspectSplit(source)).map(
+                  issue => ({ cell: issue.cell, edges: issue.edges.slice() })
+                );
+                source.xs[divider] = fresh.px / source.image.width;
+                const after = inspectSplit(source);
+                const previous = new Map(before.map(issue => [issue.cell, new Set(issue.edges)]));
+                const regression = after.length >= before.length || after.some(issue =>
+                  !previous.has(issue.cell) || issue.edges.some(edge => !previous.get(issue.cell).has(edge))
+                );
+                if (regression) {
+                  source.xs[divider] = original;
+                  inspectSplit(source);
+                  renderSourceEditor();
+                  notify("新しい切れ目の可能性があるため、変更を取り消しました。");
+                  return;
+                }
                 source.cropReport = [];
                 source.cropMethod = null;
                 invalidate();
-                inspectSplit(source);
                 renderSourceEditor();
               };
             } catch (error) {
