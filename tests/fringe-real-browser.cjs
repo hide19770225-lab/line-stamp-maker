@@ -138,7 +138,7 @@ const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.
    '    assert struct.unpack(">II",data[16:24])==size,f"{name} dimensions"',
    '    assert data[25]==6,f"{name} not RGBA PNG"',
    'print("ZIP validation: 10 sticker PNGs + main + tab; sizes, alpha mode, byte limits OK")'
-  ].join('\\n'),path.join(dir,'app-10.zip')],{encoding:'utf8'});
+  ].join(String.fromCharCode(10)),path.join(dir,'app-10.zip')],{encoding:'utf8'});
   console.log(zipCheck.trim());
   assert.deepEqual(errors,[]);
   result.provenance={baseline:baseRef,input,inputSha256:sha(fs.readFileSync(input)),mode:'auto',tolerance:24,layout:'2x5',insets:0,semanticAcceptance:'NOT PASSED: manual review required'};
