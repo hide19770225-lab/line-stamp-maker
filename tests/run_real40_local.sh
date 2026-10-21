@@ -34,5 +34,16 @@ STAMP_REQUIRE_DISTINCT_OUTPUT=1 \
 node tests/single-sheet-40-browser.cjs
 python3 tests/verify_40_zip.py "$out/40.zip" "$out/expected.json"
 python3 tests/audit_real40_mapping.py "$source_image" "$out/40.zip" >"$out/source-mapping.csv"
+python3 - "$out" "$source_image" <<'PY'
+import json, pathlib, sys
+folder = pathlib.Path(sys.argv[1]); source = pathlib.Path(sys.argv[2])
+result = json.loads((folder / "result.json").read_text())
+result["sourceFilename"] = source.name
+result["sourceMappingCSV"] = "source-mapping.csv"
+result["mappingVerified"] = True
+result["physicalSafariVerified"] = False
+result["cutoutVisualReviewVerified"] = False
+(folder / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\\n")
+PY
 echo "PASS: real 40-sheet browser/ZIP technical regression; manually inspect $out/iphone40-editor.png and all ZIP stickers."
 echo "NOTE: Chromium iPhone emulation is NOT physical iPhone Safari."
