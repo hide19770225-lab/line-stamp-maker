@@ -52,6 +52,9 @@ writer = csv.writer(sys.stdout)
 writer.writerow(["sticker", "best_source_cell", "own_cell_matches", "best_matches", "own_cell_rank"])
 writer.writerows(rows)
 incorrect = [row for row in rows if row[0] != row[1]]
+weak = [row for row in rows if row[2] < 8]
+if weak:
+    raise SystemExit(f"FAIL: {len(weak)} stickers have fewer than 8 matching features; mapping is inconclusive")
 if incorrect:
     raise SystemExit(f"FAIL: {len(incorrect)} stickers do not best match their numbered source cell")
 print("PASS: all 40 stickers best match their numbered source cells", file=sys.stderr)
