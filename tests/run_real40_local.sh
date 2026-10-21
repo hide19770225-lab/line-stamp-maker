@@ -32,7 +32,7 @@ import sys, urllib.request
 try:
     with urllib.request.urlopen(f"http://127.0.0.1:{sys.argv[1]}/", timeout=3) as response:
         page = response.read().decode("utf-8", errors="replace")
-    if "StampCore" not in page and "production-mode" not in page:
+    if "production-mode" not in page:
         raise RuntimeError("response is not the sticker maker application")
 except Exception as error:
     print(f"FAIL: app server did not return sticker maker HTML: {error}", file=sys.stderr)
