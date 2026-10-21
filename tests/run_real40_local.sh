@@ -47,6 +47,8 @@ STAMP_TEST_ARTIFACTS="$out" \
 STAMP_REQUIRE_DISTINCT_OUTPUT=1 \
 node tests/single-sheet-40-browser.cjs
 python3 tests/verify_40_zip.py "$out/40.zip" "$out/expected.json"
+python3 tests/render_export_review_sheet.py "$out/40.zip" "$out/exported-40-review.png"
+python3 tests/verify_export_review_sheet.py "$out/40.zip" "$out/exported-40-review.png"
 mapping_verified=true
 if ! python3 tests/audit_real40_mapping.py "$source_image" "$out/40.zip" >"$out/source-mapping.csv" 2>"$out/mapping-error.log"; then
   mapping_verified=false
@@ -67,5 +69,5 @@ result["physicalSafariVerified"] = False
 result["cutoutVisualReviewVerified"] = False
 (folder / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
 PY
-echo "PASS: real 40-sheet browser/ZIP technical regression; manually inspect $out/iphone40-editor.png and all ZIP stickers."
+echo "PASS: real 40-sheet browser/ZIP technical regression; manually inspect $out/exported-40-review.png, $out/iphone40-editor.png and all ZIP stickers."
 echo "NOTE: Chromium iPhone emulation is NOT physical iPhone Safari."
