@@ -19,11 +19,17 @@ with zipfile.ZipFile(source) as archive:
     bad = archive.testzip()
     if bad:
         raise SystemExit(f"Invalid ZIP CRC: {bad}")
+    numbered = [name for name in archive.namelist() if len(name) == 6 and name[:2].isdigit() and name[2:].lower() == ".png"]
+    unexpected = sorted(name for name in numbered if not (1 <= int(name[:2]) <= 40))
+    if unexpected:
+        raise SystemExit(f"Unexpected numbered stickers: {unexpected}")
     for i in range(40):
         name = f"{i+1:02d}.png"
         if name not in archive.namelist():
             raise SystemExit(f"Missing numbered sticker: {name}")
-        sticker = Image.open(io.BytesIO(archive.read(name))).convert("RGBA")
+        with Image.open(io.BytesIO(archive.read(name))) as original:
+            original.load()
+            sticker = original.convert("RGBA")
         if sticker.size != (370, 320):
             raise SystemExit(f"Unexpected size for {name}: {sticker.size}")
         bg = Image.new("RGBA", sticker.size, "white")
