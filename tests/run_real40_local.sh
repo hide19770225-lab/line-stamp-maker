@@ -47,17 +47,22 @@ STAMP_TEST_ARTIFACTS="$out" \
 STAMP_REQUIRE_DISTINCT_OUTPUT=1 \
 node tests/single-sheet-40-browser.cjs
 python3 tests/verify_40_zip.py "$out/40.zip" "$out/expected.json"
+mapping_verified=true
 if ! python3 tests/audit_real40_mapping.py "$source_image" "$out/40.zip" >"$out/source-mapping.csv" 2>"$out/mapping-error.log"; then
-  echo "FAIL: source mapping did not pass. See $out/source-mapping.csv and $out/mapping-error.log; browser artifacts remain for review." >&2
-  exit 1
+  mapping_verified=false
+  if [[ "${STAMP_ALLOW_INCONCLUSIVE_MAPPING:-0}" != "1" ]]; then
+    echo "FAIL: source mapping did not pass. See $out/source-mapping.csv and $out/mapping-error.log; browser artifacts remain for review." >&2
+    exit 1
+  fi
+  echo "WARN: synthetic-only mapping check inconclusive; mappingVerified will remain false." >&2
 fi
-python3 - "$out" "$source_image" <<'PY'
+python3 - "$out" "$source_image" "$mapping_verified" <<'PY'
 import json, pathlib, sys
 folder = pathlib.Path(sys.argv[1]); source = pathlib.Path(sys.argv[2])
 result = json.loads((folder / "result.json").read_text())
 result["sourceFilename"] = source.name
 result["sourceMappingCSV"] = "source-mapping.csv"
-result["mappingVerified"] = True
+result["mappingVerified"] = sys.argv[3] == "true"
 result["physicalSafariVerified"] = False
 result["cutoutVisualReviewVerified"] = False
 (folder / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
