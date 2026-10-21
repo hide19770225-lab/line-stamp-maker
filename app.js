@@ -3749,12 +3749,20 @@
       return;
     }
     const v = validation();
-    if (!v.complete || v.unreviewed || v.stale.length) {
-      notify(
-        "全画像を加工し、一覧または個別画面で目視確認してからZIPを保存してください。",
-        true,
-      );
+    if (!v.all.length) {
+      notify("ZIPに入れる加工済み画像がありません。まず画像を加工してください。", true);
       return;
+    }
+    if (v.stale.length) {
+      notify("分割・透過設定が変更されています。再加工してから保存してください。", true);
+      return;
+    }
+    if (v.complete && v.unreviewed) {
+      notify("申請用ZIPは全画像の目視確認後に保存できます。確認を完了してください。", true);
+      return;
+    }
+    if (!v.complete) {
+      notify(`加工済み${v.all.length}枚のテストZIPを作成します。申請用には全${state.target}枚の加工と目視確認が必要です。`);
     }
     easyStep(3);
     $("download-button").onclick();
