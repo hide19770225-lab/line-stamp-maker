@@ -64,6 +64,13 @@ if (!image) throw new Error("Set STAMP_TEST_IMAGE to a 5-column, 8-row sheet PNG
     assert.deepEqual(failures,[]);
     await p.check("#bulk-visual"); await p.click("#bulk-confirm");
     const expected=await p.evaluate(()=>Object.fromEntries(Object.values(testStamps).map(s=>[`${String(s.slot).padStart(2,'0')}.png`,StampCore.renderStamp(s).canvas.toDataURL().split(',')[1]])));
+    if (process.env.STAMP_REQUIRE_DISTINCT_OUTPUT === "1") {
+      const images = Object.values(expected);
+      assert.equal(images.length, 40, "expected 40 rendered outputs");
+      const distinct = new Set(images);
+      assert.equal(distinct.size, 40, "different source cells must not produce identical stamp PNGs");
+      console.log("PASS: all 40 rendered PNGs are pixel-distinct");
+    }
     await fs.writeFile(path.join(dir,"expected.json"),JSON.stringify(expected));
     const download=p.waitForEvent("download"); await p.click("#download-button");
     await (await download).saveAs(path.join(dir,"40.zip")); await idle();
