@@ -642,8 +642,11 @@
     // Boundary color alone is not evidence of a cut. Compare the crop to
     // neighbouring ORIGINAL pixels; a stroke must continue across the edge.
     const sourceCuts = cropCrossings(source.image, rect, mode, tolerance, color);
-    if (sourceCuts.length)
-      throw new Error(`コマ${row * (source.columns || source.xs.length - 1) + column + 1}の分割線をまたぐ絵柄があります（${sourceCuts.join("・")}）。分割線と余白設定を調整してください。`);
+    // Preserve the crossing diagnostics, but do not reject a tile before the
+    // user can inspect the processed image. Detection can be a false positive.
+    if (sourceCuts.length) {
+      console.warn(`コマ${row * (source.columns || source.xs.length - 1) + column + 1}：分割境界に色の連続（${sourceCuts.join("・")}）。加工後に目視確認してください。`);
+    }
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
     const scale = Math.min(1, 600 / Math.max(rect.width, rect.height));
     const crop = canvas(
