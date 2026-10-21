@@ -19,7 +19,7 @@ source = pathlib.Path(sys.argv[1]); folder = pathlib.Path(sys.argv[2])
     "sourceBytes": source.stat().st_size,
     "sourceSha256": hashlib.sha256(source.read_bytes()).hexdigest(),
     "sourceKind": "user-supplied local file; not automatically certified as actual original artwork",
-}, ensure_ascii=False, indent=2) + "\\n")
+}, ensure_ascii=False, indent=2) + "\n")
 PY
 port="${STAMP_TEST_PORT:-4174}"
 python3 -m http.server "$port" --bind 127.0.0.1 >"$out/http.log" 2>&1 &
