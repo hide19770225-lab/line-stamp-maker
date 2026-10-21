@@ -25,5 +25,6 @@ STAMP_TEST_ARTIFACTS="$out" \
 STAMP_REQUIRE_DISTINCT_OUTPUT=1 \
 node tests/single-sheet-40-browser.cjs
 python3 tests/verify_40_zip.py "$out/40.zip" "$out/expected.json"
+python3 tests/audit_real40_mapping.py "$source_image" "$out/40.zip" >"$out/source-mapping.csv"
 echo "PASS: real 40-sheet browser/ZIP technical regression; manually inspect $out/iphone40-editor.png and all ZIP stickers."
 echo "NOTE: Chromium iPhone emulation is NOT physical iPhone Safari."
