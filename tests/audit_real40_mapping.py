@@ -47,14 +47,14 @@ with zipfile.ZipFile(sys.argv[2]) as archive:
                               and pair[0].distance < .75 * pair[1].distance))
         ranked = sorted(range(40), key=lambda k: scores[k], reverse=True)
         rows.append((index+1, ranked[0]+1, scores[index], scores[ranked[0]],
-                     ranked.index(index)+1))
+                     ranked.index(index)+1, scores[ranked[1]], scores[index]-scores[ranked[1]]))
 writer = csv.writer(sys.stdout)
-writer.writerow(["sticker", "best_source_cell", "own_cell_matches", "best_matches", "own_cell_rank"])
+writer.writerow(["sticker", "best_source_cell", "own_cell_matches", "best_matches", "own_cell_rank", "runner_up_matches", "match_gap"])
 writer.writerows(rows)
 incorrect = [row for row in rows if row[0] != row[1]]
-weak = [row for row in rows if row[2] < 8]
+weak = [row for row in rows if row[2] < 8 or row[5] < 5]
 if weak:
-    raise SystemExit(f"FAIL: {len(weak)} stickers have fewer than 8 matching features; mapping is inconclusive")
+    raise SystemExit(f"FAIL: {len(weak)} stickers have fewer than 8 matching features or less than 5-point margin over runner-up; mapping is inconclusive")
 if incorrect:
     raise SystemExit(f"FAIL: {len(incorrect)} stickers do not best match their numbered source cell")
 print("PASS: all 40 stickers best match their numbered source cells", file=sys.stderr)
