@@ -114,6 +114,14 @@ jobs:
           STAMP_TEST_IMAGE=/tmp/stamp-constructed-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-40-evidence node tests/single-sheet-40-browser.cjs
       - name: Verify all 40 exported PNGs match browser render pixels
         run: python3 tests/verify_40_zip.py /tmp/stamp-40-evidence/40.zip /tmp/stamp-40-evidence/expected.json
+      - name: Generate synthetic distinct 40 sheet
+        run: python3 tests/prepare_distinct_40_sheet.py tests/fixtures/BBE9DC5F-F70D-490D-B5E3-40E2D682218B.png /tmp/stamp-distinct-40.png
+      - name: Check synthetic sheet distinctness
+        run: python3 tests/check_distinct_40_sheet.py /tmp/stamp-distinct-40.png
+      - name: Test 40 synthetic distinct cells
+        run: STAMP_TEST_IMAGE=/tmp/stamp-distinct-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-distinct-40-evidence node tests/single-sheet-40-browser.cjs
+      - name: Verify 40 synthetic exports
+        run: python3 tests/verify_40_zip.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/expected.json
       - name: Upload constructed-sheet diagnostics
         if: always()
         uses: actions/upload-artifact@v4
