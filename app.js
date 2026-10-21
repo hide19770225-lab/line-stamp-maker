@@ -1854,10 +1854,13 @@
     const warnings = rows.filter(
       (row) => row.report.status === "要確認",
     ).length;
-    bulkAudit = { rows, complete, errors: errors + unresolvedBoundary };
+    // Boundary crossing is a warning requiring visual inspection, not an
+    // audit error. Counting it as an error prevented the visual-review flow
+    // from ever confirming those same stamps (a circular dependency).
+    bulkAudit = { rows, complete, errors };
     $("bulk-summary").textContent =
       `${rows.length}画像：正常 ${rows.length - errors - warnings}・要確認 ${warnings}・エラー ${errors}。` +
-      (unresolvedBoundary ? ` 分割境界の未確認が${unresolvedBoundary}個あります。個別編集で確認してください。` : "") +
+      (unresolvedBoundary ? ` 分割境界の要目視確認が${unresolvedBoundary}個あります。該当画像の欠け・混入を確認し、問題があれば個別編集してください。` : "") +
       (complete
         ? "一覧を目視確認してください。"
         : `未加工の番号があります（${all.length}/${state.target}個）。全数を加工してから再検査してください。`);
