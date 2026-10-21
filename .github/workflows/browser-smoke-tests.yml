@@ -119,7 +119,7 @@ jobs:
       - name: Check synthetic sheet distinctness
         run: python3 tests/check_distinct_40_sheet.py /tmp/stamp-distinct-40.png
       - name: Test 40 synthetic distinct cells
-        run: STAMP_TEST_IMAGE=/tmp/stamp-distinct-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-distinct-40-evidence node tests/single-sheet-40-browser.cjs
+        run: STAMP_REQUIRE_DISTINCT_OUTPUT=1 STAMP_TEST_IMAGE=/tmp/stamp-distinct-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-distinct-40-evidence node tests/single-sheet-40-browser.cjs
       - name: Verify 40 synthetic exports
         run: python3 tests/verify_40_zip.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/expected.json
       - name: Upload constructed-sheet diagnostics
