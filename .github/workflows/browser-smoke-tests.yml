@@ -123,6 +123,16 @@ jobs:
                   z.writestr(f'{i+1:02d}.png', out.getvalue())
           PY
           python3 tests/build_reviewed_40_sheet.py /tmp/reviewed-fixture.zip /tmp/reviewed-fixture-sheet.png
+          python3 - <<'PY'
+          import zipfile, subprocess
+          with zipfile.ZipFile('/tmp/reviewed-missing.png.zip', 'w') as z:
+              for i in range(1, 40):
+                  with zipfile.ZipFile('/tmp/reviewed-fixture.zip') as source:
+                      z.writestr(f'{i:02d}.png', source.read(f'{i:02d}.png'))
+          p = subprocess.run(['python3', 'tests/build_reviewed_40_sheet.py', '/tmp/reviewed-missing.png.zip', '/tmp/should-not-exist.png'], capture_output=True, text=True)
+          assert p.returncode != 0 and 'Missing numbered sticker: 40.png' in (p.stderr + p.stdout), (p.returncode, p.stderr, p.stdout)
+          print('PASS: missing sticker is rejected by reviewed sheet builder')
+          PY
           python3 tests/check_distinct_40_sheet.py /tmp/reviewed-fixture-sheet.png
       - name: Verify distinct-40 fixture guard rejects repeated artwork
         run: python3 -m unittest tests/test_distinct_40_sheet.py -v
