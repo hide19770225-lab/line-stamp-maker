@@ -77,7 +77,10 @@
   let bulkAudit = null;
   function syncBulkControls() {
     const valid = bulkAudit && bulkAudit.complete && !bulkAudit.errors;
-    $("bulk-visual").disabled = !valid;
+    // Visual acknowledgement should be interactive after an inspection even
+    // when individual images still need corrections. Block confirmation, not
+    // the checkbox itself, and explain the remaining blockers below.
+    $("bulk-visual").disabled = !bulkAudit || !bulkAudit.complete;
     $("bulk-confirm").disabled = !valid || !$("bulk-visual").checked;
   }
   function resetBulkAudit() {
@@ -1859,6 +1862,9 @@
         ? "一覧を目視確認してください。"
         : `未加工の番号があります（${all.length}/${state.target}個）。全数を加工してから再検査してください。`);
     syncBulkControls();
+    if (bulkAudit.complete && bulkAudit.errors) {
+      $("bulk-summary").textContent += " 未解決のエラーがあるため、一括確認の保存はできません。チェックは操作できますが、エラー対象のスタンプを個別編集・確認してください。";
+    }
   }
   $("bulk-inspect").onclick = () => task(inspectAll);
   $("bulk-visual").onchange = () => {
