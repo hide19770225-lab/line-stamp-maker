@@ -10,3 +10,14 @@ Two distinct tests are necessary:
 The original source's uneven artwork placement cannot be repaired by merely changing the confidence threshold in `tests/audit_real40_mapping.py`. ORB matches establish source identity, not cutout completeness or clean boundaries.
 
 Do not merge PR #67 until the real 40-image application run and physical iPhone Safari workflow have been reviewed.
+
+## Reproducible reviewed-design browser test
+
+With a locally available 42-image candidate ZIP, from the repository root:
+
+```bash
+python3 tests/build_reviewed_40_sheet.py /path/to/reviewed-42-images.zip /tmp/reviewed-40-sheet.png
+bash tests/run_real40_local.sh /tmp/reviewed-40-sheet.png /tmp/reviewed-40-browser-evidence
+```
+
+This generates 40 *different, previously reviewed* sticker images in a clean 5×8 sheet, then drives the app's 40 editors and ZIP export and checks pixel outputs and source-number mapping. Inspect the resulting `40.zip`, `iphone40-editor.png`, `source-mapping.csv` and `result.json`. This is **not** an acceptance test for the unmodified original sheet; original-source segmentation and physical Safari remain separate gates.
