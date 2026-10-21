@@ -1,4 +1,4 @@
-name: PR 67 iPhone Safari preview
+name: PR 67 iPhone preview build (artifact only)
 on:
   workflow_dispatch:
   push:
@@ -6,16 +6,8 @@ on:
       - preview/pr-67-iphone-safari
 permissions:
   contents: read
-  pages: write
-  id-token: write
-concurrency:
-  group: iphone-preview-pages
-  cancel-in-progress: true
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  preview-artifact:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,9 +17,8 @@ jobs:
           tar --exclude=.git --exclude=.github --exclude=_site --exclude=node_modules --exclude=tests --exclude=docs -cf - . | tar -xf - -C _site
           touch _site/.nojekyll
           test -f _site/index.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: pr67-iphone-preview-site
           path: _site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          if-no-files-found: error
