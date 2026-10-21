@@ -27,6 +27,20 @@ if ! kill -0 "$server_pid" 2>/dev/null; then
   echo "FAIL: local HTTP server did not stay running; see $out/http.log" >&2
   exit 1
 fi
+if ! python3 - "$port" <<'PY'
+import sys, urllib.request
+try:
+    with urllib.request.urlopen(f"http://127.0.0.1:{sys.argv[1]}/", timeout=3) as response:
+        page = response.read().decode("utf-8", errors="replace")
+    if "StampCore" not in page and "production-mode" not in page:
+        raise RuntimeError("response is not the sticker maker application")
+except Exception as error:
+    print(f"FAIL: app server did not return sticker maker HTML: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+then
+  exit 1
+fi
 STAMP_TEST_URL="http://127.0.0.1:$port" \
 STAMP_TEST_IMAGE="$source_image" \
 STAMP_TEST_ARTIFACTS="$out" \
