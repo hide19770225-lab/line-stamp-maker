@@ -11,6 +11,16 @@ source_image="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 out="${2:-/tmp/stamp-real40-evidence}"
 mkdir -p "$out"
 python3 tests/check_distinct_40_sheet.py "$source_image"
+python3 - "$source_image" "$out" <<'PY'
+import hashlib, json, pathlib, sys
+source = pathlib.Path(sys.argv[1]); folder = pathlib.Path(sys.argv[2])
+(folder / "source-provenance.json").write_text(json.dumps({
+    "sourceFilename": source.name,
+    "sourceBytes": source.stat().st_size,
+    "sourceSha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+    "sourceKind": "user-supplied local file; not automatically certified as actual original artwork",
+}, ensure_ascii=False, indent=2) + "\\n")
+PY
 port="${STAMP_TEST_PORT:-4174}"
 python3 -m http.server "$port" --bind 127.0.0.1 >"$out/http.log" 2>&1 &
 server_pid=$!
