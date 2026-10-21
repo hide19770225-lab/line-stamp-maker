@@ -1488,10 +1488,11 @@
       }
     }
     const issues = inspectSplit(source);
+    // A colored pixel crossing a proposed crop edge is a diagnostic signal,
+    // not proof of a bad cut. Do not prevent processing and visual inspection.
+    // Keep splitIssues so the reviewer can inspect the flagged stamps.
     if (issues.length) {
-      renderSourceEditor();
-      $("split-diagnostics").scrollIntoView({ block: "center" });
-      throw new Error(`分割境界に絵柄が重なるコマが${issues.length}個あります。赤い辺と切り抜き一覧を確認してください。`);
+      console.warn(`境界に色の連続を検出: ${issues.length}コマ。加工後に目視確認してください。`);
     }
     const tiles = [],
       count = source.assignments.filter(Boolean).length;
