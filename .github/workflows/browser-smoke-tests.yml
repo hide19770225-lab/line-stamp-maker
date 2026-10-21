@@ -124,6 +124,21 @@ jobs:
           PY
           python3 tests/build_reviewed_40_sheet.py /tmp/reviewed-fixture.zip /tmp/reviewed-fixture-sheet.png
           python3 - <<'PY'
+          import io, zipfile
+          from PIL import Image, ImageChops
+          sheet = Image.open('/tmp/reviewed-fixture-sheet.png').convert('RGB')
+          assert sheet.size == (2100, 2960)
+          with zipfile.ZipFile('/tmp/reviewed-fixture.zip') as z:
+              for i in range(40):
+                  stamp = Image.open(io.BytesIO(z.read(f'{i+1:02d}.png'))).convert('RGBA')
+                  white = Image.new('RGBA', stamp.size, 'white')
+                  white.alpha_composite(stamp)
+                  x, y = (i % 5) * 420 + 25, (i // 5) * 370 + 25
+                  actual = sheet.crop((x, y, x+370, y+320))
+                  assert ImageChops.difference(actual, white.convert('RGB')).getbbox() is None, f'pixel mismatch: {i+1}'
+          print('PASS: all 40 sheet cells pixel-exactly preserve source artwork')
+          PY
+          python3 - <<'PY'
           import zipfile, subprocess
           with zipfile.ZipFile('/tmp/reviewed-missing.png.zip', 'w') as z:
               for i in range(1, 40):
