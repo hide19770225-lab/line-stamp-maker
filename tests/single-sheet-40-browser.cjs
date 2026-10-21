@@ -68,7 +68,7 @@ if (!image) throw new Error("Set STAMP_TEST_IMAGE to a 5-column, 8-row sheet PNG
     const download=p.waitForEvent("download"); await p.click("#download-button");
     await (await download).saveAs(path.join(dir,"40.zip")); await idle();
     assert.deepEqual(errors,[]);
-    await fs.writeFile(path.join(dir,"result.json"),JSON.stringify({image,engine:"Chromium, iPhone 13 emulation (not physical Safari)",transition,visited,errors},null,2));
+    await fs.writeFile(path.join(dir,"result.json"),JSON.stringify({image,engine:"Chromium, iPhone 13 emulation (not physical Safari)",transition,visited,errors,visualReview:"NOT PERFORMED: browser test acknowledges bulk visual confirmation to exercise ZIP download; it does not certify illustration quality",distinctArtwork:"NOT VERIFIED by this browser test: run check_distinct_40_sheet.py on the actual 5x8 source first"},null,2));
     console.log("PASS: single 5x8 sheet, 2-column stale state reset, all 40 editors, ZIP downloaded, zero page errors");
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
