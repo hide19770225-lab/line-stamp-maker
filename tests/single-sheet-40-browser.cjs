@@ -1,5 +1,6 @@
 "use strict";
-const { chromium, devices } = require("playwright");
+const { chromium, webkit, devices } = require("playwright");
+const engineName = process.env.STAMP_BROWSER_ENGINE === "webkit" ? "webkit" : "chromium";
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -9,7 +10,7 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || "/tmp/stamp-single40";
 if (!image) throw new Error("Set STAMP_TEST_IMAGE to a 5-column, 8-row sheet PNG");
 (async () => {
   await fs.mkdir(dir, {recursive:true});
-  const browser = await chromium.launch({args:["--no-sandbox"]});
+  const browser = await (engineName === "webkit" ? webkit : chromium).launch(engineName === "chromium" ? {args:["--no-sandbox"]} : {});
   try {
     const p = await browser.newPage({...devices["iPhone 13"],acceptDownloads:true});
     const errors=[]; p.on("pageerror", e=>errors.push(e.message)); p.on("dialog",d=>d.accept());
@@ -75,7 +76,7 @@ if (!image) throw new Error("Set STAMP_TEST_IMAGE to a 5-column, 8-row sheet PNG
     const download=p.waitForEvent("download"); await p.click("#download-button");
     await (await download).saveAs(path.join(dir,"40.zip")); await idle();
     assert.deepEqual(errors,[]);
-    await fs.writeFile(path.join(dir,"result.json"),JSON.stringify({image,engine:"Chromium, iPhone 13 emulation (not physical Safari)",transition,visited,errors,visualReview:"NOT PERFORMED: browser test acknowledges bulk visual confirmation to exercise ZIP download; it does not certify illustration quality",distinctArtwork:process.env.STAMP_REQUIRE_DISTINCT_OUTPUT === "1" ? "40 output PNGs verified pixel-distinct; original artwork quality and crop boundaries NOT visually verified" : "NOT VERIFIED: run check_distinct_40_sheet.py on actual 5x8 source"},null,2));
+    await fs.writeFile(path.join(dir,"result.json"),JSON.stringify({image,engine:`${engineName}, iPhone 13 emulation (not physical Safari)`,transition,visited,errors,visualReview:"NOT PERFORMED: browser test acknowledges bulk visual confirmation to exercise ZIP download; it does not certify illustration quality",distinctArtwork:process.env.STAMP_REQUIRE_DISTINCT_OUTPUT === "1" ? "40 output PNGs verified pixel-distinct; original artwork quality and crop boundaries NOT visually verified" : "NOT VERIFIED: run check_distinct_40_sheet.py on actual 5x8 source"},null,2));
     console.log("PASS: single 5x8 sheet, 2-column stale state reset, all 40 editors, ZIP downloaded, zero page errors");
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
