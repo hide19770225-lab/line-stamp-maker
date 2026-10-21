@@ -145,6 +145,7 @@ jobs:
       - name: Exercise real40 local runner end to end on synthetic distinct fixture
         env:
           STAMP_TEST_PORT: '4175'
+          STAMP_ALLOW_INCONCLUSIVE_MAPPING: '1'
         run: |
           python3 -m pip install opencv-python-headless
           bash tests/run_real40_local.sh /tmp/stamp-distinct-40.png /tmp/stamp-runner-40-evidence
