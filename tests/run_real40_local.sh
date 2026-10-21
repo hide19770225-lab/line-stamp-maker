@@ -47,8 +47,8 @@ STAMP_TEST_ARTIFACTS="$out" \
 STAMP_REQUIRE_DISTINCT_OUTPUT=1 \
 node tests/single-sheet-40-browser.cjs
 python3 tests/verify_40_zip.py "$out/40.zip" "$out/expected.json"
-if ! python3 tests/audit_real40_mapping.py "$source_image" "$out/40.zip" >"$out/source-mapping.csv"; then
-  echo "FAIL: source mapping did not pass. See $out/source-mapping.csv; browser artifacts remain for review." >&2
+if ! python3 tests/audit_real40_mapping.py "$source_image" "$out/40.zip" >"$out/source-mapping.csv" 2>"$out/mapping-error.log"; then
+  echo "FAIL: source mapping did not pass. See $out/source-mapping.csv and $out/mapping-error.log; browser artifacts remain for review." >&2
   exit 1
 fi
 python3 - "$out" "$source_image" <<'PY'
