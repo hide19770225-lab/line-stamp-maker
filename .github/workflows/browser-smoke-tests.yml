@@ -108,6 +108,22 @@ jobs:
         run: |
           bash -n tests/run_real40_local.sh
           python3 -m py_compile tests/audit_real40_mapping.py tests/check_distinct_40_sheet.py
+      - name: Verify reviewed-ZIP fixture builder on synthetic 40 designs
+        run: |
+          python3 - <<'PY'
+          import io, zipfile
+          from PIL import Image, ImageDraw
+          with zipfile.ZipFile('/tmp/reviewed-fixture.zip', 'w') as z:
+              for i in range(40):
+                  im = Image.new('RGBA', (370, 320), (255, 255, 255, 0))
+                  d = ImageDraw.Draw(im)
+                  d.rectangle((40, 40, 300, 280), fill=((i*37)%255, (i*53)%255, (i*71)%255, 255))
+                  d.text((80, 90), str(i+1), fill=(0,0,0,255))
+                  out = io.BytesIO(); im.save(out, format='PNG')
+                  z.writestr(f'{i+1:02d}.png', out.getvalue())
+          PY
+          python3 tests/build_reviewed_40_sheet.py /tmp/reviewed-fixture.zip /tmp/reviewed-fixture-sheet.png
+          python3 tests/check_distinct_40_sheet.py /tmp/reviewed-fixture-sheet.png
       - name: Verify distinct-40 fixture guard rejects repeated artwork
         run: python3 -m unittest tests/test_distinct_40_sheet.py -v
       - name: Generate constructed 40-cell sheet from 10 real poses
