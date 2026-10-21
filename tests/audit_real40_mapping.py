@@ -52,7 +52,7 @@ writer = csv.writer(sys.stdout)
 writer.writerow(["sticker", "best_source_cell", "own_cell_matches", "best_matches", "own_cell_rank", "runner_up_matches", "match_gap"])
 writer.writerows(rows)
 incorrect = [row for row in rows if row[0] != row[1]]
-weak = [row for row in rows if row[2] < 8 or row[5] < 5]
+weak = [row for row in rows if row[2] < 8 or row[6] < 5]
 if weak:
     raise SystemExit(f"FAIL: {len(weak)} stickers have fewer than 8 matching features or less than 5-point margin over runner-up; mapping is inconclusive")
 if incorrect:
