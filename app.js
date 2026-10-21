@@ -820,6 +820,57 @@
       ? issues.length ? `境界に色の連続を検出 ${issues.length}コマ（切り抜き失敗とは限りません）：` + issues.map(issue => `コマ${issue.cell + 1}（${issue.edges.map(edge => edgeNames[edge]).join("・")}）`).join("、")
          : "全採用コマの境界検査：色の連続は検出されませんでした。画像も目視確認してください。"
       : "境界は未検査です。「境界を検査」で全採用コマを確認できます。";
+    // Try independently optimized vertical gutters for only the affected rows.
+    // A shared column boundary can be correct for most rows yet clip artwork
+    // in one row. Never apply a move unless diagnostics strictly improve.
+    if (issues.some(issue => issue.edges.includes("left") || issue.edges.includes("right"))) {
+      const rowButton = document.createElement("button");
+      rowButton.type = "button";
+      rowButton.className = "button secondary wide";
+      rowButton.textContent = "警告のある行だけ左右境界を自動改善";
+      rowButton.onclick = () => {
+        rowButton.disabled = true;
+        rowButton.textContent = "行ごとの境界を解析中…";
+        requestAnimationFrame(() => {
+          try {
+            const initial = inspectSplit(source).length;
+            let improved = 0;
+            const targets = new Set();
+            for (const issue of source.splitIssues || []) {
+              const row = Math.floor(issue.cell / source.columns);
+              const col = issue.cell % source.columns;
+              if (issue.edges.includes("right") && col < source.columns - 1)
+                targets.add(row + ":" + (col + 1));
+              if (issue.edges.includes("left") && col > 0)
+                targets.add(row + ":" + col);
+            }
+            for (const key of targets) {
+              const [row, divider] = key.split(":").map(Number);
+              const suggestion = suggestSafeRowDivider(source, row, divider);
+              if (!suggestion) continue;
+              source.rowXs ||= Array.from({ length: source.rows }, () => source.xs.slice());
+              const old = source.rowXs[row][divider];
+              const before = inspectSplit(source).length;
+              source.rowXs[row][divider] = suggestion.px / source.image.width;
+              const after = inspectSplit(source).length;
+              if (after < before) improved++;
+              else source.rowXs[row][divider] = old;
+            }
+            invalidate();
+            inspectSplit(source);
+            drawSplit();
+            renderGridControls();
+            notify(improved
+              ? `行別の境界を${improved}か所改善しました（警告 ${initial}→${source.splitIssues.length}コマ）。再加工後に画像を目視確認してください。`
+              : "安全に警告を減らせる行別境界は見つかりませんでした。元画像の重なりを目視確認してください。");
+          } catch (error) {
+            notify(error.message || String(error), true);
+            renderSourceEditor();
+          }
+        });
+      };
+      overview.append(rowButton);
+    }
     // Avoid hundreds of canvas probes during every editor redraw on iPhone.
     // Run the expensive search only when the user explicitly requests it.
     if (issues.length && source.columns > 1 && !source.rowXs) {
