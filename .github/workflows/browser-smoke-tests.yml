@@ -177,6 +177,8 @@ jobs:
         run: python3 tests/verify_40_zip.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/expected.json
       - name: Build numbered review overview from 40 exported PNGs
         run: python3 tests/render_export_review_sheet.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/exported-40-review.png
+      - name: Verify numbered review overview matches all 40 exported PNG pixels
+        run: python3 tests/verify_export_review_sheet.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/exported-40-review.png
       - name: Exercise real40 local runner end to end on synthetic distinct fixture
         env:
           STAMP_TEST_PORT: '4175'
