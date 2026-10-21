@@ -43,7 +43,7 @@ result["sourceMappingCSV"] = "source-mapping.csv"
 result["mappingVerified"] = True
 result["physicalSafariVerified"] = False
 result["cutoutVisualReviewVerified"] = False
-(folder / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\\n")
+(folder / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
 PY
 echo "PASS: real 40-sheet browser/ZIP technical regression; manually inspect $out/iphone40-editor.png and all ZIP stickers."
 echo "NOTE: Chromium iPhone emulation is NOT physical iPhone Safari."
