@@ -13,8 +13,10 @@ const assert = require("node:assert/strict");
     assert.equal(await page.locator("#layout-preset").count(),1);
     await page.selectOption("#production-mode","easy");
     assert.equal(await page.locator("#easy-files").count(),1);
-    await page.selectOption("#layout-preset","5x8");
+    // This selector is hidden until an image is imported.
+    assert.equal(await page.locator('#layout-preset option[value="5x8"]').count(),1);
+    assert.equal(await page.locator("#layout-preset").isVisible(),false);
     assert.deepEqual(errors,[]);
-    console.log("PASS: WebKit iPhone emulation loads app and selects easy 5x8 layout; physical Safari NOT tested");
+    console.log("PASS: WebKit iPhone emulation loads app and confirms 5x8 option exists (hidden until import); physical Safari NOT tested");
   } finally { await browser.close(); }
 })().catch(e => {console.error(e);process.exit(1);});
