@@ -3,6 +3,23 @@ on:
   pull_request:
   workflow_dispatch:
 jobs:
+  webkit-mobile-smoke:
+    name: WebKit iPhone-emulation smoke (not physical Safari)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps webkit
+      - name: Check app startup and 5x8 layout in WebKit
+        run: |
+          python3 -m http.server 4176 --bind 127.0.0.1 >/tmp/stamp-webkit-http.log 2>&1 &
+          node tests/webkit-mobile-smoke.cjs
   browser-ui:
     runs-on: ubuntu-latest
     timeout-minutes: 12
