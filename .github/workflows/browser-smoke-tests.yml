@@ -104,6 +104,10 @@ jobs:
       - run: npm install --no-save --no-package-lock @playwright/test
       - run: npx playwright install --with-deps chromium
       - run: python3 -m pip install pillow
+      - name: Check real-40 runner shell syntax and Python mapping script
+        run: |
+          bash -n tests/run_real40_local.sh
+          python3 -m py_compile tests/audit_real40_mapping.py tests/check_distinct_40_sheet.py
       - name: Verify distinct-40 fixture guard rejects repeated artwork
         run: python3 -m unittest tests/test_distinct_40_sheet.py -v
       - name: Generate constructed 40-cell sheet from 10 real poses
