@@ -354,10 +354,21 @@
             );
             continue;
           }
+          const selectedLayout = easy ? $("easy-layout").value : "";
+          const singleNewSheet = chosen.length === 1 &&
+            state.sources.filter((source) => source.image).length === 0;
+          const likelyFortySheet = singleNewSheet && state.target === 40 &&
+            image.width / image.height >= 0.65 &&
+            image.width / image.height <= 1.15;
           const easyLayout = easy
-            ? $("easy-layout").value.split("x").map(Number)
+            ? (selectedLayout === "auto"
+                ? (likelyFortySheet ? [5, 8] : [2, 5])
+                : selectedLayout.split("x").map(Number))
             : null;
           addSource(image, file.name, easyLayout);
+          if (easy && easyLayout) easyMessages.push(
+            `${file.name}：${easyLayout[0]}列×${easyLayout[1]}段で読み込みました。違う場合は詳細調整で修正してください。`
+          );
           loaded++;
         } catch (error) {
           if (easy) easyMessages.push(`${file.name}：${error.message}`);
@@ -378,7 +389,7 @@
         ...easyPlan().warnings,
       ]);
       notify(
-        "画像を読み込み済みです。提案一覧で画像とセリフを確認・承認してください。",
+        "画像を読み込みました。配置を確認して②の一括加工を押してください。",
         false,
         true,
       );
