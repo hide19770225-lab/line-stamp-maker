@@ -2494,6 +2494,8 @@
             "rows",
             "xs",
             "ys",
+            "columnYs",
+            "manualColumnYs",
             "insets",
             "assignments",
             "mode",
