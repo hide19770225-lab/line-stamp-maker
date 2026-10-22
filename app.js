@@ -174,6 +174,7 @@
       s.xs,
       s.ys,
       s.columnYs || null,
+      s.manualColumnYs === true,
       s.mode,
       s.tolerance,
       s.color,
@@ -799,8 +800,32 @@
       lines = s[axis];
     if (!Number.isFinite(value)) return;
     const gap = Math.max(0.004, 2 / (axis === "xs" ? s.width : s.height));
-    s.columnYs = null;
-    s.manualColumnYs = false;
+    // Moving a shared horizontal guide should not silently erase all
+    // carefully adjusted per-column boundaries.
+    if (axis === "ys" && s.manualColumnYs && s.columnYs) {
+      const previous = lines[index];
+      const next = Math.max(
+        index ? lines[index - 1] + gap : 0,
+        Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value),
+      );
+      const delta = next - previous;
+      lines[index] = next;
+      for (const column of s.columnYs) {
+        column[index] = Math.max(
+          index ? column[index - 1] + gap : 0,
+          Math.min(index < column.length - 1 ? column[index + 1] - gap : 1,
+            column[index] + delta),
+        );
+      }
+      invalidate();
+      return;
+    }
+    if (axis === "xs") {
+      // Vertical guides remain compatible with independent row boundaries.
+    } else {
+      s.columnYs = null;
+      s.manualColumnYs = false;
+    }
     lines[index] = Math.max(
       index ? lines[index - 1] + gap : 0,
       Math.min(index < lines.length - 1 ? lines[index + 1] - gap : 1, value),
