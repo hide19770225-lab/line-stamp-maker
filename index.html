@@ -153,9 +153,9 @@
               multiple
           /></label>
           <p class="hint">
-            元画像の配置を選んでください。分割線は詳細調整でいつでも変更できます。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
+            元画像の配置は自動判定が初期設定です。40個入り1枚は5列×8段に設定します。判定が違う場合は配置を選び直してから読み込んでください。分割線は詳細調整で変更できます。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
           </p>
-          <label>元画像の配置<select id="easy-layout"><option value="2x5">2列×5段（10個入り）</option><option value="5x8">5列×8段（40個入り）</option><option value="4x2">4列×2段（8個入り）</option><option value="4x4">4列×4段（16個入り）</option><option value="4x6">4列×6段（24個入り）</option><option value="4x8">4列×8段（32個入り）</option><option value="1x1">1列×1段（個別画像）</option></select></label><p id="easy-sources" class="hint"></p>
+          <label>元画像の配置<select id="easy-layout"><option value="auto" selected>自動判定（1枚40個は5列×8段）</option><option value="2x5">2列×5段（10個入り）</option><option value="5x8">5列×8段（40個入り）</option><option value="4x2">4列×2段（8個入り）</option><option value="4x4">4列×4段（16個入り）</option><option value="4x6">4列×6段（24個入り）</option><option value="4x8">4列×8段（32個入り）</option><option value="1x1">1列×1段（個別画像）</option></select></label><p id="easy-sources" class="hint"></p>
           <p id="easy-state" class="hint" role="status" aria-live="polite"></p>
           <p id="easy-failure" class="easy-failure" role="alert" hidden></p>
           <ul
