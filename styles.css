@@ -1969,3 +1969,8 @@ body.easy-mode:not(.easy-details-open) .workspace-grid {
 .audit-component-overlay[hidden] {
   display: none;
 }
+
+/* Keep manual split/position controls accessible from automatic mode. */
+body.easy-mode.easy-details-open .workspace-grid,
+body.easy-mode.easy-details-open .project-panel { display: revert; }
+#easy-details { min-height: 48px; }
