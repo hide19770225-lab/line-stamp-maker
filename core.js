@@ -467,6 +467,60 @@
     return components >= 1 && components <= 3 &&
       pixels >= Math.max(5, Math.floor(w * h * 0.0003));
   }
+  // Remove only a confidently isolated dark number at the extreme upper-left.
+  // Operates on the alpha mask, leaving original pixels and all other artwork
+  // intact. An ambiguous shape is left untouched for human inspection.
+  function removeIsolatedGuideNumber(original, mask) {
+    if (!guideNumberCandidate(original, mask)) return 0;
+    const w = original.width, h = original.height;
+    const x0 = Math.floor(w * 0.025), x1 = Math.ceil(w * 0.19);
+    const y0 = Math.floor(h * 0.025), y1 = Math.ceil(h * 0.16);
+    const seen = new Uint8Array(w * h), queue = new Uint32Array(w * h);
+    const groups = [];
+    const dark = (p) => mask[p] > 64 &&
+      original.data[p * 4] < 95 &&
+      original.data[p * 4 + 1] < 95 &&
+      original.data[p * 4 + 2] < 95;
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        const start = y * w + x;
+        if (seen[start] || !dark(start)) continue;
+        let head = 0, tail = 0, minX = x, maxX = x, minY = y, maxY = y;
+        seen[start] = 1; queue[tail++] = start;
+        while (head < tail) {
+          const p = queue[head++], px = p % w, py = (p - px) / w;
+          minX = Math.min(minX, px); maxX = Math.max(maxX, px);
+          minY = Math.min(minY, py); maxY = Math.max(maxY, py);
+          for (const n of [px > x0 ? p - 1 : -1, px + 1 < x1 ? p + 1 : -1,
+            py > y0 ? p - w : -1, py + 1 < y1 ? p + w : -1]) {
+            if (n >= 0 && !seen[n] && dark(n)) {
+              seen[n] = 1; queue[tail++] = n;
+            }
+          }
+        }
+        if (minX > x0 && maxX < x1 - 1 && minY > y0 && maxY < y1 - 1 &&
+            tail >= 3 && tail <= Math.max(20, w * h * 0.006) &&
+            maxX - minX + 1 <= w * 0.10 &&
+            maxY - minY + 1 <= h * 0.10)
+          groups.push({ minX, maxX, minY, maxY });
+      }
+    if (groups.length < 1 || groups.length > 3) return 0;
+    const left = Math.min(...groups.map(g => g.minX));
+    const right = Math.max(...groups.map(g => g.maxX));
+    const top = Math.min(...groups.map(g => g.minY));
+    const bottom = Math.max(...groups.map(g => g.maxY));
+    // Refuse any group near the caption area or outside the small guide zone.
+    if (right >= w * 0.15 || bottom >= h * 0.13 ||
+        right - left > w * 0.13 || bottom - top > h * 0.10) return 0;
+    const pad = 2;
+    let removed = 0;
+    for (let y = Math.max(0, top - pad); y <= Math.min(h - 1, bottom + pad); y++)
+      for (let x = Math.max(0, left - pad); x <= Math.min(w - 1, right + pad); x++) {
+        const p = y * w + x;
+        if (mask[p]) { mask[p] = 0; removed++; }
+      }
+    return removed;
+  }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
@@ -482,15 +536,21 @@
     const original = ctx.getImageData(0, 0, crop.width, crop.height);
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
+    const isNumberedSheet = source.columns === 5 && source.rows === 8;
+    const possibleNumber = isNumberedSheet && guideNumberCandidate(original, mask);
+    const guidePixelsRemoved = possibleNumber
+      ? removeIsolatedGuideNumber(original, mask) : 0;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
-    if (source.columns === 5 && source.rows === 8 &&
-        guideNumberCandidate(original, mask)) {
+    if (possibleNumber) {
       boundaryReview.needsReview = true;
-      boundaryReview.edges.push("左上・元画像の管理番号の可能性");
+      boundaryReview.edges.push(guidePixelsRemoved
+        ? "左上・管理番号を自動除去（要目視確認）"
+        : "左上・元画像の管理番号の可能性");
     }
     return {
       sourceRect: { ...rect },
       boundaryReview,
+      guidePixelsRemoved,
       original,
       mask,
       autoMask: mask.slice(),
@@ -970,6 +1030,7 @@
     suggestColumnRowLines,
     tileBoundaryReview,
     guideNumberCandidate,
+    removeIsolatedGuideNumber,
     stampCrop,
     maskBounds,
     imagePlacement,

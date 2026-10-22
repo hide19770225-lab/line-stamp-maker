@@ -80,3 +80,15 @@ assert.equal(C.guideNumberCandidate(...guideFixture(200, 200, [[10, 9, 13, 18], 
 assert.equal(C.guideNumberCandidate(...guideFixture(200, 200, [[10, 9, 32, 30]])), false);
 assert.equal(C.guideNumberCandidate(...guideFixture(200, 200, [[60, 60, 70, 70]])), false);
 console.log("isolated source guide number warning without large-artwork false positive: OK");
+
+const [guideImage, guideAlpha] = guideFixture(200, 200, [[10, 9, 13, 18], [16, 9, 19, 18]]);
+const guideOriginal = guideAlpha.slice();
+assert.ok(C.removeIsolatedGuideNumber(guideImage, guideAlpha) > 0);
+assert.equal(guideAlpha[12 * 200 + 11], 0);
+assert.equal(guideAlpha[12 * 200 + 17], 0);
+assert.ok(guideOriginal[12 * 200 + 11] > 0);
+const [largeImage, largeAlpha] = guideFixture(200, 200, [[10, 9, 32, 30]]);
+const largeCopy = largeAlpha.slice();
+assert.equal(C.removeIsolatedGuideNumber(largeImage, largeAlpha), 0);
+assert.deepEqual(largeAlpha, largeCopy);
+console.log("safe isolated guide removal and large artwork preservation: OK");
