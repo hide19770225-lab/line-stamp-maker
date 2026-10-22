@@ -92,3 +92,26 @@ const largeCopy = largeAlpha.slice();
 assert.equal(C.removeIsolatedGuideNumber(largeImage, largeAlpha), 0);
 assert.deepEqual(largeAlpha, largeCopy);
 console.log("safe isolated guide removal and large artwork preservation: OK");
+
+// A dark digit-like detail connected to a colored drawing must survive.
+const [connectedImage, connectedAlpha] = guideFixture(200, 200,
+  [[10, 9, 13, 18], [16, 9, 19, 18], [12, 17, 14, 60], [13, 59, 70, 80]]);
+connectedImage.data[(60 * 200 + 20) * 4] = 210;
+const connectedCopy = connectedAlpha.slice();
+assert.equal(C.removeIsolatedGuideNumber(connectedImage, connectedAlpha), 0);
+assert.deepEqual(connectedAlpha, connectedCopy);
+// Do not erase colored punctuation even when it falls in the old padded box.
+const [nearImage, nearAlpha] = guideFixture(200, 200,
+  [[10, 9, 13, 18], [16, 9, 19, 18], [14, 20, 16, 22]]);
+for (let y = 20; y < 22; y++) for (let x = 14; x < 16; x++)
+  nearImage.data[(y * 200 + x) * 4] = 210;
+assert.equal(C.removeIsolatedGuideNumber(nearImage, nearAlpha), 54);
+assert.equal(nearAlpha[20 * 200 + 14], 255);
+const [singleImage, singleAlpha] = guideFixture(200, 200, [[10, 9, 13, 18]]);
+assert.equal(C.removeIsolatedGuideNumber(singleImage, singleAlpha), 0);
+// Reshaping a sheet must clear column geometry of the previous dimensions.
+const reshape = { ...source, columnYs, manualColumnYs: true };
+P.setGrid({ sources: [reshape], target: 40 }, reshape, 2, 5);
+assert.equal(reshape.columnYs, null);
+assert.equal(reshape.manualColumnYs, false);
+console.log('connected artwork, neighboring colored punctuation, single marks and reshaped geometry preserved: OK');

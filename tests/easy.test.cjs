@@ -22,7 +22,7 @@ test("easy production covers all valid counts without mutating row-major assignm
     assert.equal(p.warnings.length, n % 10 ? 1 : 0);
   }
 });
-test("missing images, duplicate images/numbers, pending source and more than four are blocked", () => {
+test("missing images, duplicate images/numbers, pending source and more than forty are blocked", () => {
   assert.deepEqual(
     E.plan([source(1, 1, 10)], 40).missing,
     Array.from({ length: 30 }, (_, i) => i + 11),
@@ -44,9 +44,9 @@ test("missing images, duplicate images/numbers, pending source and more than fou
   );
   assert(
     E.plan(
-      Array.from({ length: 5 }, (_, i) => source(i, i * 8 + 1, 8)),
+      Array.from({ length: 41 }, (_, i) => source(i, 1, 1)),
       40,
-    ).errors.some((s) => s.includes("4枚")),
+    ).errors.some((s) => s.includes("40枚")),
   );
 });
 test("Japanese multiline captions preserve order and blank lines; limits validate before changes", () => {

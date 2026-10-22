@@ -422,103 +422,71 @@
       if (!edges.includes(side + "・小さな独立部分")) edges.push(side + "・小さな独立部分");
     return { needsReview: edges.length > 0, edges };
   }
-  // Guide numbers should be isolated small ink clusters, not a large
-  // character face or a long Japanese caption. This is a warning only.
-  function guideNumberCandidate(original, mask) {
+  // Inspect complete alpha components (including antialiasing), not only their
+  // dark cores. A dark facial detail can be connected to a colored character.
+  // Ambiguous components remain visible and require manual review.
+  function isolatedGuideGroups(original, mask, region = {}) {
     const w = original.width, h = original.height;
-    const x0 = Math.floor(w * 0.025), x1 = Math.ceil(w * 0.19);
-    const y0 = Math.floor(h * 0.025), y1 = Math.ceil(h * 0.16);
-    const seen = new Uint8Array(w * h);
-    const queue = new Uint32Array(w * h);
-    let components = 0, pixels = 0;
-    const dark = (p) => mask[p] > 64 &&
-      original.data[p * 4] < 95 &&
-      original.data[p * 4 + 1] < 95 &&
-      original.data[p * 4 + 2] < 95;
+    const cw = region.width || w, ch = region.height || h;
+    const ox = region.x || 0, oy = region.y || 0;
+    const x0 = Math.max(0, Math.floor(ox + cw * 0.025));
+    const x1 = Math.min(w, Math.ceil(ox + cw * 0.19));
+    const y0 = Math.max(0, Math.floor(oy + ch * 0.025));
+    const y1 = Math.min(h, Math.ceil(oy + ch * 0.16));
+    const seen = new Uint8Array(w * h), queue = new Uint32Array(w * h);
+    const groups = [];
     for (let y = y0; y < y1; y++)
       for (let x = x0; x < x1; x++) {
         const start = y * w + x;
-        if (seen[start] || !dark(start)) continue;
-        let head = 0, tail = 0, count = 0;
+        if (seen[start] || !mask[start]) continue;
+        let head = 0, tail = 0, dark = 0, colored = false;
         let minX = x, maxX = x, minY = y, maxY = y;
         seen[start] = 1; queue[tail++] = start;
         while (head < tail) {
           const p = queue[head++], px = p % w, py = (p - px) / w;
-          count++;
           minX = Math.min(minX, px); maxX = Math.max(maxX, px);
           minY = Math.min(minY, py); maxY = Math.max(maxY, py);
-          for (const n of [px > x0 ? p - 1 : -1,
-            px + 1 < x1 ? p + 1 : -1,
-            py > y0 ? p - w : -1, py + 1 < y1 ? p + w : -1]) {
-            if (n >= 0 && !seen[n] && dark(n)) {
-              seen[n] = 1; queue[tail++] = n;
+          const rgb = original.data.subarray(p * 4, p * 4 + 3);
+          if (Math.max(...rgb) < 95 && mask[p] > 64) dark++;
+          if (Math.max(...rgb) - Math.min(...rgb) > 35) colored = true;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = px + dx, ny = py + dy;
+              if ((!dx && !dy) || nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+              const n = ny * w + nx;
+              if (!seen[n] && mask[n]) { seen[n] = 1; queue[tail++] = n; }
             }
-          }
         }
-        // A shape cut off by the region edge is not confidently a digit.
-        if (minX <= x0 || maxX >= x1 - 1 ||
-            minY <= y0 || maxY >= y1 - 1) continue;
-        if (count >= 3 && count <= Math.max(20, w * h * 0.006) &&
-            maxX - minX + 1 <= w * 0.10 &&
-            maxY - minY + 1 <= h * 0.10) {
-          components++; pixels += count;
-        }
+        if (!colored && dark >= 3 && tail <= Math.max(20, w * h * 0.006) &&
+            minX > x0 && maxX < x1 - 1 && minY > y0 && maxY < y1 - 1 &&
+            maxX - minX + 1 <= w * 0.10 && maxY - minY + 1 <= h * 0.10)
+          groups.push({ minX, maxX, minY, maxY, pixels: Array.from(queue.subarray(0, tail)) });
       }
-    return components >= 1 && components <= 3 &&
-      pixels >= Math.max(5, Math.floor(w * h * 0.0003));
+    return groups;
   }
-  // Remove only a confidently isolated dark number at the extreme upper-left.
-  // Operates on the alpha mask, leaving original pixels and all other artwork
-  // intact. An ambiguous shape is left untouched for human inspection.
-  function removeIsolatedGuideNumber(original, mask) {
-    if (!guideNumberCandidate(original, mask)) return 0;
-    const w = original.width, h = original.height;
-    const x0 = Math.floor(w * 0.025), x1 = Math.ceil(w * 0.19);
-    const y0 = Math.floor(h * 0.025), y1 = Math.ceil(h * 0.16);
-    const seen = new Uint8Array(w * h), queue = new Uint32Array(w * h);
-    const groups = [];
-    const dark = (p) => mask[p] > 64 &&
-      original.data[p * 4] < 95 &&
-      original.data[p * 4 + 1] < 95 &&
-      original.data[p * 4 + 2] < 95;
-    for (let y = y0; y < y1; y++)
-      for (let x = x0; x < x1; x++) {
-        const start = y * w + x;
-        if (seen[start] || !dark(start)) continue;
-        let head = 0, tail = 0, minX = x, maxX = x, minY = y, maxY = y;
-        seen[start] = 1; queue[tail++] = start;
-        while (head < tail) {
-          const p = queue[head++], px = p % w, py = (p - px) / w;
-          minX = Math.min(minX, px); maxX = Math.max(maxX, px);
-          minY = Math.min(minY, py); maxY = Math.max(maxY, py);
-          for (const n of [px > x0 ? p - 1 : -1, px + 1 < x1 ? p + 1 : -1,
-            py > y0 ? p - w : -1, py + 1 < y1 ? p + w : -1]) {
-            if (n >= 0 && !seen[n] && dark(n)) {
-              seen[n] = 1; queue[tail++] = n;
-            }
-          }
-        }
-        if (minX > x0 && maxX < x1 - 1 && minY > y0 && maxY < y1 - 1 &&
-            tail >= 3 && tail <= Math.max(20, w * h * 0.006) &&
-            maxX - minX + 1 <= w * 0.10 &&
-            maxY - minY + 1 <= h * 0.10)
-          groups.push({ minX, maxX, minY, maxY });
-      }
-    if (groups.length < 1 || groups.length > 3) return 0;
-    const left = Math.min(...groups.map(g => g.minX));
-    const right = Math.max(...groups.map(g => g.maxX));
-    const top = Math.min(...groups.map(g => g.minY));
-    const bottom = Math.max(...groups.map(g => g.maxY));
-    // Refuse any group near the caption area or outside the small guide zone.
-    if (right >= w * 0.15 || bottom >= h * 0.13 ||
-        right - left > w * 0.13 || bottom - top > h * 0.10) return 0;
-    const pad = 2;
+  function guideNumberCandidate(original, mask, region) {
+    return isolatedGuideGroups(original, mask, region).length > 0;
+  }
+  function removeIsolatedGuideNumber(original, mask, region = {}) {
+    const groups = isolatedGuideGroups(original, mask, region);
+    // 01..40 are two separate, similarly sized glyphs on one baseline.
+    // A single small mark is insufficient evidence to erase artwork.
+    if (groups.length !== 2) return 0;
+    groups.sort((a, b) => a.minX - b.minX);
+    const [a, b] = groups, w = original.width, h = original.height;
+    const cw = region.width || w, ch = region.height || h;
+    const ox = region.x || 0, oy = region.y || 0;
+    const ah = a.maxY - a.minY + 1, bh = b.maxY - b.minY + 1;
+    if (Math.abs(a.minY - b.minY) > Math.max(1, Math.min(ah, bh) * 0.2) ||
+        Math.min(ah, bh) / Math.max(ah, bh) < 0.75 ||
+        b.minX <= a.maxX || b.minX - a.maxX > Math.max(ah, bh) ||
+        b.maxX >= ox + cw * 0.15 || Math.max(a.maxY, b.maxY) >= oy + ch * 0.13 ||
+        b.maxX - a.minX > cw * 0.13) return 0;
     let removed = 0;
-    for (let y = Math.max(0, top - pad); y <= Math.min(h - 1, bottom + pad); y++)
-      for (let x = Math.max(0, left - pad); x <= Math.min(w - 1, right + pad); x++) {
-        const p = y * w + x;
-        if (mask[p]) { mask[p] = 0; removed++; }
-      }
+    // Delete only the isolated glyph pixels. Never erase a padded bounding
+    // rectangle: neighboring punctuation and colored artwork must survive.
+    for (const group of groups)
+      for (const p of group.pixels) { mask[p] = 0; removed++; }
     return removed;
   }
   function createTile(source, column, row, mode, tolerance, color) {
@@ -537,9 +505,19 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const isNumberedSheet = source.columns === 5 && source.rows === 8;
-    const possibleNumber = isNumberedSheet && guideNumberCandidate(original, mask);
+    // Gutter centering moves crop origins. Locate the printed guide relative
+    // to the original nominal cell, then map into crop pixels; otherwise rows
+    // 2..8 can silently keep their numbers after an automatic boundary shift.
+    const sx = original.width / rect.width, sy = original.height / rect.height;
+    const guideRegion = {
+      x: (column * source.image.width / source.columns - rect.x) * sx,
+      y: (row * source.image.height / source.rows - rect.y) * sy,
+      width: source.image.width / source.columns * sx,
+      height: source.image.height / source.rows * sy,
+    };
+    const possibleNumber = isNumberedSheet && guideNumberCandidate(original, mask, guideRegion);
     const guidePixelsRemoved = possibleNumber
-      ? removeIsolatedGuideNumber(original, mask) : 0;
+      ? removeIsolatedGuideNumber(original, mask, guideRegion) : 0;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
     if (possibleNumber) {
       boundaryReview.needsReview = true;

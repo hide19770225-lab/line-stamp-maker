@@ -16,5 +16,39 @@ jobs:
             echo "Checking $file"
             node --check "$file"
           done
-      - name: Test 40-sticker grid regression
-        run: node tests/grid-40.test.js
+      - name: Test image processing and project regressions
+        run: node --test tests/*.test.cjs tests/grid-40.test.js
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/stamp-tests" playwright@1.61.1
+          "$RUNNER_TEMP/stamp-tests/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Test synthetic 40-sheet and bulk exports
+        run: |
+          set -eu
+          export NODE_PATH="$RUNNER_TEMP/stamp-tests/node_modules"
+          export CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
+          python3 -m http.server 4173 --bind 127.0.0.1 > "$RUNNER_TEMP/stamp-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          python3 - <<'PY'
+          import time, urllib.request
+          for attempt in range(30):
+              try:
+                  urllib.request.urlopen('http://127.0.0.1:4173').read()
+                  break
+              except OSError:
+                  if attempt == 29:
+                      raise
+                  time.sleep(0.2)
+          PY
+          node tests/grid-40-browser.cjs
+          node tests/bulk-review-browser.cjs
+          python3 tests/verify_grid40_zip.py
+          python3 tests/verify_bulk_zip.py
