@@ -80,8 +80,8 @@
         </div>
         <label class="mode-switch"
           >制作モード<select id="production-mode">
-            <option value="normal">通常制作</option>
-            <option value="easy">かんたん一括制作</option>
+            <option value="normal">通常制作（詳細編集）</option>
+            <option value="easy" selected>自動加工・一括確認（推奨）</option>
           </select></label
         >
         <section id="auto-caption-panel" class="panel" hidden>
@@ -242,7 +242,7 @@
           </p>
           <p class="hint">
             ③
-            下の検査一覧を目視し、問題のある画像だけ個別編集してください。目視したチェックと「すべて確認済みにする」が必要です。
+            全画像を一覧で確認し、問題のある画像だけ「個別編集」から余白・幅・位置・切り抜き範囲を調整してください。調整項目は削除されていません。確認後に一括確認してください。
           </p>
           <button id="easy-review" class="button secondary wide">
             ③ 一括確認の一覧へ
@@ -255,7 +255,7 @@
             class="text-button wide"
             aria-expanded="false"
           >
-            画像ごとの分割・通常の詳細設定を表示
+            手動調整を開く（余白・大きさ・位置・切り抜き）
           </button>
         </section>
         <ol class="steps" aria-label="制作の流れ">

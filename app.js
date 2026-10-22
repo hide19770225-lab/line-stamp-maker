@@ -3069,8 +3069,8 @@
     const open = document.body.classList.toggle("easy-details-open");
     $("easy-details").setAttribute("aria-expanded", String(open));
     $("easy-details").textContent = open
-      ? "通常の詳細設定を隠す"
-      : "画像ごとの分割・通常の詳細設定を表示";
+      ? "手動調整を閉じる"
+      : "手動調整を開く（余白・大きさ・位置・切り抜き）";
   };
   $("easy-files").onchange = (event) => importFiles(event.target.files, true);
   $("easy-target").onchange = () => {
@@ -3245,6 +3245,7 @@
     $("download-button").onclick();
   };
   renderCaptionList();
+  $("production-mode").onchange();
   updateEasyState();
   window.addEventListener("beforeunload", (e) => {
     if (state.dirty) {
