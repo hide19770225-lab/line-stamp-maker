@@ -3139,6 +3139,20 @@
         const plan = easyPlan();
         easyWarnings([...plan.errors, ...plan.warnings]);
         if (plan.errors.length) throw new Error(plan.errors.join(" / "));
+        const captionMode = $("caption-handling")?.value || "auto";
+        // Never overlay new text on an image that might already contain text.
+        // Auto is conservative until reliable per-tile Japanese OCR is available.
+        if (captionMode === "auto" && easyCaptionDirty) {
+          throw new Error("自動判定では画像内文字の有無を確実に識別できません。二重文字を防ぐため、セリフ入り・なしを選択してください。");
+        }
+        if (captionMode === "embedded" && easyCaptionDirty) {
+          throw new Error("「セリフあり」では新しい文字を追加しません。入力欄を空にするか、セリフなしモードに切り替えてください。");
+        }
+        if (captionMode === "empty" && !easyCaptionDirty &&
+            !state.slots.some((slot) => slot.caption.trim())) {
+          $("caption-handling-status").textContent =
+            "画像加工後、「セリフ候補を再確認」で40個の提案を確認・承認してください。";
+        }
         if (easyCaptionDirty)
           window.StampEasy.captions($("easy-captions").value);
         if ($("easy-style-enabled").checked) {
@@ -3206,6 +3220,15 @@
         easyStage("完成PNGの一括検査");
         notify("完成PNGを一括検査中…", false, true);
         await inspectAll();
+        if (captionMode === "empty" && !easyCaptionDirty &&
+            !state.slots.some((slot) => slot.caption.trim())) {
+          $("caption-handling-status").textContent =
+            "分割完了。セリフ候補を確認して承認してください。";
+          $("auto-caption-panel").scrollIntoView({ block: "start", behavior: "smooth" });
+        } else if (captionMode === "auto") {
+          $("caption-handling-status").textContent =
+            "自動判定（安全優先）：画像内の文字は保持し、未確認の文字追加は行いません。文字なしの場合は「セリフなし」に切り替えて候補を生成してください。";
+        }
         Object.assign(easyRun, { phase: "complete", stage: "", error: "" });
         updateEasyState();
         easyStep(2);
