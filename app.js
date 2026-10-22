@@ -726,17 +726,17 @@
       $("grid-controls").append(details);
     }
 
-    if (source.columns === 2 && source.rows === 5) {
+    if (source.columns >= 2 && source.rows >= 2) {
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.textContent = source.manualColumnYs
-        ? "左右別の横線調整を終了"
-        : "左右の列ごとに横線を調整";
+        ? "列ごとの横線調整を終了"
+        : "列ごとに横線を細かく調整（40個対応）";
       toggle.onclick = () => {
         source.manualColumnYs = !source.manualColumnYs;
         if (source.manualColumnYs) {
-          source.columnYs = source.columnYs ||
-            Array.from({ length: source.columns }, () => source.ys.slice());
+          source.columnYs = source.columnYs && source.columnYs.length === source.columns
+            ? source.columnYs : Array.from({ length: source.columns }, () => source.ys.slice());
         } else {
           source.columnYs = null;
         }
@@ -749,7 +749,7 @@
         for (let col = 0; col < source.columns; col++) {
           for (let row = 1; row < source.rows; row++) {
             const label = document.createElement("label");
-            label.textContent = `${col === 0 ? "左" : "右"}列・${row}段目の下（%）`;
+            label.textContent = `${col + 1}列目・${row}段目の下（%）`;
             const input = document.createElement("input");
             input.type = "number";
             input.inputMode = "decimal";
