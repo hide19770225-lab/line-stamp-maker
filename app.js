@@ -369,7 +369,19 @@
             );
             continue;
           }
-          addSource(image, file.name, easy ? [2, 5] : null);
+          // Easy mode supports either one 5x8 sheet (40 stamps) or
+          // multiple 2x5 sheets (10 stamps per source).
+          // The old hard-coded 2x5 layout cut 5x8 sheets across rows.
+          const easyLayout = easy
+            ? (chosen.length === 1 && state.sources.filter((source) => source.image).length === 0 &&
+               Number($("easy-target").value) === 40 &&
+               image.width / image.height > 0.65 &&
+               image.width / image.height < 1.15
+                ? [5, 8] : [2, 5])
+            : null;
+          addSource(image, file.name, easyLayout);
+          if (easyLayout?.[0] === 5)
+            easyMessages.push("5列×8段の40個画像として読み込みました。番号順と分割境界を一覧で確認してください。");
           loaded++;
         } catch (error) {
           if (easy) easyMessages.push(`${file.name}：${error.message}`);
