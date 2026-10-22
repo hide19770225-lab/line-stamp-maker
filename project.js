@@ -63,6 +63,7 @@
     source.rows = rows;
     source.xs = lines(columns);
     source.ys = lines(rows);
+    delete source.autoGridXs;
     source.columnYs = null;
     source.manualColumnYs = false;
     source.assignments = Array.from(
@@ -306,6 +307,9 @@
         )
           fail();
       }
+      if (s.autoGridXs !== undefined && (!Array.isArray(s.autoGridXs) ||
+          s.autoGridXs.length !== s.xs.length ||
+          s.autoGridXs.some((x, i) => x !== s.xs[i]))) fail();
       if (s.manualColumnYs !== undefined && typeof s.manualColumnYs !== "boolean") fail();
       if (s.columnYs != null) {
         if (!Array.isArray(s.columnYs) || s.columnYs.length !== s.columns) fail();
@@ -323,6 +327,7 @@
         height: s.height,
         columns: s.columns,
         rows: s.rows,
+        ...(s.autoGridXs ? { autoGridXs: s.autoGridXs.slice() } : {}),
         xs: s.xs.slice(),
         ys: s.ys.slice(),
         columnYs: s.columnYs ? s.columnYs.map((col) => col.slice()) : null,
