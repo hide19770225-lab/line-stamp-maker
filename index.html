@@ -33,7 +33,7 @@
     <script src="caption-references.js?v=pose-confidence-1" defer></script>
     <script src="caption-vision.js?v=pose-confidence-1" defer></script>
     <script src="suggestions.js?v=pose-confidence-1" defer></script>
-    <script src="upload-bridge.js?v=101-ci-verified" defer></script><script src="app.js?v=101-ci-verified" defer></script>
+    <script src="upload-bridge.js?v=101-ci-verified" defer></script><script src="app.js?v=final-png-audit-1" defer></script>
   </head>
   <body>
     <div id="boot-diagnostic" role="status" aria-live="polite" style="position:sticky;top:0;z-index:99999;padding:12px 16px;background:#fff0c2;color:#403000;font-size:16px;font-weight:700;border-bottom:2px solid #a87b00">
@@ -129,7 +129,18 @@
           hidden
           aria-labelledby="easy-title"
         >
-          <h2 id="easy-title">かんたん一括制作</h2><section aria-label="サイト開発の完成度" class="site-progress"><strong>サイト開発の完成度（暫定評価）</strong><p id="site-progress-percent" style="font-size:1.8rem;font-weight:800;margin:8px 0">45%</p><progress value="45" max="100" style="width:100%" aria-label="サイト開発完成度"></progress><p class="hint">機能の実装状況をもとにした暫定評価です。実機での動作確認・品質保証を示す数字ではありません。</p><details><summary>評価の内訳と残課題を見る</summary><ul><li>申請枚数8〜40個の選択：実装済み・未検証</li><li>複数枚・一枚絵の一括加工：実装済み・動作未検証</li><li>分割線・位置の詳細調整：実装済み・実機未検証</li><li>セリフの有無の画像自動判定：未実装</li><li>セリフ候補：限定的な提案のみ・未検証</li><li>全画像の目視確認とZIP保存：実装済み・iPhone実機未検証</li></ul><p>評価更新は検証結果に基づいて開発時に行います。自動的に実機試験が完了したと判定する機能ではありません。</p></details></section>
+          <h2 id="easy-title">かんたん一括制作</h2>
+          <section aria-label="実装と検証の状況" class="site-progress">
+            <strong>実装と検証の状況</strong>
+            <p>実装済み：40個の分割・番号除去、列別調整、個別修正、一括確認、透過PNG・ZIP生成</p>
+            <p>自動テストで検証済み：合成5列×8段画像の01〜40除去・日本語画素保持、40個の確認操作、42画像のZIP内容・寸法・透過</p>
+            <p>未検証：利用者の実画像での40個一括処理、iPhone Safari実機の「ファイルに保存」</p>
+            <details><summary>検証の範囲と残る制限</summary>
+              <p>検証記録：2026年10月22日。ブラウザ試験はLinux Chromiumと共有APIの模擬試験です。実機の保存完了を保証するものではありません。</p>
+              <p>番号除去は形状推定です。接触した数字や異なる配置は個別修正が必要です。セリフの有無の自動判定は未実装のため、自動モードでは既存文字を保持します。加工後は全画像を目視確認してください。</p>
+              <a href="docs/forty-sticker-final-validation.md">検証結果と未検証項目</a>
+            </details>
+          </section>
           <ol
             id="easy-steps"
             class="easy-steps"
@@ -692,6 +703,7 @@
               >
               <a id="download-direct" class="button secondary wide" hidden
                 >共有せずZIPをダウンロードする</a>
+              <p class="hint">保存先にZIPが見つからない場合は、Safariのダウンロード一覧を確認し、上の「共有せずZIPをダウンロードする」で再試行してください。アプリ内ブラウザではSafariで開いて再作成してください。端末側の保存完了はこのページから確認できません。</p>
             </div>
           </div>
         </section>
