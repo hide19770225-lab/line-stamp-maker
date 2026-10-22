@@ -2303,6 +2303,29 @@
     a.click();
     a.remove();
   }
+  // A real user gesture is required for reliable iOS in-app browser downloads.
+  // Keep the generated Blob URL alive so the user can explicitly open/share it.
+  function prepareZipSaveLink(url, name) {
+    const link = $("download-link");
+    link.href = url;
+    link.download = name;
+    link.hidden = false;
+    link.removeAttribute("target");
+    link.setAttribute("aria-label", "作成したZIPを開いて保存する");
+    link.onclick = (event) => {
+      if (!state.zipURL) {
+        event.preventDefault();
+        notify("ZIPがありません。もう一度ZIPを作成してください。", true);
+        return;
+      }
+      // On iOS, the download attribute on a blob URL may be ignored.
+      // Opening the blob in the same tab allows the native share/save UI.
+      if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+        event.preventDefault();
+        window.location.assign(state.zipURL);
+      }
+    };
+  }
   $("download-single").onclick = () =>
     task(async () => {
       const stamp = selected();
@@ -2384,16 +2407,16 @@
       const name = v.complete
         ? `line-stamps-${state.target}.zip`
         : `line-stamps-test-${v.all.length}.zip`;
-      $("download-link").href = state.zipURL;
-      $("download-link").download = name;
-      $("download-link").hidden = false;
+      prepareZipSaveLink(state.zipURL, name);
       const li = document.createElement("li");
       li.textContent = `実ファイル検査OK：${files.length}画像・${(zip.size / 1024 / 1024).toFixed(2)}MB`;
       $("validation-list").append(li);
       state.dirty = false;
-      triggerDownload(state.zipURL, name);
+      if (!/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+        triggerDownload(state.zipURL, name);
+      }
       notify(
-        `${files.length}画像のZIPを作成しました。保存が始まらない場合は「作成したZIPを保存する」をタップしてください。`,
+        `${files.length}画像のZIPを作成しました。iPhoneでは「作成したZIPを保存する」をタップして開き、共有メニューから「ファイルに保存」を選んでください。`,
       );
     });
   $("target-count").onchange = () => {
