@@ -1126,10 +1126,16 @@
           !oldEdges.has(issue.cell) ||
           issue.edges.some(edge => !oldEdges.get(issue.cell).has(edge))
         );
-        if (!introducesCuts && count < bestIssueCount) {
+        // Rank every candidate by its actual warning count. A layout that
+        // moves a warning to a different edge must not produce Infinity or
+        // hide a measurable improvement from the user.
+        if (count < bestIssueCount) {
           bestIssueCount = count;
           bestCandidate = candidate;
         }
+        // Apply partial candidates only if they don't introduce new cut
+        // directions; otherwise preserve the current layout for review.
+        if (introducesCuts && count !== 0) continue;
         if (count === 0) { selected = candidate; break; }
       }
     } finally {
@@ -1141,7 +1147,20 @@
       source.manualColumnYs = original.manualColumnYs;
       source.splitIssues = original.splitIssues;
     }
-    if (!selected && bestCandidate && bestIssueCount < currentIssueCount) {
+    if (!selected && bestCandidate && bestIssueCount < currentIssueCount &&
+        !(function () {
+          const saved = { xs: source.xs, ys: source.ys, columnYs: source.columnYs, rowXs: source.rowXs };
+          try {
+            source.xs = bestCandidate.xs; source.ys = bestCandidate.ys;
+            source.columnYs = bestCandidate.columnYs; source.rowXs = null;
+            return inspectSplit(source).some(issue => !oldEdges.has(issue.cell) ||
+              issue.edges.some(edge => !oldEdges.get(issue.cell).has(edge)));
+          } finally {
+            source.xs = saved.xs; source.ys = saved.ys;
+            source.columnYs = saved.columnYs; source.rowXs = saved.rowXs;
+            inspectSplit(source);
+          }
+        })()) {
       // Explicit auto-layout request: apply the best partial improvement,
       // retain visible warnings and keep the export safety gate in place.
       source.xs = bestCandidate.xs;
@@ -1159,7 +1178,7 @@
     if (!selected) {
       renderSourceEditor();
       throw new Error(candidates.length
-        ? `安全な自動配置は見つかりませんでした（候補の最少エラー数：${bestIssueCount}コマ）。元の設定は保持しました。赤い辺を確認してください。`
+        ? `安全な自動配置は見つかりませんでした（候補の最少警告数：${Number.isFinite(bestIssueCount) ? bestIssueCount : "評価可能な候補なし"}コマ）。元の設定は保持しました。赤い辺を確認してください。`
         : "安全な余白を自動検出できませんでした。元の設定は保持しました。");
     }
     source.xs = selected.xs;
