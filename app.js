@@ -1008,11 +1008,11 @@
       values.every((value, index) =>
         Math.abs(value - index / (values.length - 1)) < 0.0001,
       );
-    // For sheets containing 5x8 numbered artwork, keep every grid boundary
-    // reviewable; a neighboring number can remain opaque after matte removal.
-    if (source.columns === 5 && source.rows === 8 && source.insets.left === 0 &&
-        source.insets.right === 0) {
-      source.gutterUncertain = true;
+    // Manual column boundaries have been explicitly placed by the user.
+    // Clear any stale *automatic gutter* warning, but preserve the independent
+    // pixel-edge review returned by createTile for each individual sticker.
+    if (source.manualColumnYs && source.columnYs) {
+      source.gutterUncertain = false;
     }
     if (!source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
       // Use column-specific boundaries when each column has clear white gutters.
@@ -1099,8 +1099,8 @@
     source.stamps = tiles;
     source.cropReport = tiles.map((stamp) => stamp.cropDiagnostic).filter(Boolean);
     source.cropMethod = source.manualColumnYs
-      ? "左右別・手動調整"
-      : source.columnYs ? "左右別・自動検出" : "共通線・要確認";
+      ? "列別・手動調整"
+      : source.columnYs ? "列別・自動検出" : "共通線・要確認";
     source.processSignature = signature(source);
     invalidate();
     if (state.sources[state.selectedSource] === source) renderGridControls();
