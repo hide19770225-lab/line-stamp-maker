@@ -16,3 +16,5 @@ jobs:
             echo "Checking $file"
             node --check "$file"
           done
+      - name: Test 40-sticker grid regression
+        run: node tests/grid-40.test.js
