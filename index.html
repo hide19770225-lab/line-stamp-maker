@@ -33,7 +33,7 @@
     <script src="caption-references.js?v=pose-confidence-1" defer></script>
     <script src="caption-vision.js?v=pose-confidence-1" defer></script>
     <script src="suggestions.js?v=pose-confidence-1" defer></script>
-    <script src="app.js?v=grid-radius-free-20261019-2" defer></script>
+    <script src="app.js?v=upload-feedback-20261022" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -150,7 +150,7 @@
             <input id="easy-files" class="easy-visible-file" type="file"
               accept="image/png,image/jpeg,image/webp" multiple
               aria-describedby="easy-upload-help" />
-            <p id="easy-upload-help" class="hint">ここをタップして写真・ファイルから画像を選択してください。複数枚の選択もできます。</p>
+            <p id="easy-upload-feedback" role="status" aria-live="polite" style="font-weight:700">まだ画像は選択されていません。</p><p id="easy-upload-help" class="hint">ここをタップして写真・ファイルから画像を選択してください。複数枚の選択もできます。</p>
           </div>
           <p class="hint">
             元画像の配置は自動判定が初期設定です。40個入り1枚は5列×8段に設定します。判定が違う場合は配置を選び直してから読み込んでください。分割線は詳細調整で変更できます。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
