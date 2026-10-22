@@ -318,21 +318,6 @@
   async function importFiles(files, easy = false) {
     if (state.busy) return;
     const easyMessages = [];
-    if (
-      easy &&
-      state.sources.filter((source) => source.image).length + files.length > 4
-    ) {
-      easyWarnings([
-        "元画像は合計4枚までです。今回は読み込まず、既存画像を維持しました。",
-      ]);
-      $("easy-files").value = "";
-      notify(
-        "元画像は合計4枚までです。読み込み済み画像を確認してください。",
-        true,
-        true,
-      );
-      return;
-    }
     const remaining =
       P.MAX_SOURCES - state.sources.filter((source) => source.image).length;
     if (remaining <= 0) {
@@ -369,19 +354,10 @@
             );
             continue;
           }
-          // Easy mode supports either one 5x8 sheet (40 stamps) or
-          // multiple 2x5 sheets (10 stamps per source).
-          // The old hard-coded 2x5 layout cut 5x8 sheets across rows.
           const easyLayout = easy
-            ? (chosen.length === 1 && state.sources.filter((source) => source.image).length === 0 &&
-               Number($("easy-target").value) === 40 &&
-               image.width / image.height > 0.65 &&
-               image.width / image.height < 1.15
-                ? [5, 8] : [2, 5])
+            ? $("easy-layout").value.split("x").map(Number)
             : null;
           addSource(image, file.name, easyLayout);
-          if (easyLayout?.[0] === 5)
-            easyMessages.push("5列×8段の40個画像として読み込みました。番号順と分割境界を一覧で確認してください。");
           loaded++;
         } catch (error) {
           if (easy) easyMessages.push(`${file.name}：${error.message}`);
@@ -389,11 +365,8 @@
         }
       }
       if (loaded) {
-        await proposeLoadedImages();
         renderResults();
-        notify(
-          `${loaded}枚を読み込みました。番号別の提案セリフを確認・承認してください。`,
-        );
+        notify(`${loaded}枚を読み込みました。②で一括加工し、必要に応じてセリフ候補を確認してください。`);
       }
     });
     $("file-input").value = "";
@@ -3214,6 +3187,15 @@
             );
             await processSource(source);
           }
+        }
+        // Never silently overlay generated text on source artwork.
+        // Automatic text detection is not reliable without OCR: ask for review instead.
+        const captionMode = $("easy-caption-mode").value;
+        if (captionMode === "suggest") {
+          easyStage("セリフ候補を準備");
+          await proposeLoadedImages(false);
+        } else if (captionMode === "auto") {
+          notify("セリフの有無を確実に自動識別できないため、既存文字は保持し、必要な場合は「セリフ候補を再確認」を押してください。", false, true);
         }
         easyStage("文字合成・一覧プレビュー");
         finishedProcessing();

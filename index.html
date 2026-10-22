@@ -146,16 +146,16 @@
             </select></label
           >
           <label class="button secondary wide project-file"
-            >10個×最大4枚、または40個入り画像を読み込む<input
+            >元画像を読み込む（8〜40個対応）<input
               id="easy-files"
               type="file"
               accept="image/png,image/jpeg,image/webp"
               multiple
           /></label>
           <p class="hint">
-            10個入りは2列×5段、40個入り1枚は5列×8段。判定が違う場合は詳細調整で変更してください。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
+            元画像の配置を選んでください。分割線は詳細調整でいつでも変更できます。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
           </p>
-          <p id="easy-sources" class="hint"></p>
+          <label>元画像の配置<select id="easy-layout"><option value="2x5">2列×5段（10個入り）</option><option value="5x8">5列×8段（40個入り）</option><option value="4x2">4列×2段（8個入り）</option><option value="4x4">4列×4段（16個入り）</option><option value="4x6">4列×6段（24個入り）</option><option value="4x8">4列×8段（32個入り）</option><option value="1x1">1列×1段（個別画像）</option></select></label><p id="easy-sources" class="hint"></p>
           <p id="easy-state" class="hint" role="status" aria-live="polite"></p>
           <p id="easy-failure" class="easy-failure" role="alert" hidden></p>
           <ul
@@ -163,7 +163,7 @@
             class="validation-list"
             aria-live="polite"
           ></ul>
-          <label for="easy-captions">セリフ（1行目＝01.png、最大40行）</label
+          <label>セリフ処理<select id="easy-caption-mode"><option value="auto" selected>自動判定（文字ありは保持・文字なしは候補確認）</option><option value="existing">セリフあり（分割のみ）</option><option value="suggest">セリフなし（自動提案）</option></select></label><p class="hint">自動判定は文字認識の精度を保証できません。判定が不確かな画像はセリフを勝手に重ねず、候補を確認してください。</p><label for="easy-captions">セリフ（1行目＝01.png、最大40行）</label
           ><textarea
             id="easy-captions"
             rows="6"
