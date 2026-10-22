@@ -3212,11 +3212,11 @@
         }
         // Never silently overlay generated text on source artwork.
         // Automatic text detection is not reliable without OCR: ask for review instead.
-        const captionMode = $("easy-caption-mode").value;
-        if (captionMode === "suggest") {
+        const captionSuggestionMode = $("easy-caption-mode").value;
+        if (captionSuggestionMode === "suggest") {
           easyStage("セリフ候補を準備");
           await proposeLoadedImages(false);
-        } else if (captionMode === "auto") {
+        } else if (captionSuggestionMode === "auto") {
           notify("セリフの有無を確実に自動識別できないため、既存文字は保持し、必要な場合は「セリフ候補を再確認」を押してください。", false, true);
         }
         easyStage("文字合成・一覧プレビュー");
