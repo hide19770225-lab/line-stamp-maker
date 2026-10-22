@@ -83,7 +83,7 @@
     const percent = Math.round((reviewed / total) * 100);
     const node = $("completion-status");
     if (node) node.textContent =
-      `完成度（目視確認の進捗）：${percent}% ／ 加工 ${processed}/${total}枚・確認済み ${reviewed}/${total}枚` +
+      `スタンプ確認進捗：${percent}% ／ 加工 ${processed}/${total}枚・確認済み ${reviewed}/${total}枚` +
       (bulkAudit ? ` ／ 一括検査 ${bulkAudit.errors ? "問題あり" : bulkAudit.complete ? "完了" : "未完了"}` : " ／ 一括検査待ち");
   }
   function syncBulkControls() {
