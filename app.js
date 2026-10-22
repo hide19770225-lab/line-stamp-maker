@@ -983,6 +983,12 @@
       values.every((value, index) =>
         Math.abs(value - index / (values.length - 1)) < 0.0001,
       );
+    // For sheets containing 5x8 numbered artwork, keep every grid boundary
+    // reviewable; a neighboring number can remain opaque after matte removal.
+    if (source.columns === 5 && source.rows === 8 && source.insets.left === 0 &&
+        source.insets.right === 0) {
+      source.gutterUncertain = true;
+    }
     if (!source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
       // Use column-specific boundaries when each column has clear white gutters.
       // Never silently fall back to a potentially destructive shared row line.
@@ -990,7 +996,7 @@
         source.image, source.xs, source.rows,
       );
       source.columnYs = columnLines || null;
-      source.gutterUncertain = !columnLines;
+      source.gutterUncertain = !columnLines || (source.columns === 5 && source.rows === 8 && source.insets.left === 0 && source.insets.right === 0);
       // Never substitute a shared horizontal boundary for a failed
       // column-specific search: it can cut off ears in staggered sheets.
     }
