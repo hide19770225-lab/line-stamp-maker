@@ -3011,9 +3011,19 @@
       li.textContent = `実ファイル検査OK：${files.length}画像・${(zip.size / 1024 / 1024).toFixed(2)}MB`;
       $("validation-list").append(li);
       state.dirty = false;
-      triggerDownload(state.zipURL, name);
+      // iOS Safari may reject a programmatic download after asynchronous
+      // PNG rendering and ZIP compression because user activation has expired.
+      // Leave a real, user-tappable download link visible instead.
+      const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      $("download-link").scrollIntoView({ block: "center", behavior: "smooth" });
+      if (!isiOS) triggerDownload(state.zipURL, name);
       notify(
-        `${files.length}画像のZIPを作成しました。保存が始まらない場合は「作成したZIPを保存する」をタップしてください。`,
+        isiOS
+          ? `ZIPを作成しました（${files.length}画像）。下の「作成したZIPを保存する」をタップして保存してください。`
+          : `${files.length}画像のZIPを作成しました。保存が始まらない場合は「作成したZIPを保存する」をタップしてください。`,
+        false,
+        true,
       );
     });
   $("target-count").onchange = () => {
