@@ -378,6 +378,48 @@
     };
     for (const side of ["left", "right", "top", "bottom"])
       if (count(side) >= 2) edges.push(side);
+    // Detect small disconnected opaque islands along a vertical cut. They
+    // can be neighboring guide digits, but may also be valid punctuation or
+    // antenna tips. Report only: never erase source pixels automatically.
+    const seen = new Uint8Array(mask.length);
+    const queue = new Uint32Array(mask.length);
+    const suspicious = [];
+    const maxIsland = Math.max(8, Math.floor(width * height * 0.012));
+    for (const side of ["left", "right"]) {
+      const startX = side === "left" ? 0 : width - band;
+      const endX = side === "left" ? band : width;
+      for (let y = 0; y < height; y++)
+        for (let x = startX; x < endX; x++) {
+          const start = y * width + x;
+          if (seen[start] || mask[start] === 0) continue;
+          let head = 0, tail = 0, count = 0;
+          let minX = x, maxX = x, minY = y, maxY = y;
+          seen[start] = 1;
+          queue[tail++] = start;
+          while (head < tail) {
+            const p = queue[head++];
+            const px = p % width, py = (p - px) / width;
+            count++;
+            minX = Math.min(minX, px); maxX = Math.max(maxX, px);
+            minY = Math.min(minY, py); maxY = Math.max(maxY, py);
+            for (const n of [px > 0 ? p - 1 : -1,
+              px + 1 < width ? p + 1 : -1,
+              py > 0 ? p - width : -1,
+              py + 1 < height ? p + width : -1]) {
+              if (n >= 0 && !seen[n] && mask[n] > 0) {
+                seen[n] = 1;
+                queue[tail++] = n;
+              }
+            }
+          }
+          if (count >= 3 && count <= maxIsland &&
+              maxX - minX + 1 <= width * 0.20 &&
+              maxY - minY + 1 <= height * 0.20)
+            suspicious.push(side);
+        }
+    }
+    for (const side of suspicious)
+      if (!edges.includes(side + "・小さな独立部分")) edges.push(side + "・小さな独立部分");
     return { needsReview: edges.length > 0, edges };
   }
   function createTile(source, column, row, mode, tolerance, color) {
