@@ -8,10 +8,7 @@
       assigned = new Set();
     if (![8, 16, 24, 32, 40].includes(target))
       errors.push("制作枚数が不正です");
-    if (sources.length > 4)
-      errors.push(
-        "かんたんモードの元画像は最大4枚です。通常モードで調整してください",
-      );
+    if (sources.length > 40) errors.push("元画像は最大40枚です");
     for (const s of sources) {
       if (!s.image) errors.push(`${s.name}の元画像を再選択してください`);
       if (s.fingerprint && seen.has(s.fingerprint))
