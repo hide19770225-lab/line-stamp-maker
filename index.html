@@ -37,29 +37,9 @@
   </head>
   <body>
     <div id="boot-diagnostic" role="status" aria-live="polite" style="position:sticky;top:0;z-index:99999;padding:12px 16px;background:#fff0c2;color:#403000;font-size:16px;font-weight:700;border-bottom:2px solid #a87b00">
-      読み込み診断 v81：画面を準備しています…
+      診断 v82：HTMLは表示されています。起動診断を待機中…
     </div>
-    <script>
-      window.addEventListener("error",function(e){
-        var el=document.getElementById("boot-diagnostic");
-        if(el){el.textContent="起動エラー v81："+(e.message||"詳細不明");el.style.background="#ffd7d7";}
-      });
-      window.addEventListener("DOMContentLoaded",function(){
-        var el=document.getElementById("boot-diagnostic");
-        if(!el)return;
-        var normal=document.getElementById("file-input");
-        var easy=document.getElementById("easy-files");
-        function selected(input,label){
-          if(!input)return;
-          input.addEventListener("change",function(){
-            el.textContent=label+"：画像選択を検知しました（"+(input.files?input.files.length:0)+"枚）";
-            el.style.background="#dcfce7";
-          });
-        }
-        selected(normal,"通常制作");selected(easy,"一括制作");
-        el.textContent="診断 v81：画像選択の準備完了。画像を選択してください。";
-      });
-    </script>
+    <script src="boot-diagnostic.js?v=82" defer></script>
     <aside class="sidebar">
       <a class="brand" href="./" aria-label="STAMP atelier ホーム"
         ><span class="brand-mark">s<span>✦</span></span
