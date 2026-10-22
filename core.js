@@ -422,6 +422,51 @@
       if (!edges.includes(side + "・小さな独立部分")) edges.push(side + "・小さな独立部分");
     return { needsReview: edges.length > 0, edges };
   }
+  // Guide numbers should be isolated small ink clusters, not a large
+  // character face or a long Japanese caption. This is a warning only.
+  function guideNumberCandidate(original, mask) {
+    const w = original.width, h = original.height;
+    const x0 = Math.floor(w * 0.025), x1 = Math.ceil(w * 0.19);
+    const y0 = Math.floor(h * 0.025), y1 = Math.ceil(h * 0.16);
+    const seen = new Uint8Array(w * h);
+    const queue = new Uint32Array(w * h);
+    let components = 0, pixels = 0;
+    const dark = (p) => mask[p] > 64 &&
+      original.data[p * 4] < 95 &&
+      original.data[p * 4 + 1] < 95 &&
+      original.data[p * 4 + 2] < 95;
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        const start = y * w + x;
+        if (seen[start] || !dark(start)) continue;
+        let head = 0, tail = 0, count = 0;
+        let minX = x, maxX = x, minY = y, maxY = y;
+        seen[start] = 1; queue[tail++] = start;
+        while (head < tail) {
+          const p = queue[head++], px = p % w, py = (p - px) / w;
+          count++;
+          minX = Math.min(minX, px); maxX = Math.max(maxX, px);
+          minY = Math.min(minY, py); maxY = Math.max(maxY, py);
+          for (const n of [px > x0 ? p - 1 : -1,
+            px + 1 < x1 ? p + 1 : -1,
+            py > y0 ? p - w : -1, py + 1 < y1 ? p + w : -1]) {
+            if (n >= 0 && !seen[n] && dark(n)) {
+              seen[n] = 1; queue[tail++] = n;
+            }
+          }
+        }
+        // A shape cut off by the region edge is not confidently a digit.
+        if (minX <= x0 || maxX >= x1 - 1 ||
+            minY <= y0 || maxY >= y1 - 1) continue;
+        if (count >= 3 && count <= Math.max(20, w * h * 0.006) &&
+            maxX - minX + 1 <= w * 0.10 &&
+            maxY - minY + 1 <= h * 0.10) {
+          components++; pixels += count;
+        }
+      }
+    return components >= 1 && components <= 3 &&
+      pixels >= Math.max(5, Math.floor(w * h * 0.0003));
+  }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
@@ -438,25 +483,10 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
-    // 5x8 source sheets sometimes print 01..40 in the upper-left of
-    // *each tile*. These are not neighboring-image bleed and cannot be
-    // fixed by moving grid lines. Warn separately; never erase captions.
-    if (source.columns === 5 && source.rows === 8) {
-      const w = original.width, h = original.height;
-      const x0 = Math.floor(w * 0.025), x1 = Math.ceil(w * 0.19);
-      const y0 = Math.floor(h * 0.025), y1 = Math.ceil(h * 0.16);
-      let dark = 0;
-      for (let y = y0; y < y1; y++)
-        for (let x = x0; x < x1; x++) {
-          const i = (y * w + x) * 4;
-          if (mask[y * w + x] > 64 &&
-              original.data[i] < 95 && original.data[i + 1] < 95 &&
-              original.data[i + 2] < 95) dark++;
-        }
-      if (dark >= Math.max(5, Math.floor(w * h * 0.0005))) {
-        boundaryReview.needsReview = true;
-        boundaryReview.edges.push("左上・元画像の管理番号の可能性");
-      }
+    if (source.columns === 5 && source.rows === 8 &&
+        guideNumberCandidate(original, mask)) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("左上・元画像の管理番号の可能性");
     }
     return {
       sourceRect: { ...rect },
@@ -939,6 +969,7 @@
     suggestGridLines,
     suggestColumnRowLines,
     tileBoundaryReview,
+    guideNumberCandidate,
     stampCrop,
     maskBounds,
     imagePlacement,
