@@ -205,6 +205,22 @@
     isolated.getContext("2d").drawImage(image, -rect.x, -rect.y);
     return isolated;
   }
+  // Transparent RGB is undefined; on transparent sheets alpha alone defines ink.
+  // Mixed corner alpha cannot establish one reliable background model.
+  function gridInk(image) {
+    const { data, width, height } = image;
+    const corners = [0, width - 1, (height - 1) * width, width * height - 1];
+    if (corners.every((p) => data[p * 4 + 3] === 0))
+      return (x, y) => data[(y * width + x) * 4 + 3] > 0;
+    if (corners.some((p) => data[p * 4 + 3] !== 255)) return null;
+    const bg = Array.from(data.slice(0, 3));
+    if (corners.some((p) => bg.some((v, k) => Math.abs(data[p * 4 + k] - v) > 18)))
+      return null;
+    return (x, y) => {
+      const p = (y * width + x) * 4;
+      return data[p + 3] > 0 && bg.some((v, k) => Math.abs(data[p + k] - v) > 30);
+    };
+  }
   // Locate nearly blank gutters close to the expected grid positions.
   // Only return strong suggestions; uncertain sheets keep their manual grid.
   function suggestGridLines(image, columns, rows) {
@@ -214,39 +230,24 @@
     const sample = canvas(width, height);
     const ctx = sample.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(image, 0, 0);
-    const pixels = ctx.getImageData(0, 0, width, height).data;
+    const isInk = gridInk(ctx.getImageData(0, 0, width, height));
     sample.width = sample.height = 1;
-    const cornerIndices = [0, width - 1, (height - 1) * width, width * height - 1];
-    const corners = cornerIndices.map((i) => Array.from(pixels.slice(i * 4, i * 4 + 3)));
-    const background = corners[0];
-    // A nonuniform border cannot safely establish the background color.
-    if (corners.some((c) => c.some((v, i) => Math.abs(v - background[i]) > 18)))
-      return null;
-    const isInk = (x, y) => {
-      const i = (y * width + x) * 4;
-      if (pixels[i + 3] < 16) return false;
-      return Math.max(
-        Math.abs(pixels[i] - background[0]),
-        Math.abs(pixels[i + 1] - background[1]),
-        Math.abs(pixels[i + 2] - background[2]),
-      ) > 30;
-    };
+    if (!isInk) return null;
     function line(axis, index, total, count) {
       const nominal = Math.round((index * total) / count);
       const cross = axis === "x" ? height : width;
-      const step = Math.max(1, Math.floor(cross / 600));
+      const step = 1; // Never skip a thin antenna, guide digit or punctuation.
       const start = Math.max(1, nominal - Math.max(2, Math.round((total / count) * 0.16)));
       const end = Math.min(total - 2, nominal + Math.max(2, Math.round((total / count) * 0.16)));
       const blank = [];
       for (let pos = start; pos <= end; pos++) {
-        let ink = 0, samples = 0;
+        let ink = 0;
         for (let other = 0; other < cross; other += step) {
           const x = axis === "x" ? pos : other;
           const y = axis === "x" ? other : pos;
           if (isInk(x, y)) ink++;
-          samples++;
         }
-        blank.push(ink / samples <= 0.003);
+        blank.push(ink === 0);
       }
       // Choose the center of a blank corridor, not its edge. This preserves
       // nearby ears, paws and decorations and avoids spurious boundary alerts.
@@ -287,12 +288,9 @@
     const sample = canvas(width, height);
     const ctx = sample.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(image, 0, 0);
-    const data = ctx.getImageData(0, 0, width, height).data;
+    const isInk = gridInk(ctx.getImageData(0, 0, width, height));
     sample.width = sample.height = 1;
-    const corners = [0, width - 1, width * (height - 1), width * height - 1];
-    const bg = [data[0], data[1], data[2]];
-    if (corners.some((p) => [0,1,2].some((k) => Math.abs(data[p*4+k]-bg[k]) > 18)))
-      return null;
+    if (!isInk) return null;
     const lines = [];
     for (let c = 0; c < xs.length - 1; c++) {
       const x0 = Math.round(xs[c] * width), x1 = Math.round(xs[c+1] * width);
@@ -305,21 +303,16 @@
         // Count foreground pixels in each scanline. A true gutter must
         // separate two foreground groups, not just pass through a letter.
         const densities = [];
-        const step = Math.max(1, Math.floor((x1 - x0) / 500));
+        const step = 1; // Subsampling can miss one-pixel-wide foreground.
         for (let y = start; y <= end; y++) {
           let ink = 0, count = 0;
           for (let x = x0; x < x1; x += step) {
-            const i = (y * width + x) * 4;
-            if (data[i + 3] > 16 && Math.max(
-              Math.abs(data[i] - bg[0]),
-              Math.abs(data[i + 1] - bg[1]),
-              Math.abs(data[i + 2] - bg[2])
-            ) > 65) ink++;
+            if (isInk(x, y)) ink++;
             count++;
           }
           densities.push(ink / Math.max(1, count));
         }
-        const blank = densities.map((v) => v <= 0.003);
+        const blank = densities.map((v) => v === 0);
         const minLength = Math.max(5, Math.round(height / rows * 0.018));
         const maxDrift = Math.round(height / rows * 0.24);
         const look = Math.max(8, Math.round(height / rows * 0.09));
