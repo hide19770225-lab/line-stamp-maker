@@ -93,7 +93,7 @@
     $("bulk-visual").title = !bulkAudit
       ? "先に「全画像を自動検査して一覧確認」を押してください"
       : !bulkAudit.complete ? "全画像の加工を完了してください"
-      : bulkAudit.errors ? "分割境界やエラーのある画像を個別編集・確認し、再検査してください"
+      : bulkAudit.errors ? "画像のエラーを個別編集して再検査してください"
       : "全画像を目視したらチェックしてください";
     updateCompletionStatus();
   }
@@ -1360,10 +1360,12 @@
     const warnings = rows.filter(
       (row) => row.report.status === "要確認",
     ).length;
-    bulkAudit = { rows, complete, errors: errors + unresolvedBoundary };
+    // Boundary warnings need explicit visual review, but should not disable the
+    // very checkbox through which the user acknowledges that review.
+    bulkAudit = { rows, complete, errors, unresolvedBoundary };
     $("bulk-summary").textContent =
       `${rows.length}画像：正常 ${rows.length - errors - warnings}・要確認 ${warnings}・エラー ${errors}。` +
-      (unresolvedBoundary ? ` 分割境界の未確認が${unresolvedBoundary}個あります。個別編集で確認してください。` : "") +
+      (unresolvedBoundary ? ` 分割境界の確認対象が${unresolvedBoundary}個あります。一覧で各画像の端を確認し、問題があれば個別編集してください。問題がなければ目視確認チェックを入れられます。` : "") +
       (complete
         ? "一覧を目視確認してください。"
         : `未加工の番号があります（${all.length}/${state.target}個）。全数を加工してから再検査してください。`);
