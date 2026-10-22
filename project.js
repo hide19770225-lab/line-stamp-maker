@@ -304,6 +304,16 @@
         )
           fail();
       }
+      if (s.manualColumnYs !== undefined && typeof s.manualColumnYs !== "boolean") fail();
+      if (s.columnYs != null) {
+        if (!Array.isArray(s.columnYs) || s.columnYs.length !== s.columns) fail();
+        for (const column of s.columnYs) {
+          if (!Array.isArray(column) || column.length !== s.rows + 1 ||
+              column.some((n, i) => !number(n, 0, 1) ||
+                (i && n - column[i - 1] < 2 / s.height - 1e-9))) fail();
+        }
+      }
+      if (s.manualColumnYs && !s.columnYs) fail();
       return {
         name: s.name,
         fingerprint: s.fingerprint,
@@ -313,6 +323,8 @@
         rows: s.rows,
         xs: s.xs.slice(),
         ys: s.ys.slice(),
+        columnYs: s.columnYs ? s.columnYs.map((col) => col.slice()) : null,
+        manualColumnYs: s.manualColumnYs === true,
         insets: Object.fromEntries(sides.map((k) => [k, s.insets[k]])),
         assignments: s.assignments.slice(),
         mode: s.mode,
