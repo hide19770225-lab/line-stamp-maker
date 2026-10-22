@@ -693,6 +693,42 @@
       boundaryReview.needsReview = true;
       boundaryReview.edges.push("detached-bottom-fragment");
     }
+    // Diagnose isolated fragments along either vertical edge. On tightly
+    // packed 5x8 sheets, the adjacent sticker's caption or decoration may
+    // survive background removal as a disconnected island. Detection is
+    // advisory only: never erase artwork without explicit visual review.
+    const columnInk = new Uint32Array(original.width);
+    for (let y = 0; y < original.height; y++)
+      for (let x = 0; x < original.width; x++)
+        if (mask[y * original.width + x] > 32) columnInk[x]++;
+    const edgeWindow = Math.max(4, Math.floor(original.width * 0.24));
+    const minVerticalGap = Math.max(2, Math.round(original.width * 0.018));
+    for (const side of ["left", "right"]) {
+      const positions = [];
+      for (let k = 0; k < edgeWindow; k++)
+        positions.push(side === "left" ? k : original.width - 1 - k);
+      let fragment = false;
+      for (let k = 1; k < positions.length - minVerticalGap; k++) {
+        if (columnInk[positions[k]] !== 0) continue;
+        let next = k;
+        while (next < positions.length && columnInk[positions[next]] === 0) next++;
+        if (next - k >= minVerticalGap) {
+          let outer = 0, inner = 0;
+          for (let j = 0; j < k; j++) outer += columnInk[positions[j]];
+          for (let j = next; j < original.width; j++) {
+            const x = side === "left" ? j : original.width - 1 - j;
+            inner += columnInk[x];
+          }
+          if (outer >= Math.max(8, original.height * 0.06) &&
+              inner >= outer * 2) { fragment = true; break; }
+        }
+        k = next - 1;
+      }
+      if (fragment) {
+        boundaryReview.needsReview = true;
+        boundaryReview.edges.push("detached-" + side + "-fragment");
+      }
+    }
     // Inferred flat baselines are a geometric hypothesis, not semantic
     // evidence that a white region is a paw. Keep a visible review marker.
     if (mask.baselineCaps) {
