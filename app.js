@@ -3090,7 +3090,26 @@
       $("split-section").scrollIntoView({ block: "start", behavior: "smooth" });
     }
   };
-  $("easy-files").onchange = (event) => importFiles(event.target.files, true);
+  $("easy-files").addEventListener("change", async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) {
+      $("easy-upload-feedback").textContent = "画像が選択されていません。";
+      return;
+    }
+    $("easy-upload-feedback").textContent =
+      `選択：${files.map((file) => file.name).join("、")}（読み込み中）`;
+    try {
+      await importFiles(files, true);
+      const loaded = state.sources.filter((source) => source.image).length;
+      $("easy-upload-feedback").textContent =
+        loaded ? `読み込み済み：${loaded}枚。配置を確認して②の一括加工へ進んでください。`
+          : "読み込みできませんでした。画面のエラー表示を確認してください。";
+    } catch (error) {
+      $("easy-upload-feedback").textContent =
+        `読み込みエラー：${error.message || String(error)}`;
+      notify($("easy-upload-feedback").textContent, true, true);
+    }
+  });
   $("easy-target").onchange = () => {
     $("target-count").value = $("easy-target").value;
     $("target-count").onchange();
