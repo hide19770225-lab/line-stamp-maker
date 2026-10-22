@@ -438,6 +438,26 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    // 5x8 source sheets sometimes print 01..40 in the upper-left of
+    // *each tile*. These are not neighboring-image bleed and cannot be
+    // fixed by moving grid lines. Warn separately; never erase captions.
+    if (source.columns === 5 && source.rows === 8) {
+      const w = original.width, h = original.height;
+      const x0 = Math.floor(w * 0.025), x1 = Math.ceil(w * 0.19);
+      const y0 = Math.floor(h * 0.025), y1 = Math.ceil(h * 0.16);
+      let dark = 0;
+      for (let y = y0; y < y1; y++)
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          if (mask[y * w + x] > 64 &&
+              original.data[i] < 95 && original.data[i + 1] < 95 &&
+              original.data[i + 2] < 95) dark++;
+        }
+      if (dark >= Math.max(5, Math.floor(w * h * 0.0005))) {
+        boundaryReview.needsReview = true;
+        boundaryReview.edges.push("左上・元画像の管理番号の可能性");
+      }
+    }
     return {
       sourceRect: { ...rect },
       boundaryReview,
