@@ -1,0 +1,18 @@
+name: Check browser JavaScript syntax
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate browser JavaScript syntax
+        run: |
+          set -eu
+          for file in *.js; do
+            echo "Checking $file"
+            node --check "$file"
+          done
