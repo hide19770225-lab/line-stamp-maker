@@ -2341,11 +2341,12 @@
         notify("ZIPがありません。もう一度ZIPを作成してください。", true);
         return;
       }
-      // On iOS, the download attribute on a blob URL may be ignored.
-      // Opening the blob in the same tab allows the native share/save UI.
+      // Do not replace the editor with a blob URL on iOS: navigating away
+      // can discard all in-memory sticker edits and the generated ZIP.
+      // Let Safari handle the explicit download link as a user gesture.
+      // If the browser does not support blob downloads, keep the editor open.
       if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-        event.preventDefault();
-        window.location.assign(state.zipURL);
+        link.setAttribute("download", name);
       }
     };
   }
@@ -2439,7 +2440,7 @@
         triggerDownload(state.zipURL, name);
       }
       notify(
-        `${files.length}画像のZIPを作成しました。iPhoneでは「作成したZIPを保存する」をタップして開き、共有メニューから「ファイルに保存」を選んでください。`,
+        `${files.length}画像のZIPを作成しました。iPhoneでは「作成したZIPを保存する」をタップしてください。Safariのダウンロード一覧または「ファイル」アプリのダウンロードを確認してください。画面が切り替わらない場合も元の編集画面は閉じないでください。`,
       );
     });
   $("target-count").onchange = () => {
