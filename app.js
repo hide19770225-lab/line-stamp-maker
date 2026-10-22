@@ -3099,8 +3099,12 @@
     const open = document.body.classList.toggle("easy-details-open");
     $("easy-details").setAttribute("aria-expanded", String(open));
     $("easy-details").textContent = open
-      ? "手動調整を閉じる"
-      : "手動調整を開く（余白・大きさ・位置・切り抜き）";
+      ? "詳細調整を閉じる"
+      : "分割線・余白を細かく調整する";
+    if (open && state.sources.length) {
+      renderSourceEditor();
+      $("split-section").scrollIntoView({ block: "start", behavior: "smooth" });
+    }
   };
   $("easy-files").onchange = (event) => importFiles(event.target.files, true);
   $("easy-target").onchange = () => {
