@@ -33,7 +33,7 @@
     <script src="caption-references.js?v=pose-confidence-1" defer></script>
     <script src="caption-vision.js?v=pose-confidence-1" defer></script>
     <script src="suggestions.js?v=pose-confidence-1" defer></script>
-    <script src="upload-bridge.js?v=20261022-2" defer></script><script src="app.js?v=upload-bridge-20261022-2" defer></script>
+    <script src="upload-bridge.js?v=20261022-2" defer></script><script src="app.js?v=caption-status-fix-84" defer></script>
   </head>
   <body>
     <div id="boot-diagnostic" role="status" aria-live="polite" style="position:sticky;top:0;z-index:99999;padding:12px 16px;background:#fff0c2;color:#403000;font-size:16px;font-weight:700;border-bottom:2px solid #a87b00">
@@ -167,7 +167,7 @@
             class="validation-list"
             aria-live="polite"
           ></ul>
-          <label>セリフ処理<select id="easy-caption-mode"><option value="auto" selected>自動判定（文字ありは保持・文字なしは候補確認）</option><option value="existing">セリフあり（分割のみ）</option><option value="suggest">セリフなし（自動提案）</option></select></label><p class="hint">自動判定は文字認識の精度を保証できません。判定が不確かな画像はセリフを勝手に重ねず、候補を確認してください。</p><label for="easy-captions">セリフ（1行目＝01.png、最大40行）</label
+          <label>セリフ処理<select id="easy-caption-mode"><option value="auto" selected>自動判定（文字ありは保持・文字なしは候補確認）</option><option value="existing">セリフあり（分割のみ）</option><option value="suggest">セリフなし（自動提案）</option></select></label><p id="easy-caption-mode-status" class="hint" role="status" aria-live="polite">セリフ入り画像は文字を保持します。</p><p class="hint">自動判定は文字認識の精度を保証できません。判定が不確かな画像はセリフを勝手に重ねず、候補を確認してください。</p><label for="easy-captions">セリフ（1行目＝01.png、最大40行）</label
           ><textarea
             id="easy-captions"
             rows="6"
