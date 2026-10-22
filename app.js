@@ -69,7 +69,9 @@
     }
     $("status").classList.toggle("error", error);
     $("status").hidden = false;
-    if (!persistent)
+    // Keep actionable failures visible until the next action. On iPhone the
+    // six-second toast often disappears before the user can read or capture it.
+    if (!persistent && !error)
       toastTimer = setTimeout(() => {
         $("status").hidden = true;
       }, 6500);
@@ -2946,6 +2948,8 @@
         throw new Error(
           "承認後の画像生成が未完了です。セリフ一覧で再承認して生成してください。",
         );
+      notify("保存前の設定・画像を検査中…", false, true);
+      await frame();
       const v = updateValidation();
       if (v.stale.length)
         throw new Error(
