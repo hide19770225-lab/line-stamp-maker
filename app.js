@@ -75,10 +75,27 @@
       }, 6500);
   }
   let bulkAudit = null;
+  function updateCompletionStatus() {
+    const all = stamps();
+    const total = state.target || 40;
+    const processed = all.length;
+    const reviewed = all.filter((stamp) => stamp.reviewed).length;
+    const percent = Math.round((reviewed / total) * 100);
+    const node = $("completion-status");
+    if (node) node.textContent =
+      `完成度（目視確認の進捗）：${percent}% ／ 加工 ${processed}/${total}枚・確認済み ${reviewed}/${total}枚` +
+      (bulkAudit ? ` ／ 一括検査 ${bulkAudit.errors ? "問題あり" : bulkAudit.complete ? "完了" : "未完了"}` : " ／ 一括検査待ち");
+  }
   function syncBulkControls() {
     const valid = bulkAudit && bulkAudit.complete && !bulkAudit.errors;
     $("bulk-visual").disabled = !valid;
     $("bulk-confirm").disabled = !valid || !$("bulk-visual").checked;
+    $("bulk-visual").title = !bulkAudit
+      ? "先に「全画像を自動検査して一覧確認」を押してください"
+      : !bulkAudit.complete ? "全画像の加工を完了してください"
+      : bulkAudit.errors ? "分割境界やエラーのある画像を個別編集・確認し、再検査してください"
+      : "全画像を目視したらチェックしてください";
+    updateCompletionStatus();
   }
   function resetBulkAudit() {
     bulkAudit = null;
@@ -93,6 +110,7 @@
     $("bulk-results").replaceChildren();
     $("bulk-summary").textContent =
       "設定または画像が変更されました。一括検査を実行してください。";
+    updateCompletionStatus();
   }
   function invalidate() {
     lastValidation = null;
