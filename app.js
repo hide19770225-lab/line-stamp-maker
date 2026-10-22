@@ -20,6 +20,7 @@
     busy: false,
     brush: "none",
     zipURL: null,
+    zipFile: null,
     dirty: false,
   };
   let toastTimer,
@@ -124,6 +125,7 @@
       URL.revokeObjectURL(state.zipURL);
       state.zipURL = null;
     }
+    state.zipFile = null;
     $("download-link").hidden = true;
     updateEasyState();
   }
@@ -2366,12 +2368,18 @@
         notify("ZIPがありません。もう一度ZIPを作成してください。", true);
         return;
       }
-      // Do not replace the editor with a blob URL on iOS: navigating away
-      // can discard all in-memory sticker edits and the generated ZIP.
-      // Let Safari handle the explicit download link as a user gesture.
-      // If the browser does not support blob downloads, keep the editor open.
-      if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-        link.setAttribute("download", name);
+      // Web Share with a File is an iOS-native route to "Save to Files".
+      // It must be called directly from the tap handler to retain user activation.
+      // Unsupported browsers keep the ordinary download link as a fallback.
+      if (/iPad|iPhone|iPod/.test(navigator.userAgent) &&
+          state.zipFile && typeof navigator.share === "function" &&
+          typeof navigator.canShare === "function" &&
+          navigator.canShare({ files: [state.zipFile] })) {
+        event.preventDefault();
+        navigator.share({ files: [state.zipFile] }).catch((error) => {
+          if (error?.name !== "AbortError")
+            notify("共有シートで保存できませんでした。SafariでZIP保存リンクを再度お試しください。", true);
+        });
       }
     };
   }
@@ -2456,6 +2464,8 @@
       const name = v.complete
         ? `line-stamps-${state.target}.zip`
         : `line-stamps-test-${v.all.length}.zip`;
+      state.zipFile = typeof File === "function"
+        ? new File([zip], name, { type: "application/zip" }) : null;
       prepareZipSaveLink(state.zipURL, name);
       const li = document.createElement("li");
       li.textContent = `実ファイル検査OK：${files.length}画像・${(zip.size / 1024 / 1024).toFixed(2)}MB`;
@@ -2465,7 +2475,7 @@
         triggerDownload(state.zipURL, name);
       }
       notify(
-        `${files.length}画像のZIPを作成しました。iPhoneでは「作成したZIPを保存する」をタップしてください。Safariのダウンロード一覧または「ファイル」アプリのダウンロードを確認してください。画面が切り替わらない場合も元の編集画面は閉じないでください。`,
+        `${files.length}画像のZIPを作成しました。iPhoneでは「作成したZIPを保存する」をタップしてください。共有シートが出た場合は「ファイルに保存」を選んでください。出ない場合はSafariのダウンロード一覧を確認してください。画面が切り替わらない場合も元の編集画面は閉じないでください。`,
       );
     });
   $("target-count").onchange = () => {
