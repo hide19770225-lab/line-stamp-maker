@@ -64,3 +64,19 @@ const largeBody = C.tileBoundaryReview(edgeMask(100, 100, [[0, 10, 45, 90]]), 10
 assert.ok(largeBody.edges.includes("left"));
 assert.ok(!largeBody.edges.includes("left・小さな独立部分"));
 console.log("edge island warnings, unchanged alpha masks and large-artwork distinction: OK");
+
+function guideFixture(width, height, boxes) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  const mask = new Uint8ClampedArray(width * height);
+  for (const [x0, y0, x1, y1] of boxes)
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        const p = y * width + x;
+        data[p * 4 + 3] = mask[p] = 255;
+      }
+  return [{ width, height, data }, mask];
+}
+assert.equal(C.guideNumberCandidate(...guideFixture(200, 200, [[10, 9, 13, 18], [16, 9, 19, 18]])), true);
+assert.equal(C.guideNumberCandidate(...guideFixture(200, 200, [[10, 9, 32, 30]])), false);
+assert.equal(C.guideNumberCandidate(...guideFixture(200, 200, [[60, 60, 70, 70]])), false);
+console.log("isolated source guide number warning without large-artwork false positive: OK");
