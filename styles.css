@@ -1974,3 +1974,9 @@ body.easy-mode:not(.easy-details-open) .workspace-grid {
 body.easy-mode.easy-details-open .workspace-grid,
 body.easy-mode.easy-details-open .project-panel { display: revert; }
 #easy-details { min-height: 48px; }
+
+/* Make image upload visibly usable in iPhone Safari / installed home-screen mode. */
+.easy-upload-zone { border: 2px dashed #3b8a69; border-radius: 14px; padding: 16px; margin: 14px 0; background: #f4faf6; }
+.easy-upload-title { display:block; font-weight: 800; margin-bottom: 12px; color: #155c42; }
+.easy-upload-zone input.easy-visible-file { display: block !important; position: static !important; width: 100% !important; height: auto !important; opacity: 1 !important; visibility: visible !important; clip: auto !important; pointer-events: auto !important; font-size: 16px; color: #123e2e; }
+.easy-upload-zone .hint { margin: 10px 0 0; }
