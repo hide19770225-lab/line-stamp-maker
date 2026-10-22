@@ -219,3 +219,16 @@ test("boundary fragments are labeled without deletion; nearby motion marks stay 
   assert.throws(() => R.removeSelected(mask, scan, [motion.id]));
   assert.deepEqual(mask, before);
 });
+
+test("residue analysis rejects invalid crop bounds and RGBA length without editing pixels",()=>{
+  const im=fixture(), mask=alpha(im), before=im.data.slice();
+  for(const rect of [
+    {x:-1,y:0,width:20,height:20},
+    {x:0,y:0,width:121,height:120},
+    {x:0,y:0,width:0,height:20},
+    {x:0.5,y:0,width:20,height:20},
+    {x:0,y:119,width:20,height:2},
+  ]) assert.throws(()=>R.analyse(im,mask,rect),/検査範囲/);
+  assert.throws(()=>R.analyse({...im,data:new Uint8ClampedArray(4)},mask),/寸法/);
+  assert.deepEqual(im.data,before);
+});

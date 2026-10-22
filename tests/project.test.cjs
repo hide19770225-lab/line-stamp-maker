@@ -110,7 +110,7 @@ test("JSON round trip preserves captions, individual settings, cell assignments 
   };
   const restored = P.readProject(JSON.parse(JSON.stringify(p)));
   assert.deepEqual(restored.slots, p.slots);
-  assert.deepEqual(restored.sources, p.sources);
+  assert.deepEqual(restored.sources, p.sources.map(s => ({...s, rowXs: null, columnYs: null, manualColumnYs: false})));
   assert(!("image" in restored.sources[0]));
 });
 test("invalid JSON is rejected before application state can change", () => {
@@ -150,4 +150,93 @@ test("automatic cleanup defaults on for old JSON, preserves per-slot OFF and rej
   assert.equal(restored.slots[1].cleanupEnabled, false);
   p.slots[0].cleanupEnabled = "yes";
   assert.throws(() => P.readProject(p));
+});
+
+test("changing 2x5 to 5x8 discards automatic and manual column gutters", () => {
+  for (const manual of [false, true]) {
+    const p = project(), s = source(p, 2, 5);
+    s.columnYs = [P.lines(5), P.lines(5)];
+    s.manualColumnYs = manual;
+    s.gutterUncertain = true;
+    s.insets = { left: 3, right: 4, top: 5, bottom: 6 };
+    s.splitIssues = [{ cell: 0, edges: ["right"] }];
+    s.cropReport = ["old coordinates"]; s.cropMethod = "old";
+    p.slots[0].caption = "ありがとう";
+    P.setGrid(p, s, 5, 8);
+    assert.equal(s.columnYs, null);
+    assert.equal(s.manualColumnYs, false);
+    assert.equal(s.gutterUncertain, false);
+    assert.deepEqual(s.insets, P.blankInsets());
+    assert.equal(s.splitIssues, null);
+    assert.deepEqual(s.cropReport, []);
+    assert.deepEqual(s.xs, P.lines(5)); assert.deepEqual(s.ys, P.lines(8));
+    assert.deepEqual(s.assignments, Array.from({length:40}, (_,i)=>i+1));
+    assert.equal(p.slots[0].caption, "ありがとう");
+    P.setGrid(p, s, 2, 5);
+    assert.deepEqual(s.assignments, Array.from({length:10}, (_,i)=>i+1));
+  }
+});
+
+test("JSON rejects split lines that crop away source edges, including per-column and per-row gutters", () => {
+  const base = project(8);
+  source(base, 2, 4);
+  const variants = [
+    v => { v.sources[0].xs[0] = 0.1; },
+    v => { v.sources[0].xs[2] = 0.9; },
+    v => { v.sources[0].ys[0] = 0.1; },
+    v => { v.sources[0].ys[4] = 0.9; },
+    v => { v.sources[0].columnYs = [P.lines(4), P.lines(4)]; v.sources[0].columnYs[1][0] = 0.1; },
+    v => { v.sources[0].columnYs = [P.lines(4), P.lines(4)]; v.sources[0].columnYs[1][4] = 0.9; },
+    v => { v.sources[0].rowXs = Array.from({length:4},()=>P.lines(2)); v.sources[0].rowXs[0][0] = 0.1; },
+    v => { v.sources[0].rowXs = Array.from({length:4},()=>P.lines(2)); v.sources[0].rowXs[0][2] = 0.9; },
+  ];
+  for (const mutate of variants) {
+    const invalid = structuredClone(base);
+    mutate(invalid);
+    assert.throws(() => P.readProject(invalid));
+  }
+  assert.deepEqual(P.readProject(base).sources[0].assignments, [1,2,3,4,5,6,7,8]);
+});
+
+test("40 slots retain their captions and assignments across swaps, exclusion, and JSON restore", () => {
+  const p = project(40);
+  const sources = Array.from({length:4}, (_,i) => {
+    const s = source(p, 2, 5);
+    s.name = `sheet-${i+1}.png`;
+    s.fingerprint = String(i+1).repeat(64);
+    return s;
+  });
+  p.slots.forEach((slot,i) => {
+    slot.caption = `セリフ${String(i+1).padStart(2,'0')}`;
+    slot.style.x = 20 + i;
+  });
+  P.assignSlot(p,sources[0],0,40);
+  P.assignSlot(p,sources[2],4,2);
+  P.assignSlot(p,sources[1],1,0);
+  P.assignSlot(p,sources[1],1,12);
+  const before = p.sources.flatMap(s=>s.assignments);
+  assert.equal(new Set(before.filter(Boolean)).size,before.filter(Boolean).length);
+  const restored = P.readProject(JSON.parse(JSON.stringify(p)));
+  assert.deepEqual(restored.sources.map(s=>s.assignments),p.sources.map(s=>s.assignments));
+  for(let i=0;i<40;i++){
+    assert.equal(restored.slots[i].caption,`セリフ${String(i+1).padStart(2,'0')}`);
+    assert.equal(restored.slots[i].style.x,20+i);
+  }
+  assert.equal(restored.sources[0].assignments[0],40);
+  assert.equal(restored.sources[1].assignments[1],12);
+});
+test("invalid duplicate numbers across multiple sources cannot be restored",()=>{
+  const p=project(40);
+  const a=source(p,2,5), b=source(p,2,5);
+  b.assignments[3]=a.assignments[0];
+  assert.throws(()=>P.readProject(p));
+});
+
+test("mask differences reject missing or mismatched mask lengths instead of saving corrupt data", () => {
+  const a = new Uint8ClampedArray([0,255,255,0]);
+  const b = new Uint8ClampedArray([0,255,255]);
+  assert.throws(()=>P.encodeMask(a,b),/サイズが一致/);
+  assert.throws(()=>P.encodeMask(null,a),/サイズが一致/);
+  assert.throws(()=>P.encodeMask(a,null),/サイズが一致/);
+  assert.deepEqual(P.encodeMask(a,a),[]);
 });

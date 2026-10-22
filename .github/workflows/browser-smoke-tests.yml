@@ -1,0 +1,257 @@
+name: Chromium browser smoke tests
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  webkit-mobile-smoke:
+    name: WebKit iPhone-emulation smoke (not physical Safari)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps webkit
+      - name: Check app startup and 5x8 layout in WebKit
+        run: |
+          python3 -m http.server 4176 --bind 127.0.0.1 >/tmp/stamp-webkit-http.log 2>&1 &
+          node tests/webkit-mobile-smoke.cjs
+  webkit-40-export:
+    name: WebKit 40-editor and ZIP regression (not physical Safari)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps webkit
+      - run: python3 -m pip install pillow
+      - name: Prepare distinct 40-design sheet
+        run: python3 tests/prepare_distinct_40_sheet.py tests/fixtures/BBE9DC5F-F70D-490D-B5E3-40E2D682218B.png /tmp/webkit-distinct-40.png
+      - name: Run all 40 editors and ZIP download in WebKit
+        run: |
+          python3 -m http.server 4177 --bind 127.0.0.1 >/tmp/stamp-webkit40-http.log 2>&1 &
+          STAMP_BROWSER_ENGINE=webkit STAMP_TEST_URL=http://127.0.0.1:4177 STAMP_TEST_IMAGE=/tmp/webkit-distinct-40.png STAMP_TEST_ARTIFACTS=/tmp/webkit-40-evidence STAMP_REQUIRE_DISTINCT_OUTPUT=1 node tests/single-sheet-40-browser.cjs
+      - name: Verify all WebKit-exported PNGs
+        run: python3 tests/verify_40_zip.py /tmp/webkit-40-evidence/40.zip /tmp/webkit-40-evidence/expected.json
+      - name: Upload WebKit 40-output evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkit-40-output-evidence
+          path: /tmp/webkit-40-evidence/
+          if-no-files-found: ignore
+  browser-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - name: Test sticker count selection in browser
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/stamp-http.log 2>&1 &
+          npx playwright test tests/browser-counts.spec.cjs --workers=1 --reporter=line
+      - name: Upload UI failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-ui-failure
+          path: test-results/
+          if-no-files-found: ignore
+  browser-images:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: small-8-16
+            grep: '(8|16) stickers:'
+          - group: large-24-40
+            grep: '(24|32|40) stickers:'
+          - group: visual-details
+            grep: '(white facial|thin diagonal|diagonal arm|review background|changing main image)'
+          - group: project-restore
+            grep: 'project JSON'
+    name: browser-images (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - name: Test image processing and ZIP export
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/stamp-http.log 2>&1 &
+          npx playwright test tests/browser-image.spec.cjs --workers=1 --reporter=line --timeout=240000 --grep "${{ matrix.grep }}"
+      - name: Upload image failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-image-failure-${{ matrix.group }}
+          path: test-results/
+          if-no-files-found: ignore
+
+  real-fixture-evidence:
+    name: real fixture cutout evidence (10 stickers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - name: Produce real-fixture PNGs and ZIP with pixel diagnostics
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/stamp-fixture-http.log 2>&1 &
+          node tests/fringe-real-browser.cjs
+      - name: Upload real-fixture image evidence for visual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-fixture-10-cutout-evidence
+          path: work/cutout-comparison/
+          if-no-files-found: warn
+
+  constructed-40-sheet:
+    name: constructed 5x8 sheet 40-editor and ZIP flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock @playwright/test
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m pip install pillow
+      - name: Check real-40 runner shell syntax and Python mapping script
+        run: |
+          bash -n tests/run_real40_local.sh
+          python3 -m py_compile tests/audit_real40_mapping.py tests/check_distinct_40_sheet.py
+      - name: Verify reviewed-ZIP fixture builder on synthetic 40 designs
+        run: |
+          python3 - <<'PY'
+          import io, zipfile
+          from PIL import Image, ImageDraw
+          with zipfile.ZipFile('/tmp/reviewed-fixture.zip', 'w') as z:
+              for i in range(40):
+                  im = Image.new('RGBA', (370, 320), (255, 255, 255, 0))
+                  d = ImageDraw.Draw(im)
+                  d.rectangle((40, 40, 300, 280), fill=((i*37)%255, (i*53)%255, (i*71)%255, 255))
+                  d.text((80, 90), str(i+1), fill=(0,0,0,255))
+                  out = io.BytesIO(); im.save(out, format='PNG')
+                  z.writestr(f'{i+1:02d}.png', out.getvalue())
+          PY
+          python3 tests/build_reviewed_40_sheet.py /tmp/reviewed-fixture.zip /tmp/reviewed-fixture-sheet.png
+          python3 - <<'PY'
+          import io, zipfile
+          from PIL import Image, ImageChops
+          sheet = Image.open('/tmp/reviewed-fixture-sheet.png').convert('RGB')
+          assert sheet.size == (2100, 2960)
+          with zipfile.ZipFile('/tmp/reviewed-fixture.zip') as z:
+              for i in range(40):
+                  stamp = Image.open(io.BytesIO(z.read(f'{i+1:02d}.png'))).convert('RGBA')
+                  white = Image.new('RGBA', stamp.size, 'white')
+                  white.alpha_composite(stamp)
+                  x, y = (i % 5) * 420 + 25, (i // 5) * 370 + 25
+                  actual = sheet.crop((x, y, x+370, y+320))
+                  assert ImageChops.difference(actual, white.convert('RGB')).getbbox() is None, f'pixel mismatch: {i+1}'
+          print('PASS: all 40 sheet cells pixel-exactly preserve source artwork')
+          PY
+          python3 - <<'PY'
+          import zipfile, subprocess
+          with zipfile.ZipFile('/tmp/reviewed-missing.png.zip', 'w') as z:
+              for i in range(1, 40):
+                  with zipfile.ZipFile('/tmp/reviewed-fixture.zip') as source:
+                      z.writestr(f'{i:02d}.png', source.read(f'{i:02d}.png'))
+          p = subprocess.run(['python3', 'tests/build_reviewed_40_sheet.py', '/tmp/reviewed-missing.png.zip', '/tmp/should-not-exist.png'], capture_output=True, text=True)
+          assert p.returncode != 0 and 'Missing numbered sticker: 40.png' in (p.stderr + p.stdout), (p.returncode, p.stderr, p.stdout)
+          with zipfile.ZipFile('/tmp/reviewed-extra.zip', 'w') as z:
+              with zipfile.ZipFile('/tmp/reviewed-fixture.zip') as source:
+                  for name in source.namelist():
+                      z.writestr(name, source.read(name))
+                  z.writestr('41.png', source.read('01.png'))
+          p = subprocess.run(['python3', 'tests/build_reviewed_40_sheet.py', '/tmp/reviewed-extra.zip', '/tmp/should-not-exist-extra.png'], capture_output=True, text=True)
+          assert p.returncode != 0 and 'Unexpected numbered stickers' in (p.stderr + p.stdout), (p.returncode, p.stderr, p.stdout)
+          print('PASS: out-of-range 41.png is rejected by reviewed sheet builder')
+          print('PASS: missing sticker is rejected by reviewed sheet builder')
+          PY
+          python3 tests/check_distinct_40_sheet.py /tmp/reviewed-fixture-sheet.png
+      - name: Verify distinct-40 fixture guard rejects repeated artwork
+        run: python3 -m unittest tests/test_distinct_40_sheet.py -v
+      - name: Generate constructed 40-cell sheet from 10 real poses
+        run: python3 tests/prepare_40_sheet.py tests/fixtures/BBE9DC5F-F70D-490D-B5E3-40E2D682218B.png /tmp/stamp-constructed-40.png
+      - name: Exercise all 40 editors and ZIP download in emulated iPhone Chromium
+        run: |
+          python3 -m http.server 4174 --bind 127.0.0.1 >/tmp/stamp-40-http.log 2>&1 &
+          STAMP_TEST_IMAGE=/tmp/stamp-constructed-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-40-evidence node tests/single-sheet-40-browser.cjs
+      - name: Verify all 40 exported PNGs match browser render pixels
+        run: python3 tests/verify_40_zip.py /tmp/stamp-40-evidence/40.zip /tmp/stamp-40-evidence/expected.json
+      - name: Generate synthetic distinct 40 sheet
+        run: python3 tests/prepare_distinct_40_sheet.py tests/fixtures/BBE9DC5F-F70D-490D-B5E3-40E2D682218B.png /tmp/stamp-distinct-40.png
+      - name: Check synthetic sheet distinctness
+        run: python3 tests/check_distinct_40_sheet.py /tmp/stamp-distinct-40.png
+      - name: Test 40 synthetic distinct cells
+        run: STAMP_REQUIRE_DISTINCT_OUTPUT=1 STAMP_TEST_IMAGE=/tmp/stamp-distinct-40.png STAMP_TEST_ARTIFACTS=/tmp/stamp-distinct-40-evidence node tests/single-sheet-40-browser.cjs
+      - name: Verify 40 synthetic exports
+        run: python3 tests/verify_40_zip.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/expected.json
+      - name: Test review overview rejects altered and swapped output cells
+        run: python3 -m unittest tests/test_export_review_sheet.py -v
+      - name: Build numbered review overview from 40 exported PNGs
+        run: python3 tests/render_export_review_sheet.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/exported-40-review.png
+      - name: Verify numbered review overview matches all 40 exported PNG pixels
+        run: python3 tests/verify_export_review_sheet.py /tmp/stamp-distinct-40-evidence/40.zip /tmp/stamp-distinct-40-evidence/exported-40-review.png
+      - name: Exercise real40 local runner end to end on synthetic distinct fixture
+        env:
+          STAMP_TEST_PORT: '4175'
+          STAMP_ALLOW_INCONCLUSIVE_MAPPING: '1'
+        run: |
+          python3 -m pip install opencv-python-headless
+          bash tests/run_real40_local.sh /tmp/stamp-distinct-40.png /tmp/stamp-runner-40-evidence
+      - name: Upload real40 runner diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real40-runner-synthetic-evidence
+          path: /tmp/stamp-runner-40-evidence/
+          if-no-files-found: ignore
+      - name: Upload distinct 40 synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distinct-40-sheet-evidence
+          path: /tmp/stamp-distinct-40-evidence/
+          if-no-files-found: warn
+      - name: Upload constructed-sheet diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: constructed-40-sheet-evidence
+          path: /tmp/stamp-40-evidence/
+          if-no-files-found: warn

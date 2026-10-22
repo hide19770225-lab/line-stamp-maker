@@ -49,6 +49,80 @@
     }
     return best;
   }
+  function closeContour(ink, width, height, radius) {
+    const w = width + radius * 4, h = height + radius * 4;
+    let field = new Uint8Array(w * h);
+    for (let y = 0; y < height; y++)
+      field.set(ink.subarray(y * width, (y + 1) * width),
+        (y + radius * 2) * w + radius * 2);
+    for (const dilate of [true, false]) {
+      for (const horizontal of [true, false]) {
+        const next = new Uint8Array(field.length);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          let value = dilate ? 0 : 1;
+          for (let d = -radius; d <= radius; d++) {
+            const xx = horizontal ? x + d : x, yy = horizontal ? y : y + d;
+            const v = xx >= 0 && xx < w && yy >= 0 && yy < h ? field[yy * w + xx] : 0;
+            value = dilate ? Math.max(value, v) : Math.min(value, v);
+          }
+          next[y * w + x] = value;
+        }
+        field = next;
+      }
+    }
+    const result = new Uint8Array(ink.length);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++)
+      result[y * width + x] = ink[y * width + x] ||
+        field[(y + radius * 2) * w + x + radius * 2];
+    return result;
+  }
+  // A drawing can end on a flat baseline without a painted bottom outline.
+  // Seal that baseline only when a substantial connected contour has separate
+  // vertical terminations at the same level. Never join unrelated components.
+  function sealFlatBaseline(ink, width, height, radius) {
+    const sealed = ink.slice(), seen = new Uint8Array(ink.length), queue = new Uint32Array(ink.length);
+    let caps = 0;
+    for (let seed = 0; seed < ink.length; seed++) {
+      if (!ink[seed] || seen[seed]) continue;
+      let head = 0, tail = 1, left = width, right = 0, top = height, bottom = 0;
+      queue[0] = seed; seen[seed] = 1;
+      while (head < tail) {
+        const p = queue[head++], x = p % width, y = Math.floor(p / width);
+        left = Math.min(left, x); right = Math.max(right, x);
+        top = Math.min(top, y); bottom = Math.max(bottom, y);
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx, yy = y + dy, q = yy * width + xx;
+          if (xx < 0 || xx >= width || yy < 0 || yy >= height || !ink[q] || seen[q]) continue;
+          seen[q] = 1; queue[tail++] = q;
+        }
+      }
+      if (right - left < width * 0.2 || bottom - top < height * 0.25) continue;
+      const band = Math.max(radius * 2 + 1, Math.round((bottom - top) * 0.025)), terminations = new Uint8Array(width);
+      for (let j = 0; j < tail; j++) {
+        const p = queue[j], y = Math.floor(p / width);
+        if (y >= bottom - band) terminations[p % width]++;
+      }
+      // Require vertical support, not a lone JPEG speck at the bottom.
+      const ends = [];
+      for (let x = left; x <= right; x++)
+        if (terminations[x] >= Math.max(2, Math.ceil(band / 2))) ends.push(x);
+      if (ends.length < 2) continue;
+      const x0 = ends[0], x1 = ends[ends.length - 1];
+      if (x1 - x0 < (right - left) * 0.25) continue;
+      let gap = 0;
+      for (let x = x0; x <= x1; x++) if (!terminations[x]) gap++;
+      // A mostly painted baseline needs no cap. A small exterior gap next
+      // to a coloured body and a nearby motion line must stay transparent.
+      if (gap < (x1 - x0 + 1) * 0.35) continue;
+      caps++;
+      for (let x = x0; x <= x1; x++) sealed[bottom * width + x] = 1;
+      // Link terminations that stop a couple of antialiased pixels earlier.
+      for (const x of ends) for (let y = bottom - band; y <= bottom; y++)
+        sealed[y * width + x] = 1;
+    }
+    sealed.baselineCaps = caps;
+    return sealed;
+  }
   function floodMask(
     imageData,
     mode = "auto",
@@ -71,41 +145,86 @@
         : mode === "custom"
           ? [1, 3, 5].map((i) => parseInt(custom.slice(i, i + 2), 16))
           : backgroundColor(data, width, height);
-    // Conservative white matte: avoid crossing pale outlines into white artwork.
-    const safeTolerance = color.every((v) => v >= 235)
-      ? Math.min(tolerance, 12) : tolerance;
-    const seen = new Uint8Array(width * height),
-      queue = new Uint32Array(width * height);
-    let head = 0,
-      tail = 0;
-    function visit(i) {
-      if (!seen[i]) {
-        seen[i] = 1;
-        if (
-          (data[i * 4 + 3] === 0 || data[i * 4 + 3] === 255) &&
-          near(data, i * 4, color, safeTolerance)
-        ) {
-          queue[tail++] = i;
-          mask[i] = 0;
-        }
+    // Close small breaks in the foreground contour BEFORE exterior flooding.
+    // This is a topological barrier, never a new painted foreground layer.
+    // No component-size filtering: detached text, hearts and motion lines count
+    // exactly like the main subject. No directional white-pixel restoration.
+    const opaque = new Uint8Array(mask.length);
+    for (let i = 0; i < mask.length; i++)
+      opaque[i] = data[i * 4 + 3] > 0 &&
+        (data[i * 4 + 3] !== 255 || !near(data, i * 4, color, tolerance)) ? 1 : 0;
+    const radius = Math.max(1, Math.min(3, Math.round(Math.min(width, height) / 250)));
+    const barrier = sealFlatBaseline(closeContour(opaque, width, height, radius), width, height, radius);
+    const outside = new Uint8Array(mask.length),
+      queue = new Uint32Array(mask.length);
+    let head = 0, tail = 0;
+    const visit = (i) => {
+      if (!outside[i] && !barrier[i]) {
+        outside[i] = 1;
+        queue[tail++] = i;
       }
-    }
+    };
     for (let x = 0; x < width; x++) {
-      visit(x);
-      visit((height - 1) * width + x);
+      visit(x); visit((height - 1) * width + x);
     }
     for (let y = 0; y < height; y++) {
-      visit(y * width);
-      visit(y * width + width - 1);
+      visit(y * width); visit(y * width + width - 1);
     }
     while (head < tail) {
-      const i = queue[head++],
-        x = i % width;
-      if (x > 0) visit(i - 1);
+      const i = queue[head++], x = i % width;
+      if (x) visit(i - 1);
       if (x + 1 < width) visit(i + 1);
       if (i >= width) visit(i - width);
       if (i + width < mask.length) visit(i + width);
     }
+    for (let i = 0; i < mask.length; i++) {
+      if (outside[i]) mask[i] = 0;
+      // A virtual bridge seals a contour for traversal only. Do not output a
+      // white bridge along its exterior; keep the enclosed white region intact.
+      else if (!opaque[i] && barrier[i]) {
+        const x = i % width;
+        if ((x && outside[i - 1]) || (x + 1 < width && outside[i + 1]) ||
+            (i >= width && outside[i - width]) ||
+            (i + width < mask.length && outside[i + width])) mask[i] = 0;
+      }
+    }
+    Object.defineProperty(mask, "baselineCaps", { value: barrier.baselineCaps });
+    // Estimate coverage only on the ORIGINAL exposed rim. Never iterate inward.
+    // Keep the original RGB immutable; rendering uses a sparse unmatting layer.
+    const matte = [], solid = mask.slice();
+    for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x, k = i * 4;
+      if (mask[i] !== 255 || data[k + 3] !== 255) continue;
+      if (![i - 1, i + 1, i - width, i + width].some(n => outside[n])) continue;
+      const v = color.map((c, j) => c - data[k + j]);
+      const distance = Math.max(...v.map(Math.abs));
+      const chroma = Math.max(data[k], data[k + 1], data[k + 2]) -
+        Math.min(data[k], data[k + 1], data[k + 2]);
+      // White artwork, dark ink and coloured ornament edges are ambiguous:
+      // preserve them. A neutral transition needs a nearby opaque dark core.
+      if (distance <= tolerance || distance > 160 || chroma > 24) continue;
+      let best = null;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+        const q = yy * width + xx, p = q * 4;
+        if (solid[q] !== 255 || data[p + 3] !== 255) continue;
+        const f = color.map((c, j) => c - data[p + j]);
+        if (Math.max(...f.map(Math.abs)) < 180) continue;
+        const norm = f.reduce((sum, c) => sum + c * c, 0);
+        const alpha = v.reduce((sum, c, j) => sum + c * f[j], 0) / norm;
+        const residual = Math.max(...v.map((c, j) => Math.abs(c - alpha * f[j])));
+        if (alpha <= 0 || alpha >= 0.95 || residual > 12) continue;
+        const score = dx * dx + dy * dy + residual;
+        if (!best || score < best.score) best = { alpha, score };
+      }
+      if (!best) continue;
+      const alpha = Math.max(1, Math.round(best.alpha * 255));
+      mask[i] = alpha;
+      matte.push([i, ...color.map((c, j) => Math.max(0, Math.min(255,
+        Math.round(c + (data[k + j] - c) * 255 / alpha))))]);
+    }
+    Object.defineProperty(mask, "matte", { value: matte });
     return mask;
   }
   // Preview-only proposal. Change alpha on one exposed opaque matte rim;
@@ -174,10 +293,13 @@
   }
   function tileRect(source, column, row) {
     const { xs, ys, image } = source;
-    const left = Math.round(xs[column] * image.width);
+    // Vertical dividers may need different positions on each row when text
+    // and antennae are staggered. Fall back to the shared grid for old files.
+    const columnLines = source.rowXs?.[row] || xs;
+    const left = Math.round(columnLines[column] * image.width);
     const rowLines = source.columnYs?.[column] || ys;
     const top = Math.round(rowLines[row] * image.height);
-    const right = Math.round(xs[column + 1] * image.width);
+    const right = Math.round(columnLines[column + 1] * image.width);
     const bottom = Math.round(rowLines[row + 1] * image.height);
     const inset = source.insets || { left: 0, right: 0, top: 0, bottom: 0 };
     const x = Math.min(
@@ -326,17 +448,48 @@
       for(let row=1;row<rows;row++){
         const nominal=row*cell, options=[];
         const low=Math.max(1,Math.round(nominal-cell*0.43));
-        const high=Math.min(height-2,Math.round(nominal+cell*0.43));
+        const high=Math.min(height-2,Math.round(
+          nominal + cell*0.43));
         for(let y=low;y<=high;y+=2){
           const left=Math.max(0,y-Math.round(cell*0.12));
           const right=Math.min(height-1,y+Math.round(cell*0.12));
           const surrounding=Math.max(smooth[left],smooth[right]);
+          // Confirm this is a gap BETWEEN two stickers. White bands inside
+          // lettering, or empty margins before the next drawing, are not
+          // sufficient evidence for a row separator.
+          const band = Math.max(4, Math.round(cell * 0.10));
+          const reach = Math.max(band + 2, Math.round(cell * 0.32));
+          const inkAbove = Math.max(...smooth.subarray(
+            Math.max(0, y - reach), Math.max(1, y - band)));
+          const inkBelow = Math.max(...smooth.subarray(
+            Math.min(height - 1, y + band), Math.min(height, y + reach)));
+          if (inkAbove < 0.035 || inkBelow < 0.035) continue;
           // A good gutter is pale and lies between two populated rows.
-          const score=smooth[y]*9+Math.abs(y-nominal)/cell*0.10
-              +Math.max(0,0.025-surrounding)*2;
+          // The cut must lie in a sustained empty corridor, not merely a
+          // pale stripe inside a caption or at the top of the next sticker.
+          // Real 2x5 artwork sometimes leaves only 2-10 clean scanlines.
+          // Reject any cut through visible ink, but do not require a broad
+          // 3.5%-of-cell gutter (which rejects every row on such sheets).
+          const maxGutterInk = 0.008;
+          const inkHere = density[y];
+          if (inkHere > maxGutterInk) continue;
+          let clearUp = 0, clearDown = 0;
+          while (clearUp < cell * 0.10 && y - clearUp >= 0 &&
+                 density[y - clearUp] <= maxGutterInk) clearUp++;
+          while (clearDown < cell * 0.10 && y + clearDown < height &&
+                 density[y + clearDown] <= maxGutterInk) clearDown++;
+          const corridor = clearUp + clearDown - 1;
+          if (corridor < 2) continue;
+          // A long clear run near the expected boundary is preferred.
+          // The two-sided ink check above excludes blank image margins.
+          const score = Math.abs(y - nominal) / cell * 0.13 +
+            0.7 / (corridor + 3) + smooth[y] * 0.08;
           options.push({y,score});
         }
         options.sort((a,b)=>a.score-b.score);
+        // An uncertain boundary must be reviewed, never guessed from an
+        // equal-height split that can include a neighbour's artwork.
+        if (!options.length) return null;
         candidates.push(options.slice(0,35));
       }
       let states=[{cuts:[0],score:0}];
@@ -355,7 +508,39 @@
       states=states.filter(st=>height-st.cuts[rows-1]>=cell*0.56);
       if(!states.length)return null;
       states.sort((a,b)=>a.score-b.score);
-      result.push([...states[0].cuts.map(y=>y/height),1]);
+      // Select the middle of the contiguous blank corridor instead of a
+      // nominal-biased edge. This maximizes clearance from both stickers,
+      // especially around the 07/08 -> 09/10 transition.
+      const selected = states[0].cuts.slice();
+      for (let i = 1; i < selected.length; i++) {
+        let lo = selected[i], hi = selected[i];
+        // Bound the corridor to the expected row junction. Otherwise a very
+        // large empty margin could shift a cut into an adjacent sticker.
+        const nominal = i * cell;
+        const minY = Math.max(1, Math.ceil(nominal - cell * 0.43));
+        const maxY = Math.min(height - 2, Math.floor(
+          nominal + cell * 0.43));
+        while (lo > minY && density[lo - 1] <= 0.008) lo--;
+        while (hi < maxY && density[hi + 1] <= 0.008) hi++;
+        const centered = Math.round((lo + hi) / 2);
+        // Preserve the joint optimizer's minimum row height after centering.
+        const previous = selected[i - 1];
+        const next = i + 1 < selected.length ? states[0].cuts[i + 1] : height;
+        selected[i] = centered - previous >= cell * 0.56 &&
+          next - centered >= cell * 0.56 ? centered : states[0].cuts[i];
+      }
+      // Independently verify every selected split against the original
+      // column pixels. A split through even one visible scanline is not
+      // reliable, regardless of the optimization score.
+      for (let i = 1; i < selected.length; i++) {
+        const cut = selected[i];
+        const before = density[Math.max(0, cut - 1)];
+        const at = density[cut];
+        const after = density[Math.min(height - 1, cut + 1)];
+        const allowedInk = 0.008;
+        if (Math.max(before, at, after) > allowedInk) return null;
+      }
+      result.push([...selected.map(y=>y/height),1]);
     }
     return result;
   }
@@ -380,8 +565,88 @@
       if (count(side) >= 2) edges.push(side);
     return { needsReview: edges.length > 0, edges };
   }
+  function pixelCropCrossings(image, rect, mode = "auto", tolerance = 24, custom = "#ffffff") {
+    if (mode === "none") return [];
+    const { data, width, height } = image;
+    const color = mode === "white" ? [255, 255, 255] : mode === "custom"
+      ? [1, 3, 5].map(i => parseInt(custom.slice(i, i + 2), 16))
+      : backgroundColor(data, width, height);
+    const ink = (x, y) => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return false;
+      const k = (y * width + x) * 4;
+      return data[k + 3] > 128 && !near(data, k, color, Math.max(40, tolerance));
+    };
+    const edges = [
+      ["top", rect.width, n => [rect.x + n, rect.y, 0, 1]],
+      ["bottom", rect.width, n => [rect.x + n, rect.y + rect.height - 1, 0, -1]],
+      ["left", rect.height, n => [rect.x, rect.y + n, 1, 0]],
+      ["right", rect.height, n => [rect.x + rect.width - 1, rect.y + n, -1, 0]],
+    ];
+    const result = [], threshold = Math.max(4, Math.round(Math.min(rect.width, rect.height) * 0.02));
+    for (const [side, length, point] of edges) {
+      let run = 0, longest = 0;
+      for (let n = 0; n < length; n++) {
+        const [x, y, dx, dy] = point(n);
+        // Require two pixels on both sides, including the actual crop edge.
+        const crosses = ink(x, y) && ink(x + dx, y + dy) &&
+          ink(x - dx, y - dy) && ink(x - 2 * dx, y - 2 * dy);
+        run = crosses ? run + 1 : 0;
+        longest = Math.max(longest, run);
+      }
+      if (longest >= threshold) result.push(side);
+    }
+    return result;
+  }
+  // One background sample per original sheet, rather than repeated
+  // canvas allocations during boundary inspection.
+  const cropBackgroundCache = new WeakMap();
+  function cropCrossings(image, rect, mode, tolerance, color) {
+    if (mode === "none") return [];
+    const x = Math.max(0, rect.x - 2), y = Math.max(0, rect.y - 2);
+    const w = Math.min(image.width, rect.x + rect.width + 2) - x;
+    const h = Math.min(image.height, rect.y + rect.height + 2) - y;
+    const probe = isolateRect(image, { x, y, width: w, height: h });
+    const pixels = probe.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, w, h);
+    probe.width = probe.height = 1;
+    // The four corners of a tiny probe may all belong to the artwork.
+    // In auto mode, infer the background from the ORIGINAL sheet corners,
+    // not the cropped probe. Otherwise dark lettering can be mistaken for
+    // background and white gutters can be flagged as cut artwork.
+    let crossingMode = mode, crossingColor = color;
+    if (mode === "auto") {
+      let bgColor = cropBackgroundCache.get(image);
+      if (!bgColor) {
+        const corners = canvas(4, 1);
+        const cornerContext = corners.getContext("2d", { willReadFrequently: true });
+        const positions = [
+          [0, 0], [image.width - 1, 0],
+          [0, image.height - 1], [image.width - 1, image.height - 1],
+        ];
+        for (let i = 0; i < positions.length; i++) {
+          const [cx, cy] = positions[i];
+          cornerContext.drawImage(image, cx, cy, 1, 1, i, 0, 1, 1);
+        }
+        const samples = cornerContext.getImageData(0, 0, 4, 1);
+        const bg = backgroundColor(samples.data, 4, 1);
+        corners.width = corners.height = 1;
+        bgColor = "#" + bg.map(channel => channel.toString(16).padStart(2, "0")).join("");
+        cropBackgroundCache.set(image, bgColor);
+      }
+      crossingMode = "custom";
+      crossingColor = bgColor;
+    }
+    return pixelCropCrossings(pixels, { ...rect, x: rect.x - x, y: rect.y - y }, crossingMode, tolerance, crossingColor);
+  }
   function createTile(source, column, row, mode, tolerance, color) {
     const rect = tileRect(source, column, row);
+    // Boundary color alone is not evidence of a cut. Compare the crop to
+    // neighbouring ORIGINAL pixels; a stroke must continue across the edge.
+    const sourceCuts = cropCrossings(source.image, rect, mode, tolerance, color);
+    // Preserve the crossing diagnostics, but do not reject a tile before the
+    // user can inspect the processed image. Detection can be a false positive.
+    if (sourceCuts.length) {
+      console.warn(`コマ${row * (source.columns || source.xs.length - 1) + column + 1}：分割境界に色の連続（${sourceCuts.join("・")}）。加工後に目視確認してください。`);
+    }
     // Keep the source layer at up to 600px, rather than repeatedly enlarging a 250px image.
     const scale = Math.min(1, 600 / Math.max(rect.width, rect.height));
     const crop = canvas(
@@ -396,28 +661,79 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
-    // Conservative signal only: do not certify tiles with suspiciously
-    // large erased areas surrounded by colored artwork.
-    const x0 = Math.floor(original.width * 0.3);
-    const x1 = Math.ceil(original.width * 0.7);
-    const y0 = Math.floor(original.height * 0.3);
-    const y1 = Math.ceil(original.height * 0.7);
-    let erased = 0, colorful = 0, samples = 0;
-    for (let y = y0; y < y1; y++) {
-      for (let x = x0; x < x1; x++) {
-        const p = y * original.width + x, k = p * 4;
-        if (original.data[k + 3] < 200) continue;
-        samples++;
-        if (mask[p] === 0) erased++;
-        if (Math.max(original.data[k], original.data[k + 1], original.data[k + 2]) -
-            Math.min(original.data[k], original.data[k + 1], original.data[k + 2]) > 40)
-          colorful++;
+    // A neighbouring row can leak into the bottom of a tile even when the
+    // source-grid cut looks plausible. Find a genuinely empty horizontal
+    // corridor separating a compact bottom fragment from the main artwork.
+    // Never silently delete artwork: preserve pixels and require review.
+    const rowInk = new Uint32Array(original.height);
+    for (let y = 0; y < original.height; y++)
+      for (let x = 0; x < original.width; x++)
+        if (mask[y * original.width + x] > 32) rowInk[y]++;
+    const start = Math.floor(original.height * 0.68);
+    const end = Math.floor(original.height * 0.94);
+    const minGap = Math.max(3, Math.round(original.height * 0.025));
+    let bottomFragment = false;
+    for (let y = start; y < end;) {
+      if (rowInk[y] > 0) { y++; continue; }
+      let next = y;
+      while (next < end && rowInk[next] === 0) next++;
+      if (next - y >= minGap) {
+        let below = 0, above = 0;
+        for (let k = next; k < original.height; k++) below += rowInk[k];
+        for (let k = 0; k < y; k++) above += rowInk[k];
+        if (below >= Math.max(12, original.width * 0.12) &&
+            above >= below * 2 && next < original.height * 0.91) {
+          bottomFragment = true;
+          break;
+        }
+      }
+      y = next;
+    }
+    if (bottomFragment) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("detached-bottom-fragment");
+    }
+    // Diagnose isolated fragments along either vertical edge. On tightly
+    // packed 5x8 sheets, the adjacent sticker's caption or decoration may
+    // survive background removal as a disconnected island. Detection is
+    // advisory only: never erase artwork without explicit visual review.
+    const columnInk = new Uint32Array(original.width);
+    for (let y = 0; y < original.height; y++)
+      for (let x = 0; x < original.width; x++)
+        if (mask[y * original.width + x] > 32) columnInk[x]++;
+    const edgeWindow = Math.max(4, Math.floor(original.width * 0.24));
+    const minVerticalGap = Math.max(2, Math.round(original.width * 0.018));
+    for (const side of ["left", "right"]) {
+      const positions = [];
+      for (let k = 0; k < edgeWindow; k++)
+        positions.push(side === "left" ? k : original.width - 1 - k);
+      let fragment = false;
+      for (let k = 1; k < positions.length - minVerticalGap; k++) {
+        if (columnInk[positions[k]] !== 0) continue;
+        let next = k;
+        while (next < positions.length && columnInk[positions[next]] === 0) next++;
+        if (next - k >= minVerticalGap) {
+          let outer = 0, inner = 0;
+          for (let j = 0; j < k; j++) outer += columnInk[positions[j]];
+          for (let j = next; j < original.width; j++) {
+            const x = side === "left" ? j : original.width - 1 - j;
+            inner += columnInk[x];
+          }
+          if (outer >= Math.max(8, original.height * 0.06) &&
+              inner >= outer * 2) { fragment = true; break; }
+        }
+        k = next - 1;
+      }
+      if (fragment) {
+        boundaryReview.needsReview = true;
+        boundaryReview.edges.push("detached-" + side + "-fragment");
       }
     }
-    if (mode !== "none" && samples > 0 && colorful > 20 &&
-        erased / samples > 0.45) {
+    // Inferred flat baselines are a geometric hypothesis, not semantic
+    // evidence that a white region is a paw. Keep a visible review marker.
+    if (mask.baselineCaps) {
       boundaryReview.needsReview = true;
-      boundaryReview.edges.push("possible-white-artwork-loss");
+      boundaryReview.edges.push("inferred-open-outline");
     }
     return {
       sourceRect: { ...rect },
@@ -425,6 +741,7 @@
       original,
       mask,
       autoMask: mask.slice(),
+      matte: mask.matte || [],
       caption: "",
       crop: { left: 0, right: 0, top: 0, bottom: 0 },
       layout: { scale: 90, x: 50, y: 50 },
@@ -618,6 +935,11 @@
     );
     for (let i = 0; i < stamp.mask.length; i++)
       data.data[i * 4 + 3] = stamp.mask[i];
+    // Manual erase/restore wins over inferred edge coverage. Recreated tiles
+    // regenerate this sparse layer, including after project JSON reload.
+    for (const [i, r, g, b] of stamp.matte || []) {
+      if (stamp.mask[i] === stamp.autoMask[i]) data.data.set([r, g, b], i * 4);
+    }
     const layer = canvas(width, height);
     layer.getContext("2d").putImageData(data, 0, 0);
     const selectedCrop = stampCrop(stamp);
@@ -892,6 +1214,8 @@
     canvas,
     backgroundColor,
     floodMask,
+    cropCrossings,
+    pixelCropCrossings,
     proposeMatteCleanup,
     alphaBounds,
     createTile,

@@ -1,0 +1,22 @@
+name: Sticker count regression tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax in every browser module
+        run: |
+          for f in core.js residue.js typography.js project.js audit.js easy.js caption-references.js caption-vision.js suggestions.js build-info.js version.js app.js; do
+            node --check "$f"
+          done
+      - name: Run sticker count and all module regression tests
+        run: node --test tests/counts.test.js tests/zip-counts.test.js tests/*.test.cjs

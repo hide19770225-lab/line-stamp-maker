@@ -8,8 +8,12 @@
     detailed = false,
   ) {
     const { width, height, data } = image;
-    if (mask.length !== width * height)
+    if (!mask || !data || data.length !== width * height * 4 || mask.length !== width * height)
       throw new Error("画像と透明度の寸法が一致しません。");
+    if (!rect || ![rect.x, rect.y, rect.width, rect.height].every(Number.isInteger) ||
+        rect.x < 0 || rect.y < 0 || rect.width < 1 || rect.height < 1 ||
+        rect.x + rect.width > width || rect.y + rect.height > height)
+      throw new Error("検査範囲が画像の外にはみ出しています。");
     const visited = new Uint32Array(mask.length),
       queue = new Uint32Array(mask.length),
       components = [];
@@ -265,6 +269,41 @@
           }
         }
       }
+    // A narrow coloured sliver can be a cut-off neighbour, not an ornament.
+    // Measure separation from ALL substantial components (including lettering),
+    // never just from the largest character. Geometry only requests review;
+    // it cannot establish background provenance and never triggers deletion.
+    for (const c of candidates) {
+      c.nearestContentDistance = null;
+      if (components.length <= 2000) {
+        let distance = Infinity;
+        for (const other of components) {
+          if (other.id === c.id || other.area < Math.max(25, c.area * 2)) continue;
+          const dx = Math.max(0, c.x - other.x - other.width + 1,
+            other.x - c.x - c.width + 1);
+          const dy = Math.max(0, c.y - other.y - other.height + 1,
+            other.y - c.y - c.height + 1);
+          distance = Math.min(distance, Math.hypot(dx, dy));
+        }
+        if (Number.isFinite(distance)) c.nearestContentDistance = distance;
+      }
+      c.isolatedSliver = c.exterior && !c.nearMain && !c.groupedDecoration &&
+        Math.min(c.width, c.height) <= 2 &&
+        Math.max(c.width, c.height) >= 5 &&
+        Math.max(c.width, c.height) / Math.min(c.width, c.height) >= 4 &&
+        c.nearestContentDistance !== null &&
+        c.nearestContentDistance >= Math.max(8, Math.min(rect.width, rect.height) * 0.05);
+      if (c.isolatedSliver) {
+        c.protected = false;
+        c.classification = "uncertain-residue";
+      }
+      c.decision = c.protected ? "keep" : "review";
+      c.reason = c.isolatedSliver
+        ? "周囲の文字・装飾から離れた細い断片。色付きでも装飾とは断定できないため要確認。自動削除しません。"
+        : c.protected
+          ? "文字・装飾・輪郭の細部の可能性があるため保持。濁点・半濁点、ハート、星、動線、触角の光を面積だけで削除しません。"
+          : "独立した画素群ですが背景由来の証拠が不足しています。要確認として保持します。";
+    }
     return {
       width,
       height,

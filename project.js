@@ -63,6 +63,15 @@
     source.rows = rows;
     source.xs = lines(columns);
     source.ys = lines(rows);
+    // Column gutters and crop diagnostics belong to the previous grid.
+    source.columnYs = null;
+    source.rowXs = null;
+    source.manualColumnYs = false;
+    source.gutterUncertain = false;
+    source.insets = blankInsets();
+    source.splitIssues = null;
+    source.cropReport = [];
+    source.cropMethod = null;
     source.assignments = Array.from(
       { length: columns * rows },
       (_, i) => source.assignments[i] || 0,
@@ -91,6 +100,8 @@
     source.assignments[cell] = value;
   }
   function encodeMask(mask, autoMask) {
+    if (!mask || !autoMask || mask.length !== autoMask.length)
+      throw new Error("切り抜きマスクのサイズが一致しません。元画像を再読み込みしてください。");
     const runs = [];
     for (let i = 0; i < mask.length;) {
       if (mask[i] === autoMask[i]) {
@@ -294,6 +305,8 @@
         if (
           !Array.isArray(s[key]) ||
           s[key].length !== count + 1 ||
+          s[key][0] !== 0 ||
+          s[key][count] !== 1 ||
           s[key].some(
             (n, i) =>
               !number(n, 0, 1) ||
@@ -304,6 +317,21 @@
         )
           fail();
       }
+      // Older project JSON files omit independent row/column gutters.
+      // Validate optional arrays before retaining them in the saved project.
+      const validLines = (lines, count, size) =>
+        Array.isArray(lines) && lines.length === count + 1 &&
+        lines[0] === 0 && lines[count] === 1 &&
+        lines.every((n, i) => number(n, 0, 1) &&
+          (!i || n - lines[i - 1] >= 2 / size - 1e-9));
+      if (s.rowXs != null && (
+        !Array.isArray(s.rowXs) || s.rowXs.length !== s.rows ||
+        !s.rowXs.every(lines => validLines(lines, s.columns, s.width))
+      )) fail();
+      if (s.columnYs != null && (
+        !Array.isArray(s.columnYs) || s.columnYs.length !== s.columns ||
+        !s.columnYs.every(lines => validLines(lines, s.rows, s.height))
+      )) fail();
       return {
         name: s.name,
         fingerprint: s.fingerprint,
@@ -313,6 +341,9 @@
         rows: s.rows,
         xs: s.xs.slice(),
         ys: s.ys.slice(),
+        rowXs: s.rowXs ? s.rowXs.map(lines => lines.slice()) : null,
+        columnYs: s.columnYs ? s.columnYs.map(lines => lines.slice()) : null,
+        manualColumnYs: Boolean(s.columnYs),
         insets: Object.fromEntries(sides.map((k) => [k, s.insets[k]])),
         assignments: s.assignments.slice(),
         mode: s.mode,

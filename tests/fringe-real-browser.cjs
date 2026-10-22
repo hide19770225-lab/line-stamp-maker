@@ -1,0 +1,204 @@
+/* Pixel evidence, not semantic acceptance. A stopped baseline tile is saved
+   ONLY as an explicitly labelled diagnostic reconstruction. */
+'use strict';
+const {chromium,devices}=require('playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {execFileSync}=require('node:child_process'),{createHash}=require('node:crypto');
+const baseRef=process.env.STAMP_BASE_REF||'a7fbe457986099289816cb1c7a7b34f0ee2e95f2';
+const input=process.env.STAMP_CUTOUT_INPUT||'tests/fixtures/BBE9DC5F-F70D-490D-B5E3-40E2D682218B.png';
+const dir=process.env.STAMP_TEST_ARTIFACTS||'work/cutout-comparison';
+const base=process.env.STAMP_TEST_URL||'http://127.0.0.1:4173';
+const sha=b=>createHash('sha256').update(b).digest('hex');
+const writePng=(file,url)=>fs.writeFileSync(path.join(dir,file),Buffer.from(url.split(',')[1],'base64'));
+(async()=>{
+ fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(path.join(dir,'final'),{recursive:true});
+ const b=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||chromium.executablePath(),args:['--no-sandbox']});
+ try{
+  const p=await b.newPage({...devices['iPhone 13'],acceptDownloads:true});
+  await p.goto('about:blank');await p.addScriptTag({content:execFileSync('git',['show',`${baseRef}:core.js`],{encoding:'utf8'})});
+  await p.evaluate(()=>window.Before=StampCore);await p.addScriptTag({path:'core.js'});
+  const result=await p.evaluate(async base64=>{
+   const im=new Image();im.src='data:image/png;base64,'+base64;await im.decode();const results={};
+   for(const [name,C] of [['before',Before],['after',StampCore]]){
+    const columnYs=C.suggestColumnRowLines(im,[0,.5,1],5);if(!columnYs)throw Error(`${name}: no safe grid; no equal-grid fallback allowed`);
+    const source={image:im,xs:[0,.5,1],ys:[0,.2,.4,.6,.8,1],columnYs,columns:2,rows:5,mode:'auto'};
+    results[name]={columnYs,tiles:[]};
+    for(let n=0;n<10;n++){
+     const col=n%2,row=Math.floor(n/2),rect=C.tileRect(source,col,row);let error=null,tile;
+     try{tile=C.createTile(source,col,row,'auto',24,'#ffffff')}catch(e){
+      if(name==='after')throw e;
+      error=e.message;const c=C.canvas(rect.width,rect.height);c.getContext('2d').drawImage(im,-rect.x,-rect.y);
+      const original=c.getContext('2d').getImageData(0,0,c.width,c.height);
+      tile={original,mask:C.floodMask(original,'auto',24),boundaryReview:null};
+     }
+     const c=C.canvas(tile.original.width,tile.original.height),ctx=c.getContext('2d'),out=ctx.createImageData(c.width,c.height);
+     out.data.set(tile.original.data);const bg=C.backgroundColor(tile.original.data,c.width,c.height);let strong=0,strongChanged=0,chromatic=0,chromaticChanged=0;
+     for(let i=0;i<tile.mask.length;i++){
+      const k=i*4,d=tile.original.data,hi=Math.max(d[k],d[k+1],d[k+2]),lo=Math.min(d[k],d[k+1],d[k+2]);
+      if(Math.max(...bg.map((v,j)=>Math.abs(v-d[k+j])))>56){strong++;if(tile.mask[i]!==d[k+3])strongChanged++;}
+      if(hi-lo>24&&Math.max(...bg.map((v,j)=>Math.abs(v-d[k+j])))>24){chromatic++;if(tile.mask[i]!==d[k+3])chromaticChanged++;}
+      out.data[k+3]=tile.mask[i];
+     }
+     for(const [i,r,g,b] of tile.matte||[]) out.data.set([r,g,b],i*4);
+     ctx.putImageData(out,0,0);
+     const oldMask=Before.floodMask(tile.original,'auto',24);
+     let whiteChanged=0,darkChanged=0,alphaRemoved=0;
+     for(let i=0;i<tile.mask.length;i++) {
+      const d=tile.original.data,k=i*4;
+      if(oldMask[i] && Math.min(d[k],d[k+1],d[k+2])>=231 && tile.mask[i]!==oldMask[i]) whiteChanged++;
+      if(oldMask[i] && Math.max(d[k],d[k+1],d[k+2])<=75 && tile.mask[i]!==oldMask[i]) darkChanged++;
+      if(oldMask[i] && !tile.mask[i]) alphaRemoved++;
+     }
+     if(name==='after'){if(whiteChanged||darkChanged||alphaRemoved) throw Error('protected pixels changed');}
+
+     const original=C.canvas(c.width,c.height);original.getContext('2d').putImageData(tile.original,0,0);
+     const sourceEdgeInk={};
+     const isInk=(x,y)=>{
+      const k=(y*tile.original.width+x)*4,d=tile.original.data;
+      return Math.min(d[k],d[k+1],d[k+2])<205||Math.max(d[k],d[k+1],d[k+2])-Math.min(d[k],d[k+1],d[k+2])>35;
+     };
+     const w=tile.original.width,h=tile.original.height;
+     sourceEdgeInk.top=Array.from({length:w},(_,x)=>isInk(x,0)).filter(Boolean).length;
+     sourceEdgeInk.bottom=Array.from({length:w},(_,x)=>isInk(x,h-1)).filter(Boolean).length;
+     sourceEdgeInk.left=Array.from({length:h},(_,y)=>isInk(0,y)).filter(Boolean).length;
+     sourceEdgeInk.right=Array.from({length:h},(_,y)=>isInk(w-1,y)).filter(Boolean).length;
+     const sourceEdgeRemoved=new Set();
+     for(let x=0;x<w;x++)for(const y of [0,h-1])if(isInk(x,y)&&tile.mask[y*w+x]===0)sourceEdgeRemoved.add(y*w+x);
+     for(let y=0;y<h;y++)for(const x of [0,w-1])if(isInk(x,y)&&tile.mask[y*w+x]===0)sourceEdgeRemoved.add(y*w+x);
+     if(name==='after'&&sourceEdgeRemoved.size)throw Error(`source edge ink removed from tile ${n+1}: ${sourceEdgeRemoved.size} pixels`);
+     results[name].tiles.push({n:n+1,rect,error,diagnosticOnly:!!error,review:tile.boundaryReview,sourceEdgeInk,sourceEdgeRemoved:sourceEdgeRemoved.size,
+      whiteChanged,darkChanged,alphaRemoved,unmatted:(tile.matte||[]).length,strong,strongChanged,chromatic,chromaticChanged,png:c.toDataURL(),original:original.toDataURL()});
+    }
+   }
+   return results;
+  },fs.readFileSync(input).toString('base64'));
+  for(const [state,r] of Object.entries(result))for(const t of r.tiles){
+   const number=String(t.n).padStart(2,'0');writePng(`${state}-${number}.png`,t.png);
+   if(state==='after'){writePng(`source-${number}.png`,t.original);assert.equal(t.chromaticChanged,0,`chromatic foreground ${number}`);}
+   delete t.png;delete t.original;
+  }
+  await p.goto(base);const errors=[];p.on('pageerror',e=>errors.push(e.message));p.on('dialog',d=>d.accept());
+  await p.evaluate(()=>{window.testTiles=[];const create=StampCore.createTile;StampCore.createTile=(...a)=>{const s=create(...a);testTiles.push(s);return s}});
+  await p.selectOption('#default-layout','2x5');await p.setInputFiles('#file-input',input);
+  await p.waitForFunction(()=>document.querySelectorAll('.source-card').length===1&&!document.body.classList.contains('busy'));
+  await p.click('#process-all');await p.waitForFunction(()=>!document.body.classList.contains('busy'));
+  assert.equal(await p.locator('.stamp-card').count(),10,await p.locator('#status').innerText());
+  const outputs=await p.evaluate(()=>testTiles.map(s=>{const rendered=StampCore.renderStamp(s),canvas=rendered.canvas,ctx=canvas.getContext('2d');const {data}=ctx.getImageData(0,0,canvas.width,canvas.height);const alpha=(x,y)=>data[(y*canvas.width+x)*4+3];const corners=[alpha(0,0),alpha(canvas.width-1,0),alpha(0,canvas.height-1),alpha(canvas.width-1,canvas.height-1)];let opaque=0,transparent=0,minX=canvas.width,minY=canvas.height,maxX=-1,maxY=-1;for(let i=3;i<data.length;i+=4){const pixel=(i-3)/4,x=pixel%canvas.width,y=Math.floor(pixel/canvas.width);if(data[i]===255)opaque++;if(data[i]===0)transparent++;if(data[i]>0){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}}const margins=[minX,minY,canvas.width-1-maxX,canvas.height-1-maxY];return {rect:s.sourceRect,review:s.boundaryReview,autoRemoved:rendered.autoRemoved,png:canvas.toDataURL(),alphaEvidence:{width:canvas.width,height:canvas.height,corners,opaque,transparent,margins}}}));
+  assert.equal(outputs.length,10,'expected 10 rendered real-image stickers');
+  for(const [i,out] of outputs.entries()){
+   assert.deepEqual([out.alphaEvidence.width,out.alphaEvidence.height],[370,320],`sticker ${i+1}: wrong rendered canvas size`);
+   assert.deepEqual(out.alphaEvidence.corners,[0,0,0,0],`sticker ${i+1}: nontransparent corner`);
+   assert.ok(out.alphaEvidence.opaque>0&&out.alphaEvidence.transparent>0,`sticker ${i+1}: missing foreground or transparent background`);
+   assert.ok(out.alphaEvidence.opaque+out.alphaEvidence.transparent<=370*320,`sticker ${i+1}: impossible alpha counts`);
+   assert.ok(out.alphaEvidence.margins.every(v=>v>=20),`sticker ${i+1}: artwork too close to output edge: ${out.alphaEvidence.margins}`);
+  }
+  assert.equal(new Set(outputs.map(o=>o.png)).size,10,'duplicate rendered PNGs: possible repeated crop');
+  assert.equal(new Set(outputs.map(o=>JSON.stringify(o.rect))).size,10,'duplicate source rectangles: possible repeated crop');
+  assert.deepEqual(outputs.map(o=>o.rect),result.after.tiles.map(t=>t.rect),'UI crop rectangles differ from core extraction');
+  for(const [i,out] of outputs.entries()){
+   assert.ok(out.rect&&out.rect.width>0&&out.rect.height>0,`sticker ${i+1}: empty source crop`);
+   assert.ok(Number.isFinite(out.rect.x)&&Number.isFinite(out.rect.y),`sticker ${i+1}: nonfinite crop coordinates`);
+   assert.ok(out.rect.x>=0&&out.rect.y>=0,`sticker ${i+1}: negative crop coordinates`);
+   assert.ok(Number.isFinite(out.rect.width)&&Number.isFinite(out.rect.height),`sticker ${i+1}: nonfinite crop dimensions`);
+   assert.ok(Number.isInteger(out.rect.width)&&Number.isInteger(out.rect.height),`sticker ${i+1}: noninteger crop dimensions`);
+   assert.ok(Number.isInteger(out.rect.x)&&Number.isInteger(out.rect.y),`sticker ${i+1}: noninteger crop coordinates`);
+   assert.ok(out.rect.width<=10000&&out.rect.height<=10000,`sticker ${i+1}: implausibly large crop`);
+  }
+  const residualDiagnostics=await p.evaluate(pngs=>Promise.all(pngs.map(async (url)=>{
+   const im=new Image();im.src=url;await im.decode();
+   const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+   const ctx=c.getContext('2d');ctx.drawImage(im,0,0);
+   const {data}=ctx.getImageData(0,0,c.width,c.height),w=c.width,h=c.height;
+   const seen=new Uint8Array(w*h),components=[];
+   for(let i=0;i<w*h;i++){
+    if(seen[i]||data[i*4+3]<32)continue;
+    const stack=[i];seen[i]=1;let pixels=0,minX=w,minY=h,maxX=0,maxY=0,alphaSum=0;
+    while(stack.length){
+     const q=stack.pop(),x=q%w,y=Math.floor(q/w);pixels++;alphaSum+=data[q*4+3];
+     minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
+     for(const n of [x>0?q-1:-1,x+1<w?q+1:-1,y>0?q-w:-1,y+1<h?q+w:-1]){
+      if(n>=0&&!seen[n]&&data[n*4+3]>=32){seen[n]=1;stack.push(n);}
+     }
+    }
+    components.push({pixels,x:minX,y:minY,width:maxX-minX+1,height:maxY-minY+1,meanAlpha:Math.round(alphaSum/pixels)});
+   }
+   components.sort((a,b)=>b.pixels-a.pixels);
+   return {componentCount:components.length,largest:components[0]||null,
+    smallIslands:components.slice(1).filter(v=>v.pixels<=150),
+    thinIslands:components.slice(1).filter(v=>v.width<=3||v.height<=3)};
+  })),outputs.map(x=>x.png));
+  const annotated=await p.evaluate(async ({pngs,boxes})=>Promise.all(pngs.map(async (url,i)=>{
+   const im=new Image();im.src=url;await im.decode();
+   const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+   const ctx=c.getContext('2d');ctx.drawImage(im,0,0);
+   ctx.lineWidth=2;ctx.strokeStyle='#e60000';
+   for(const box of boxes[i])ctx.strokeRect(Math.max(0,box.x-2),Math.max(0,box.y-2),box.width+4,box.height+4);
+   return c.toDataURL();
+  })),{pngs:outputs.map(x=>x.png),boxes:residualDiagnostics.map(x=>x.smallIslands)});
+  fs.mkdirSync(path.join(dir,'annotated'),{recursive:true});
+  for(let i=0;i<10;i++){
+   writePng(`final/${String(i+1).padStart(2,'0')}.png`,outputs[i].png);
+   writePng(`annotated/${String(i+1).padStart(2,'0')}.png`,annotated[i]);
+   outputs[i].residualDiagnostics=residualDiagnostics[i];delete outputs[i].png;
+   assert.deepEqual(outputs[i].rect,result.after.tiles[i].rect);
+  }
+  const download=p.waitForEvent('download');await p.click('#download-button');await(await download).saveAs(path.join(dir,'app-10.zip'));
+  // Verify the actual downloadable ZIP, not just in-memory canvases.
+  const zipCheck=execFileSync('python3',['-c',[
+   'import sys,zipfile,struct,json',
+   'p=sys.argv[1]',
+   'expected={**{f"{i:02}.png":(370,320) for i in range(1,11)},"main.png":(240,240),"tab.png":(96,74)}',
+   'with zipfile.ZipFile(p) as z:',
+   '  names=set(z.namelist())',
+   '  assert names==set(expected),f"ZIP entries mismatch: {names ^ set(expected)}"',
+   '  for name,size in expected.items():',
+   '    data=z.read(name)',
+   '    assert len(data)<1024*1024,f"{name} exceeds 1 MB"',
+   '    assert data[:8]==b"\\x89PNG\\r\\n\\x1a\\n",f"{name} not PNG"',
+   '    assert struct.unpack(">II",data[16:24])==size,f"{name} dimensions"',
+   '    assert data[25]==6,f"{name} not RGBA PNG"',
+   'print("ZIP validation: 10 sticker PNGs + main + tab; sizes, alpha mode, byte limits OK")'
+  ].join(String.fromCharCode(10)),path.join(dir,'app-10.zip')],{encoding:'utf8'});
+  console.log(zipCheck.trim());
+  assert.deepEqual(errors,[]);
+  result.provenance={baseline:baseRef,input,inputSha256:sha(fs.readFileSync(input)),mode:'auto',tolerance:24,layout:'2x5',insets:0,semanticAcceptance:'NOT PASSED: manual review required'};
+  result.app={errors,tiles:outputs};
+  const reviewItems=result.after.tiles.filter(t=>t.review?.needsReview);
+  const reviewReport=[
+   '# Real-image cutout review (not semantic acceptance)',
+   '',
+   'This is an automated triage report. A green CI run does not mean every outline or caption is visually correct.',
+   '',
+   '| Sticker | Review | Flagged boundaries | Source edge ink (T/B/L/R) | Edge ink removed | Alpha corners | Output margins L/T/R/B (px) | Opaque / transparent px | Small islands | Thin islands |',
+   '|---|---|---|---|---:|---|---|---|---:|---:|',
+   ...result.after.tiles.map((t,i)=>`| ${String(t.n).padStart(2,'0')} | ${t.review?.needsReview?'REVIEW REQUIRED':'No boundary warning'} | ${(t.review?.edges||[]).join(', ')||'-'} | ${Object.values(t.sourceEdgeInk||{}).join('/')} | ${t.sourceEdgeRemoved} | ${outputs[i].alphaEvidence.corners.join('/')} | ${outputs[i].alphaEvidence.margins.join('/')} | ${outputs[i].alphaEvidence.opaque} / ${outputs[i].alphaEvidence.transparent} | ${outputs[i].residualDiagnostics.smallIslands.length} | ${outputs[i].residualDiagnostics.thinIslands.length} |`),
+   '',
+   '### Candidate coordinates (output PNG pixels)',
+   'These are triage coordinates, not confirmed defects. Inspect annotated/NN.png before changing any pixels.',
+   ...outputs.map((t,i)=>`- ${String(i+1).padStart(2,'0')}: ${t.residualDiagnostics.smallIslands.map(v=>`(${v.x},${v.y}) ${v.width}x${v.height} / ${v.pixels}px`).join('; ')||'none'}`),
+   '',
+   `**${reviewItems.length}/10 images require boundary review.**`,
+   '',
+   '### Manual visual acceptance (all entries start unchecked)',
+   'For each image compare source-NN.png, after-NN.png, final/NN.png and annotated/NN.png. A passing CI result must not check these boxes automatically.',
+   ...result.after.tiles.map((t,i)=>`- [ ] ${String(i+1).padStart(2,'0')} ${t.review?.needsReview?'BOUNDARY REVIEW: '+(t.review.edges||[]).join(', '):'No boundary flag'} — verify caption, limbs/antennae, white fringe, detached decorations, and intended crop`),
+   '',
+   'Inspect source-NN.png, before-NN.png, after-NN.png, final/NN.png and annotated/NN.png at full resolution.',
+   'The test asserts that dark/colorful source-edge pixels are not made fully transparent. This does not establish correct crop placement or absence of white fringe.',
+   'Red boxes in annotated/NN.png identify small alpha islands. They are diagnostic candidates, NOT proof of residue and NOT automatic deletion targets: punctuation, antennae and decorative marks may be intentional.',
+   'The alpha corners column must be 0/0/0/0, and both opaque and transparent pixel counts must be positive. Edge ink removed must be 0. These are automated safeguards, not a substitute for visual acceptance.',
+   'For a boundary warning, first compare source-NN.png to after-NN.png. If the source already touches the crop edge, do not automatically blame the background remover. Verify the original sheet and intended grid split.',
+   'For a 40-sticker acceptance run, provide a real 40-sticker source fixture. A 10-sticker fixture and synthetic 40-count smoke test cannot establish 40-sticker visual quality.',
+   'Acceptance checklist: inspect all 40 source-to-final pairs for missing limbs/antennae, Japanese caption clipping, residual edge strokes, unwanted white matte, and intentional isolated decorations. Record findings per sticker before merging.',
+   'Boundary flags must be compared with source pixels: an already-open character silhouette at the source tile edge is not evidence that background removal deleted the body.',
+   'Do not automatically reconstruct missing lower bodies or remove intentional decorative islands.',
+   'Manual approval and real iPhone Safari operation remain outstanding.',
+   ''
+  ].join('\n');
+  fs.writeFileSync(path.join(dir,'review-report.md'),reviewReport);
+  console.log(`BOUNDARY REVIEW: ${reviewItems.length}/10 require manual inspection; see review-report.md`);
+  fs.writeFileSync(process.env.GITHUB_STEP_SUMMARY||path.join(dir,'ci-summary.md'),reviewReport,{flag:'a'});
+  fs.writeFileSync(path.join(dir,'evidence.json'),JSON.stringify(result,null,2));
+  console.log('PASS mechanical checks: 10 source tiles; white/dark alpha unchanged; no new transparent pixels; chromatic alpha unchanged; 10 app outputs and ZIP. This does not certify visual quality.');
+ }finally{await b.close()}
+})().catch(e=>{console.error(e);process.exitCode=1});
