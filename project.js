@@ -63,6 +63,8 @@
     source.rows = rows;
     source.xs = lines(columns);
     source.ys = lines(rows);
+    source.columnYs = null;
+    source.manualColumnYs = false;
     source.assignments = Array.from(
       { length: columns * rows },
       (_, i) => source.assignments[i] || 0,

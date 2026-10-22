@@ -24,6 +24,8 @@ function source(p, columns, rows) {
     rows,
     xs: P.lines(columns),
     ys: P.lines(rows),
+    columnYs: null,
+    manualColumnYs: false,
     assignments: Array(columns * rows).fill(0),
     insets: P.blankInsets(),
     mode: "auto",

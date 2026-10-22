@@ -127,6 +127,7 @@
     }
     state.zipFile = null;
     $("download-link").hidden = true;
+    $("download-direct").hidden = true;
     updateEasyState();
   }
   async function task(action) {
@@ -924,7 +925,7 @@
         ctx.fillStyle = slot ? "#217653" : "#9c7565";
         ctx.fillRect(
           source.xs[col] * c.width + 5,
-          source.ys[r] * c.height + 5,
+          (source.columnYs?.[col] || source.ys)[r] * c.height + 5,
           22,
           20,
         );
@@ -933,7 +934,7 @@
         ctx.fillText(
           slot ? String(slot).padStart(2, "0") : "×",
           source.xs[col] * c.width + 9,
-          source.ys[r] * c.height + 19,
+          (source.columnYs?.[col] || source.ys)[r] * c.height + 19,
         );
       }
   }
@@ -943,20 +944,26 @@
       source = state.sources[state.selectedSource];
     const x = (e.clientX - rect.left) / rect.width,
       y = (e.clientY - rect.top) / rect.height;
+    const nextColumn = source.xs.findIndex((v) => v > x);
+    const column = Math.max(0, Math.min(source.columns - 1,
+      nextColumn < 0 ? source.columns - 1 : nextColumn - 1));
     const candidates = [
       ...source.xs.map((v, i) => ({
         axis: "xs",
         i,
         distance: Math.abs(v - x) * rect.width,
       })),
-      ...source.ys.map((v, i) => ({
+      ...(source.columnYs?.[column] || source.ys).map((v, i) => ({
         axis: "ys",
         i,
+        column: source.columnYs ? column : null,
         distance: Math.abs(v - y) * rect.height,
       })),
     ].sort((a, b) => a.distance - b.distance);
     if (candidates[0].distance < 28) {
       dragLine = candidates[0];
+      if (dragLine.column !== null && dragLine.column !== undefined)
+        source.manualColumnYs = true;
       e.currentTarget.setPointerCapture(e.pointerId);
       e.preventDefault();
     }
@@ -964,6 +971,16 @@
   $("split-canvas").onpointermove = (e) => {
     if (!dragLine) return;
     const r = e.currentTarget.getBoundingClientRect();
+    if (dragLine.column !== null && dragLine.column !== undefined) {
+      const source = state.sources[state.selectedSource];
+      const lines = source.columnYs[dragLine.column], i = dragLine.i;
+      const gap = Math.max(0.004, 2 / source.height);
+      lines[i] = Math.max(i ? lines[i - 1] + gap : 0,
+        Math.min(i < lines.length - 1 ? lines[i + 1] - gap : 1,
+          (e.clientY - r.top) / r.height));
+      invalidate(); drawSplit();
+      return;
+    }
     changeGrid(
       dragLine.axis,
       dragLine.i,
@@ -1057,7 +1074,7 @@
       if (source.gutterUncertain) {
         stamp.boundaryReview = {
           needsReview: true,
-          edges: ["分割位置未確定"],
+          edges: [...stamp.boundaryReview.edges, "分割位置未確定"],
         };
       }
       // Display the actual pixel coordinates used, not just the suggested
@@ -2357,6 +2374,10 @@
   // Keep the generated Blob URL alive so the user can explicitly open/share it.
   function prepareZipSaveLink(url, name) {
     const link = $("download-link");
+    const direct = $("download-direct");
+    direct.href = url;
+    direct.download = name;
+    direct.hidden = false;
     link.href = url;
     link.download = name;
     link.hidden = false;
@@ -2371,15 +2392,23 @@
       // Web Share with a File is an iOS-native route to "Save to Files".
       // It must be called directly from the tap handler to retain user activation.
       // Unsupported browsers keep the ordinary download link as a fallback.
-      if (/iPad|iPhone|iPod/.test(navigator.userAgent) &&
+      let canShare = false;
+      try {
+        canShare = /iPad|iPhone|iPod/.test(navigator.userAgent) &&
           state.zipFile && typeof navigator.share === "function" &&
           typeof navigator.canShare === "function" &&
-          navigator.canShare({ files: [state.zipFile] })) {
+          navigator.canShare({ files: [state.zipFile] });
+      } catch (_) { /* Fall through to the ordinary download link. */ }
+      if (canShare) {
         event.preventDefault();
-        navigator.share({ files: [state.zipFile] }).catch((error) => {
+        try {
+          Promise.resolve(navigator.share({ files: [state.zipFile] })).catch((error) => {
           if (error?.name !== "AbortError")
-            notify("共有シートで保存できませんでした。SafariでZIP保存リンクを再度お試しください。", true);
-        });
+            notify("共有できませんでした。「共有せずZIPをダウンロードする」から保存してください。", true);
+          });
+        } catch (_) {
+          notify("共有できませんでした。「共有せずZIPをダウンロードする」から保存してください。", true);
+        }
       }
     };
   }

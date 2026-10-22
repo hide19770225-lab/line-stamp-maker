@@ -7,7 +7,7 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || "/tmp/stamp-bulk-results";
 (async () => {
   await fs.mkdir(dir, { recursive: true });
   const b = await chromium.launch({
-    executablePath: "/usr/bin/chromium",
+    executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
     args: ["--no-sandbox"],
   });
   try {
@@ -25,6 +25,7 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || "/tmp/stamp-bulk-results";
       });
       p.on("dialog", (d) => d.accept());
       await p.goto(base);
+      await p.selectOption("#production-mode", "normal");
       const idle = () =>
         p.waitForFunction(() => !document.body.classList.contains("busy"));
       await p.evaluate(() => {
@@ -133,6 +134,8 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || "/tmp/stamp-bulk-results";
       await evidence(`bulk-${n}`);
       const d = p.waitForEvent("download");
       await p.click("#download-button");
+      await idle();
+      await p.click("#download-direct");
       await (await d).saveAs(`${dir}/bulk-${n}.zip`);
       await idle();
       if (n === 40) {
@@ -161,6 +164,8 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || "/tmp/stamp-bulk-results";
         await evidence("bulk-40-edited");
         const d2 = p.waitForEvent("download");
         await p.click("#download-button");
+        await idle();
+        await p.click("#download-direct");
         await (await d2).saveAs(`${dir}/bulk-40-edited.zip`);
         await idle();
         // Caption edits invalidate only the affected individual confirmation.
