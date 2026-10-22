@@ -396,9 +396,10 @@
     }
     syncEasySources();
   }
-  $("file-input").addEventListener("change", (e) =>
-    importFiles(e.target.files),
-  );
+  window.stampImportNormalFiles = async (files) => {
+    await importFiles(files, false);
+  };
+  window.dispatchEvent(new Event("stamp-import-ready"));
   for (const type of ["dragenter", "dragover"])
     $("dropzone").addEventListener(type, (e) => {
       e.preventDefault();
