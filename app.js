@@ -121,6 +121,10 @@
     resetBulkAudit();
     captureSlots();
     state.dirty = true;
+    clearZip();
+    updateEasyState();
+  }
+  function clearZip() {
     if (state.zipURL) {
       URL.revokeObjectURL(state.zipURL);
       state.zipURL = null;
@@ -128,7 +132,6 @@
     state.zipFile = null;
     $("download-link").hidden = true;
     $("download-direct").hidden = true;
-    updateEasyState();
   }
   async function task(action) {
     if (state.busy) return;
@@ -2370,6 +2373,43 @@
     a.click();
     a.remove();
   }
+  // Inspect the encoded PNG, not only the preview canvas. Decode one file at a
+  // time and release its URL/canvas so 42 files do not accumulate mobile memory.
+  async function checkedPng(canvas, name, width, height) {
+    const blob = await C.pngBlob(canvas);
+    if (!blob.size || blob.size > 1024 * 1024)
+      throw new Error(`${name}：PNG容量が不正、または1MBを超えています。`);
+    const url = URL.createObjectURL(blob), image = new Image();
+    let decoded;
+    try {
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error(`${name}：生成したPNGを読み込めません。メモリを確認して再作成してください。`));
+        image.src = url;
+      });
+      decoded = C.canvas(image.naturalWidth, image.naturalHeight);
+      const ctx = decoded.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(image, 0, 0);
+      const report = window.StampAudit.inspect(
+        ctx.getImageData(0, 0, decoded.width, decoded.height),
+        blob.size, width, height,
+      );
+      if (report.errors.length) throw new Error(`${name}：${report.errors.join(" / ")}`);
+      return blob;
+    } finally {
+      URL.revokeObjectURL(url);
+      if (decoded) decoded.width = decoded.height = 1;
+    }
+  }
+  function zipShareFailure(error) {
+    const reason = ({
+      NotAllowedError: "共有がブラウザの権限または操作条件により拒否されました",
+      TypeError: "このブラウザではZIPファイルの共有に対応していません",
+      DataError: "共有先へZIPを渡せませんでした",
+      InvalidStateError: "別の共有処理が実行中、または画面が操作できない状態です",
+    })[error?.name] || "ブラウザまたは共有先でエラーが発生しました";
+    notify(`共有できませんでした。原因：${reason}。ZIPは保持しています。「共有せずZIPをダウンロードする」を押し、Safariのダウンロード一覧・「ファイル」を確認してください。アプリ内ブラウザの場合はSafariで開いて再作成してください。`, true, true);
+  }
   // A real user gesture is required for reliable iOS in-app browser downloads.
   // Keep the generated Blob URL alive so the user can explicitly open/share it.
   function prepareZipSaveLink(url, name) {
@@ -2403,11 +2443,13 @@
         event.preventDefault();
         try {
           Promise.resolve(navigator.share({ files: [state.zipFile] })).catch((error) => {
-          if (error?.name !== "AbortError")
-            notify("共有できませんでした。「共有せずZIPをダウンロードする」から保存してください。", true);
+            if (error?.name !== "AbortError")
+              zipShareFailure(error);
+            else
+              notify("共有をキャンセルしました。ZIPは保持しています。保存リンクから再試行できます。", false, true);
           });
-        } catch (_) {
-          notify("共有できませんでした。「共有せずZIPをダウンロードする」から保存してください。", true);
+        } catch (error) {
+          zipShareFailure(error);
         }
       }
     };
@@ -2459,28 +2501,30 @@
         throw new Error(
           "メイン画像・タブ画像に、加工済みのスタンプ番号を選んでください。",
         );
+      clearZip();
       nextStep(3);
       const files = [];
       for (let i = 0; i < v.all.length; i++) {
         notify(`PNGを作成中… ${i + 1} / ${v.all.length + 2}`, false, true);
         await frame();
         const rendered = C.renderStamp(v.all[i]);
-        const blob = await C.pngBlob(rendered.canvas);
-        rendered.canvas.width = rendered.canvas.height = 1;
-        if (blob.size > 1024 * 1024)
-          throw new Error(`${v.all[i].slot}番の画像が1MBを超えています。`);
+        const name = `${String(v.all[i].slot).padStart(2, "0")}.png`;
+        let blob;
+        try {
+          blob = await checkedPng(rendered.canvas, name, 370, 320);
+        } finally {
+          rendered.canvas.width = rendered.canvas.height = 1;
+        }
         files.push({
-          name: `${String(v.all[i].slot).padStart(2, "0")}.png`,
+          name,
           blob,
         });
       }
-      for (const [name, canvas] of [
-        ["main.png", $("main-preview")],
-        ["tab.png", $("tab-preview")],
+      for (const [name, canvas, width, height] of [
+        ["main.png", $("main-preview"), 240, 240],
+        ["tab.png", $("tab-preview"), 96, 74],
       ]) {
-        const blob = await C.pngBlob(canvas);
-        if (blob.size > 1024 * 1024)
-          throw new Error(`${name}が1MBを超えています。`);
+        const blob = await checkedPng(canvas, name, width, height);
         files.push({ name, blob });
       }
       notify("ZIPにまとめています…", false, true);

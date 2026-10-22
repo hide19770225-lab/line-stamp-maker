@@ -15,6 +15,9 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || '/tmp/stamp-grid40-results';
     p.on('request', r => { if (![base, 'blob:', 'data:'].some(v => r.url().startsWith(v))) external.push(r.url()); });
     p.on('dialog', d => d.accept());
     await p.goto(base);
+    assert.equal(await p.locator('.site-progress progress').count(), 0, 'no invented development percentage');
+    const progress = await p.locator('.site-progress').textContent();
+    for (const label of ['実装済み', '自動テストで検証済み', '未検証', 'iPhone Safari実機']) assert(progress.includes(label));
     const idle = () => p.waitForFunction(() => !document.body.classList.contains('busy'), {}, { timeout: 120000 });
     await p.selectOption('#easy-layout', '5x8');
     await p.selectOption('#easy-caption-mode', 'existing');
@@ -113,10 +116,58 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || '/tmp/stamp-grid40-results';
     await p.evaluate(() => Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => { throw Error('unsupported'); } }));
     const fallback = p.waitForEvent('download'); await p.click('#download-link');
     await (await fallback).saveAs(`${dir}/fallback-40.zip`);
+    // A cancelled share retains the ZIP and the editor, without claiming that
+    // the operating system saved anything. Synchronous rejections show a cause.
+    await p.evaluate(() => {
+      Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+      Object.defineProperty(navigator, 'share', { configurable: true, value: () => Promise.reject(new DOMException('cancelled', 'AbortError')) });
+    });
+    await p.click('#download-link');
+    await p.waitForFunction(() => document.querySelector('#status').textContent.includes('キャンセル'));
+    assert(await p.locator('#download-direct').isVisible());
+    await p.evaluate(() => Object.defineProperty(navigator, 'share', { configurable: true, value: () => { throw new DOMException('denied', 'NotAllowedError'); } }));
+    await p.click('#download-link');
+    await p.waitForFunction(() => document.querySelector('#status').textContent.includes('原因：共有がブラウザの権限'));
+    assert(await p.locator('#download-direct').isVisible());
     assert.equal(await p.locator('.stamp-card').count(), 40);
     await p.screenshot({ path: `${dir}/mobile-grid40.png`, fullPage: true });
+    // Export must inspect the actual encoded bytes, including main/tab. Inject
+    // valid but wrong/opaque PNGs and invalid bytes after review has passed.
+    await p.evaluate(() => {
+      window.encodePng = StampCore.pngBlob;
+      window.encodeZip = StampCore.makeZip;
+      window.zipBuilds = 0;
+      StampCore.makeZip = (...args) => { zipBuilds++; return encodeZip(...args); };
+    });
+    for (const [kind, expected] of [
+      ['opaque', '透明ピクセルがありません'],
+      ['main-size', 'main.png：PNGサイズ'],
+      ['tab-invalid', 'tab.png：生成したPNGを読み込めません'],
+    ]) {
+      await p.evaluate(kind => {
+        StampCore.pngBlob = c => {
+          if (kind === 'opaque' && c.width === 370) {
+            const opaque = StampCore.canvas(370, 320);
+            opaque.getContext('2d').fillRect(0, 0, 370, 320);
+            return encodePng(opaque);
+          }
+          if (kind === 'main-size' && c.width === 240) return encodePng(StampCore.canvas(96, 74));
+          if (kind === 'tab-invalid' && c.width === 96) return Promise.resolve(new Blob(['invalid png'], { type: 'image/png' }));
+          return encodePng(c);
+        };
+      }, kind);
+      await p.click('#easy-export'); await idle();
+      assert((await p.locator('#status').textContent()).includes(expected), kind);
+      assert(await p.locator('#download-link').isHidden(), 'failed export must not offer an older ZIP');
+      assert(await p.locator('#download-direct').isHidden());
+      assert.equal(await p.evaluate(() => zipBuilds), 0, 'invalid PNG never reaches ZIP construction');
+    }
+    await p.evaluate(() => { StampCore.pngBlob = encodePng; });
+    await p.click('#easy-export'); await idle();
+    assert.equal(await p.evaluate(() => zipBuilds), 1, 'retry succeeds without reuploading or reapproving');
+    assert(await p.locator('#download-direct').isVisible());
     assert.deepEqual(errors, []); assert.deepEqual(external, []);
     await fs.writeFile(`${dir}/evidence.json`, JSON.stringify({ fixture: 'synthetic only', native, shareMock: true }, null, 2));
-    console.log('PASS synthetic numbered 5x8: all 40 guide pairs removed, raster captions preserved, independent column boundary applied, 42 previews, bulk approval, ZIP, rejected share and capability fallback. Real iPhone Safari not tested.');
+    console.log('PASS synthetic numbered 5x8: all 40 guides removed, raster captions preserved, column adjustment, bulk approval, 42 PNG ZIP, share errors/cancel/fallback, opaque/wrong-size/corrupt PNG export rejection and retry. Real iPhone Safari not tested.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
