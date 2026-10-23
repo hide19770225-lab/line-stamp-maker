@@ -49,6 +49,35 @@
     }
     return best;
   }
+  // Repeated opaque neutral alternation on multiple perimeter scanlines is
+  // evidence of a baked-in checkerboard, never evidence of alpha transparency.
+  // Conservative detection: preserve pixels and ask for local background edits.
+  function paintedCheckerboard({ data, width, height }) {
+    let patterned = 0;
+    const scan = (length, point) => {
+      const runs = [];
+      for (let n = 0; n < length; n++) {
+        const p = point(n) * 4;
+        const rgb = data.subarray(p, p + 3);
+        if (data[p + 3] !== 255 || Math.max(...rgb) - Math.min(...rgb) > 10 || Math.min(...rgb) < 150) return;
+        const value = Math.round((rgb[0] + rgb[1] + rgb[2]) / 3 / 12);
+        if (runs.length && runs.at(-1).value === value) runs.at(-1).size++;
+        else runs.push({value, size: 1});
+      }
+      const middle = runs.slice(1, -1);
+      if (middle.length < 4) return;
+      const sizes = middle.map(r => r.size), size = sizes.slice().sort((a,b)=>a-b)[Math.floor(sizes.length/2)];
+      if (size < 2 || !sizes.every(n => Math.abs(n-size) <= 1)) return;
+      if (!runs.every((r,i) => i < 2 || r.value === runs[i-2].value)) return;
+      if (Math.abs(runs[0].value-runs[1].value) < 2) return;
+      patterned++;
+    };
+    scan(width, x => x);
+    scan(width, x => (height-1)*width+x);
+    scan(height, y => y*width);
+    scan(height, y => y*width+width-1);
+    return patterned >= 2;
+  }
   function floodMask(
     imageData,
     mode = "auto",
@@ -62,6 +91,7 @@
     const corners = [0, width - 1, (height - 1) * width, width * height - 1];
     if (
       mode === "none" ||
+      paintedCheckerboard(imageData) ||
       (mode === "auto" && corners.some((i) => data[i * 4 + 3] === 0))
     )
       return mask;
@@ -283,7 +313,7 @@
   }
   // Find a safe horizontal gutter separately in each column. Sticker artwork
   // can be vertically staggered, so a single row boundary may cut another cat.
-  function suggestColumnRowLines(image, xs, rows) {
+  function suggestColumnRowLines(image, xs, rows, diagnostics = null) {
     const width = image.width, height = image.height;
     const sample = canvas(width, height);
     const ctx = sample.getContext("2d", { willReadFrequently: true });
@@ -347,8 +377,11 @@
           i = j + 1;
         }
         // Never guess a boundary if there is no defensible separation.
-        if (!best) return null;
-        perColumn.push(best.center / height);
+        if (!best) {
+          if (!diagnostics) return null;
+          diagnostics.push({ column: c, boundary: r });
+        }
+        perColumn.push(best ? best.center / height : r / rows);
       }
       perColumn.push(1);
       if (perColumn.some((v,i)=>i>0 && v<=perColumn[i-1])) return null;
@@ -547,6 +580,10 @@
     const guidePixelsRemoved = possibleNumber
       ? removeIsolatedGuideNumber(original, mask, guideRegion) : 0;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    if (paintedCheckerboard(original)) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("描き込み市松模様：透過情報ではありません。個別編集で背景を調整");
+    }
     if (possibleNumber) {
       boundaryReview.needsReview = true;
       boundaryReview.edges.push(guidePixelsRemoved
@@ -1026,6 +1063,7 @@
     FONTS,
     canvas,
     backgroundColor,
+    paintedCheckerboard,
     floodMask,
     proposeMatteCleanup,
     alphaBounds,
