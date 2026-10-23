@@ -303,8 +303,12 @@
         // Count foreground pixels in each scanline. A true gutter must
         // separate two foreground groups, not just pass through a letter.
         const densities = [];
+        const look = Math.max(8, Math.round(height / rows * 0.09));
+        // The evidence on either side may lie outside the candidate window.
+        const densityStart = Math.max(0, start - look);
+        const densityEnd = Math.min(height - 1, end + look);
         const step = 1; // Subsampling can miss one-pixel-wide foreground.
-        for (let y = start; y <= end; y++) {
+        for (let y = densityStart; y <= densityEnd; y++) {
           let ink = 0, count = 0;
           for (let x = x0; x < x1; x += step) {
             if (isInk(x, y)) ink++;
@@ -312,10 +316,10 @@
           }
           densities.push(ink / Math.max(1, count));
         }
-        const blank = densities.map((v) => v === 0);
+        const searchDensities = densities.slice(start - densityStart, end - densityStart + 1);
+        const blank = searchDensities.map((v) => v === 0);
         const minLength = Math.max(5, Math.round(height / rows * 0.018));
         const maxDrift = Math.round(height / rows * 0.24);
-        const look = Math.max(8, Math.round(height / rows * 0.09));
         let best = null;
         for (let i = 0; i < blank.length;) {
           if (!blank[i]) { i++; continue; }
@@ -327,8 +331,8 @@
           if (length >= minLength && distance <= maxDrift) {
             // Inspect the image on both sides of the proposed boundary.
             // An empty interior gap in a caption or drawing is unsafe.
-            const upper = densities.slice(Math.max(0, i - look), i);
-            const lower = densities.slice(j + 1, Math.min(densities.length, j + 1 + look));
+            const upper = densities.slice(Math.max(0, start - densityStart + i - look), start - densityStart + i);
+            const lower = densities.slice(start - densityStart + j + 1, Math.min(densities.length, start - densityStart + j + 1 + look));
             const upperInk = upper.reduce((a, b) => a + b, 0);
             const lowerInk = lower.reduce((a, b) => a + b, 0);
             const hasBothGroups = upperInk >= 0.02 && lowerInk >= 0.02;
@@ -423,9 +427,9 @@
     const cw = region.width || w, ch = region.height || h;
     const ox = region.x || 0, oy = region.y || 0;
     const x0 = Math.max(0, Math.floor(ox + cw * 0.025));
-    const x1 = Math.min(w, Math.ceil(ox + cw * 0.19));
-    const y0 = Math.max(0, Math.floor(oy + ch * 0.025));
-    const y1 = Math.min(h, Math.ceil(oy + ch * 0.16));
+    const x1 = Math.min(w, Math.ceil(ox + cw * 0.24));
+    const y0 = Math.max(0, Math.floor(oy + ch * 0.005));
+    const y1 = Math.min(h, Math.ceil(oy + ch * 0.30));
     const seen = new Uint8Array(w * h), queue = new Uint32Array(w * h);
     const groups = [];
     for (let y = y0; y < y1; y++)
@@ -450,7 +454,7 @@
               if (!seen[n] && mask[n]) { seen[n] = 1; queue[tail++] = n; }
             }
         }
-        if (!colored && dark >= 3 && tail <= Math.max(20, w * h * 0.006) &&
+        if (!colored && dark >= 1 && tail <= Math.max(20, w * h * 0.006) &&
             minX > x0 && maxX < x1 - 1 && minY > y0 && maxY < y1 - 1 &&
             maxX - minX + 1 <= w * 0.10 && maxY - minY + 1 <= h * 0.10)
           groups.push({ minX, maxX, minY, maxY, pixels: Array.from(queue.subarray(0, tail)) });
@@ -461,19 +465,50 @@
     return isolatedGuideGroups(original, mask, region).length > 0;
   }
   function removeIsolatedGuideNumber(original, mask, region = {}) {
-    const groups = isolatedGuideGroups(original, mask, region);
-    // 01..40 are two separate, similarly sized glyphs on one baseline.
-    // A single small mark is insufficient evidence to erase artwork.
-    if (groups.length !== 2) return 0;
-    groups.sort((a, b) => a.minX - b.minX);
-    const [a, b] = groups, w = original.width, h = original.height;
+    let groups = isolatedGuideGroups(original, mask, region);
+    const w = original.width, h = original.height;
     const cw = region.width || w, ch = region.height || h;
     const ox = region.x || 0, oy = region.y || 0;
+    // Antialiased digits can touch through pale pixels, and a glyph can have
+    // a detached serif. Merge overlapping x spans before inspecting dark cores.
+    groups.sort((a, b) => a.minX - b.minX);
+    const merged = [];
+    for (const g of groups) {
+      const a = merged.at(-1);
+      if (a && g.minX <= a.maxX && g.minY <= a.maxY + 1 && g.maxY >= a.minY - 1) {
+        a.minX = Math.min(a.minX, g.minX); a.maxX = Math.max(a.maxX, g.maxX);
+        a.minY = Math.min(a.minY, g.minY); a.maxY = Math.max(a.maxY, g.maxY);
+        a.pixels.push(...g.pixels);
+      } else merged.push({ ...g, pixels: [...g.pixels] });
+    }
+    groups = merged;
+    let glyphs = groups;
+    if (groups.length === 1) {
+      const g = groups[0], columns = new Map();
+      for (const p of g.pixels) {
+        const rgb = original.data.subarray(p * 4, p * 4 + 3);
+        if (Math.max(...rgb) >= 95 || mask[p] <= 64) continue;
+        const x = p % w, y = Math.floor(p / w);
+        if (!columns.has(x)) columns.set(x, []);
+        columns.get(x).push(y);
+      }
+      glyphs = [];
+      for (let x = g.minX; x <= g.maxX; x++) {
+        if (!columns.has(x)) continue;
+        const ys = []; const minX = x;
+        while (columns.has(x)) { ys.push(...columns.get(x)); x++; }
+        glyphs.push({ minX, maxX: x - 1, minY: Math.min(...ys), maxY: Math.max(...ys) });
+      }
+    }
+    // Require two aligned dark glyphs even when their antialias fringes touch.
+    if (glyphs.length !== 2 || groups.length > 2) return 0;
+    const [a, b] = glyphs;
     const ah = a.maxY - a.minY + 1, bh = b.maxY - b.minY + 1;
-    if (Math.abs(a.minY - b.minY) > Math.max(1, Math.min(ah, bh) * 0.2) ||
+    if (Math.min(ah, bh) < 4 ||
+        Math.abs(a.minY - b.minY) > Math.max(1, Math.min(ah, bh) * 0.2) ||
         Math.min(ah, bh) / Math.max(ah, bh) < 0.75 ||
         b.minX <= a.maxX || b.minX - a.maxX > Math.max(ah, bh) ||
-        b.maxX >= ox + cw * 0.15 || Math.max(a.maxY, b.maxY) >= oy + ch * 0.13 ||
+        b.maxX >= ox + cw * 0.21 || Math.max(a.maxY, b.maxY) >= oy + ch * 0.26 ||
         b.maxX - a.minX > cw * 0.13) return 0;
     let removed = 0;
     // Delete only the isolated glyph pixels. Never erase a padded bounding
@@ -498,13 +533,13 @@
     const mask = floodMask(original, mode, tolerance, color);
     crop.width = crop.height = 1;
     const isNumberedSheet = source.columns === 5 && source.rows === 8;
-    // Gutter centering moves crop origins. Locate the printed guide relative
-    // to the original nominal cell, then map into crop pixels; otherwise rows
-    // 2..8 can silently keep their numbers after an automatic boundary shift.
+    // Guide numbers belong to the detected cell, not the equal-grid origin.
+    // Map its un-inset top-left into crop pixels so row drift and manual
+    // insets do not move the search away from the original printed number.
     const sx = original.width / rect.width, sy = original.height / rect.height;
     const guideRegion = {
-      x: (column * source.image.width / source.columns - rect.x) * sx,
-      y: (row * source.image.height / source.rows - rect.y) * sy,
+      x: (Math.round(source.xs[column] * source.image.width) - rect.x) * sx,
+      y: (Math.round((source.columnYs?.[column] || source.ys)[row] * source.image.height) - rect.y) * sy,
       width: source.image.width / source.columns * sx,
       height: source.image.height / source.rows * sy,
     };

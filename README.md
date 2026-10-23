@@ -258,3 +258,5 @@ python3 tests/verify_suggestions_zip.py /tmp/stamp-suggestion-results
 列別横線のドラッグ・配置変更時の境界初期化・管理番号の探索座標を修正しています。iPhone向け共有が失敗した場合は、生成後の「共有せずZIPをダウンロードする」も利用できます。
 
 [修正原因・実行テスト・未検証事項](docs/forty-sticker-validation.md)に実画像と実機の未実施範囲を記載しています。合成40個画像での成功は、実画像・iPhone Safari実機での成功を意味しません。
+
+実画像40枚の再添付に基づく列・行境界と管理番号除去の修正、および検証結果は [2026-10-23の実画像検証](docs/actual40-20261023/validation.md) に保存しています。

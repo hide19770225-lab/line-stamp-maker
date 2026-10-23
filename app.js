@@ -827,6 +827,7 @@
       return;
     }
     if (axis === "xs") {
+      delete s.autoGridXs;
       // Vertical guides remain compatible with independent row boundaries.
     } else {
       s.columnYs = null;
@@ -1036,18 +1037,29 @@
     if (source.manualColumnYs && source.columnYs) {
       source.gutterUncertain = false;
     }
-    if (!source.manualColumnYs && defaultGrid(source.xs) && defaultGrid(source.ys)) {
+    const automaticColumns = source.autoGridXs &&
+      source.xs.every((x, i) => x === source.autoGridXs[i]);
+    if (!source.manualColumnYs && (defaultGrid(source.xs) || automaticColumns) && defaultGrid(source.ys)) {
+      // Establish column gutters independently: requiring shared row gutters
+      // first rejects staggered sheets, while equal columns can split guide digits.
+      const vertical = C.suggestGridLines(source.image, source.columns, 1);
+      const detectedXs = vertical ? vertical.xs : source.xs;
       // Use column-specific boundaries when each column has clear white gutters.
       // Never silently fall back to a potentially destructive shared row line.
       const columnLines = C.suggestColumnRowLines(
-        source.image, source.xs, source.rows,
+        source.image, detectedXs, source.rows,
       );
+      if (vertical && columnLines) {
+        source.xs = detectedXs;
+        source.autoGridXs = [...detectedXs];
+      }
       source.columnYs = columnLines || null;
       source.gutterUncertain = !columnLines || (source.columns === 5 && source.rows === 8 && source.insets.left === 0 && source.insets.right === 0);
       // Never substitute a shared horizontal boundary for a failed
       // column-specific search: it can cut off ears in staggered sheets.
     }
-    if (!source.manualColumnYs && (!defaultGrid(source.xs) || !defaultGrid(source.ys))) {
+    if (!source.manualColumnYs && (!defaultGrid(source.xs) || !defaultGrid(source.ys)) &&
+        !(source.autoGridXs && source.xs.every((x, i) => x === source.autoGridXs[i]) && defaultGrid(source.ys))) {
       source.columnYs = null;
       source.gutterUncertain = false; // User explicitly chose manual grid lines.
     }
@@ -2604,6 +2616,7 @@
             "ys",
             "columnYs",
             "manualColumnYs",
+            "autoGridXs",
             "insets",
             "assignments",
             "mode",
