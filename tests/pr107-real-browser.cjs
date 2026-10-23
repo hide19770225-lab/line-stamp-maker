@@ -23,8 +23,10 @@ if(!dir || !process.env.STAMP_ACTUAL40_SOURCE) throw Error('Set STAMP_TEST_ARTIF
   const restored=await p.evaluate(()=>{
    const s=real[1],mask=new Uint8ClampedArray(s.mask.length);
    for(let i=0;i<mask.length;i++)mask[i]=s.original.data[i*4+3];
-   return StampCore.renderStamp({...s,mask}).canvas.toDataURL()===
+   const equal=StampCore.renderStamp({...s,mask}).canvas.toDataURL()===
      StampCore.renderStamp({...s,mask,matteData:null}).canvas.toDataURL();
+   real[1]=s;
+   return equal;
   });
   assert(restored,'restoring the original alpha also restores original RGB');
   const report=await p.evaluate(()=>Object.values(real).sort((a,b)=>a.slot-b.slot).map(s=>({slot:s.slot,rect:s.sourceRect,boundary:s.boundaryReview,individual:s.individualReviewRequired,guide:s.guidePixelsRemoved,removed:StampCore.renderStamp(s).autoRemoved})));
