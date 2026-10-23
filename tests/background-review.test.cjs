@@ -25,3 +25,11 @@ test('exterior white is removed while enclosed white face and body remain',()=>{
  const mask=C.floodMask(im);
  assert.equal(mask[0],0);assert.equal(mask[40*80+40],255);
 });
+test('auto mode preserves warm white artwork even when its outline is open',()=>{
+ const im=image();
+ for(let y=20;y<80;y++)for(let x=20;x<60;x++)
+  im.data.set([254,250,238,255],(y*80+x)*4);
+ const mask=C.floodMask(im);
+ assert.equal(mask[0],0);
+ for(let y=20;y<80;y++)for(let x=20;x<60;x++)assert.equal(mask[y*80+x],255);
+});

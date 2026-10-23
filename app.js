@@ -180,6 +180,7 @@
       s.xs,
       s.ys,
       s.columnYs || null,
+      C.activeRowGrid(s),
       s.manualColumnYs === true,
       s.mode,
       s.tolerance,
@@ -879,7 +880,15 @@
     );
     ctx.strokeStyle = "#21875c";
     ctx.lineWidth = 2;
-    for (const x of source.xs) {
+    const rowGrid = C.activeRowGrid(source);
+    if (rowGrid) {
+      for (let row = 0; row < source.rows; row++)
+        for (const x of rowGrid.xs[row]) {
+          ctx.beginPath();ctx.moveTo(x*c.width,rowGrid.ys[row]*c.height);
+          ctx.lineTo(x*c.width,rowGrid.ys[row+1]*c.height);ctx.stroke();
+        }
+    }
+    for (const x of rowGrid ? [] : source.xs) {
       const xx = Math.max(1, Math.min(c.width - 1, x * c.width));
       ctx.beginPath();
       ctx.moveTo(xx, 0);
@@ -898,7 +907,7 @@
         }
       }
     } else {
-      for (const y of source.ys) {
+      for (const y of rowGrid?.ys || source.ys) {
         const yy = Math.max(1, Math.min(c.height - 1, y * c.height));
         ctx.beginPath();
         ctx.moveTo(0, yy);
@@ -928,8 +937,8 @@
         const slot = source.assignments[r * source.columns + col];
         ctx.fillStyle = slot ? "#217653" : "#9c7565";
         ctx.fillRect(
-          source.xs[col] * c.width + 5,
-          (source.columnYs?.[col] || source.ys)[r] * c.height + 5,
+          (rowGrid?.xs[r] || source.xs)[col] * c.width + 5,
+          (rowGrid?.ys || source.columnYs?.[col] || source.ys)[r] * c.height + 5,
           22,
           20,
         );
@@ -937,13 +946,17 @@
         ctx.font = "11px sans-serif";
         ctx.fillText(
           slot ? String(slot).padStart(2, "0") : "×",
-          source.xs[col] * c.width + 9,
-          (source.columnYs?.[col] || source.ys)[r] * c.height + 19,
+          (rowGrid?.xs[r] || source.xs)[col] * c.width + 9,
+          (rowGrid?.ys || source.columnYs?.[col] || source.ys)[r] * c.height + 19,
         );
       }
   }
   $("split-canvas").onpointerdown = (e) => {
     if (state.busy || !state.sources[state.selectedSource]?.image) return;
+    if (C.activeRowGrid(state.sources[state.selectedSource])) {
+      notify("行別の自動境界を表示しています。手動調整する場合は、配置設定の列・行スライダーを変更して再加工してください。");
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect(),
       source = state.sources[state.selectedSource];
     const x = (e.clientX - rect.left) / rect.width,
@@ -1060,6 +1073,16 @@
         ).flat();
       source.columnYs = columnLines || null;
       source.gutterUncertain = !vertical || !columnLines || (source.columns === 5 && source.rows === 8 && source.insets.left === 0 && source.insets.right === 0);
+      delete source.autoRowGrid;
+      if (!vertical || !columnLines || uncertainCuts.length) {
+        const rowGrid = C.suggestRowGrid(source.image, source.columns, source.rows);
+        if (rowGrid) {
+          source.autoRowGrid = {...rowGrid, key: JSON.stringify([source.xs, source.ys, !!source.manualColumnYs])};
+          source.columnYs = null;
+          source.uncertainCuts = [];
+          source.gutterUncertain = false;
+        }
+      }
       // Never substitute a shared horizontal boundary for a failed
       // column-specific search: it can cut off ears in staggered sheets.
     }
@@ -1144,7 +1167,7 @@
     source.cropReport = tiles.map((stamp) => stamp.cropDiagnostic).filter(Boolean);
     source.cropMethod = source.manualColumnYs
       ? "列別・手動調整"
-      : source.columnYs ? "列別・自動検出" : "共通線・要確認";
+      : C.activeRowGrid(source) ? "行別の列境界・自動検出" : source.columnYs ? "列別・自動検出" : "共通線・要確認";
     source.processSignature = signature(source);
     invalidate();
     if (state.sources[state.selectedSource] === source) renderGridControls();

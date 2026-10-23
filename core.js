@@ -105,6 +105,10 @@
       queue = new Uint32Array(width * height);
     let head = 0,
       tail = 0;
+    // Warm near-white fills in open outlines are artwork. A broad default
+    // tolerance swallows them from the exterior; keep auto white removal tight.
+    if (mode === "auto" && Math.min(...color) >= 245)
+      tolerance = Math.min(tolerance, 8);
     function visit(i) {
       if (!seen[i]) {
         seen[i] = 1;
@@ -201,10 +205,12 @@
   }
   function tileRect(source, column, row) {
     const { xs, ys, image } = source;
-    const left = Math.round(xs[column] * image.width);
-    const rowLines = source.columnYs?.[column] || ys;
+    const rowGrid = activeRowGrid(source);
+    const columnLines = rowGrid?.xs[row] || xs;
+    const left = Math.round(columnLines[column] * image.width);
+    const rowLines = rowGrid?.ys || source.columnYs?.[column] || ys;
     const top = Math.round(rowLines[row] * image.height);
-    const right = Math.round(xs[column + 1] * image.width);
+    const right = Math.round(columnLines[column + 1] * image.width);
     const bottom = Math.round(rowLines[row + 1] * image.height);
     const inset = source.insets || { left: 0, right: 0, top: 0, bottom: 0 };
     const x = Math.min(
@@ -253,7 +259,7 @@
   }
   // Locate nearly blank gutters close to the expected grid positions.
   // Only return strong suggestions; uncertain sheets keep their manual grid.
-  function suggestGridLines(image, columns, rows) {
+  function suggestGridLines(image, columns, rows, preferNearest = false) {
     const width = image.width, height = image.height;
     if (!columns || !rows || width < columns * 20 || height < rows * 20)
       return null;
@@ -288,13 +294,16 @@
         while (j + 1 < blank.length && blank[j + 1]) j++;
         const center = Math.round((i + j) / 2) + start;
         const candidate = { center, length: j - i + 1 };
-        if (!best || candidate.length > best.length ||
+        if (preferNearest && candidate.length < 2) { i = j + 1; continue; }
+        if (!best || (preferNearest
+          ? Math.abs(center - nominal) < Math.abs(best.center - nominal)
+          : candidate.length > best.length) ||
           (candidate.length === best.length &&
             Math.abs(center - nominal) < Math.abs(best.center - nominal)))
           best = candidate;
         i = j + 1;
       }
-      const minCorridor = Math.max(3, Math.round(total / count * 0.015));
+      const minCorridor = preferNearest ? 2 : Math.max(3, Math.round(total / count * 0.015));
       return best && best.length >= minCorridor ? best.center / total : null;
     }
     const xs = [0], ys = [0];
@@ -388,6 +397,41 @@
       lines.push(perColumn);
     }
     return lines;
+  }
+  function activeRowGrid(source) {
+    const grid = source.autoRowGrid;
+    return grid && grid.key === JSON.stringify([source.xs, source.ys, !!source.manualColumnYs]) ? grid : null;
+  }
+  // Some sheets have clear horizontal gutters but staggered column gaps.
+  // Accept this alternative only if there are exactly the requested row bands,
+  // and every row has foreground-free column corridors at full resolution.
+  function suggestRowGrid(image, columns, rows) {
+    const {width,height}=image, sample=canvas(width,height);
+    const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0);
+    const ink=gridInk(ctx.getImageData(0,0,width,height));
+    sample.width=sample.height=1;
+    if(!ink || rows<2) return null;
+    const occupied=[];
+    for(let y=0;y<height;y++) {
+      let found=false;for(let x=0;x<width&&!found;x++) found=ink(x,y);
+      occupied.push(found);
+    }
+    const gaps=[];
+    for(let y=0;y<height;) {
+      if(occupied[y]){y++;continue;}
+      const start=y;while(y<height&&!occupied[y])y++;
+      if(start>0&&y<height&&y-start>=Math.max(5,Math.round(height/rows*.018)))gaps.push((start+y-1)/2);
+    }
+    if(gaps.length!==rows-1)return null;
+    const ys=[0,...gaps.map(y=>Math.round(y)/height),1],xs=[];
+    for(let r=0;r<rows;r++) {
+      const top=Math.round(ys[r]*height),bottom=Math.round(ys[r+1]*height);
+      if(bottom-top<height/rows*.55||bottom-top>height/rows*1.45)return null;
+      const crop=isolateRect(image,{x:0,y:top,width,height:bottom-top});
+      const grid=suggestGridLines(crop,columns,1,true);crop.width=crop.height=1;
+      if(!grid)return null;xs.push(grid.xs);
+    }
+    return {xs,ys};
   }
   // A source-grid cut through visible artwork needs a human ownership check.
   // This is diagnostic only: never erase thin antennae, lettering or decorations.
@@ -571,8 +615,8 @@
     // insets do not move the search away from the original printed number.
     const sx = original.width / rect.width, sy = original.height / rect.height;
     const guideRegion = {
-      x: (Math.round(source.xs[column] * source.image.width) - rect.x) * sx,
-      y: (Math.round((source.columnYs?.[column] || source.ys)[row] * source.image.height) - rect.y) * sy,
+      x: (Math.round((activeRowGrid(source)?.xs[row] || source.xs)[column] * source.image.width) - rect.x) * sx,
+      y: (Math.round((activeRowGrid(source)?.ys || source.columnYs?.[column] || source.ys)[row] * source.image.height) - rect.y) * sy,
       width: source.image.width / source.columns * sx,
       height: source.image.height / source.rows * sy,
     };
@@ -1070,6 +1114,8 @@
     createTile,
     isolateRect,
     tileRect,
+    activeRowGrid,
+    suggestRowGrid,
     suggestGridLines,
     suggestColumnRowLines,
     tileBoundaryReview,
