@@ -48,6 +48,8 @@ jobs:
                       raise
                   time.sleep(0.2)
           PY
+          node tests/background-review-browser.cjs
+          node tests/row-grid-browser.cjs
           node tests/grid-40-browser.cjs
           node tests/bulk-review-browser.cjs
           python3 tests/verify_grid40_zip.py

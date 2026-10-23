@@ -180,6 +180,7 @@
       s.xs,
       s.ys,
       s.columnYs || null,
+      C.activeRowGrid(s),
       s.manualColumnYs === true,
       s.mode,
       s.tolerance,
@@ -879,7 +880,15 @@
     );
     ctx.strokeStyle = "#21875c";
     ctx.lineWidth = 2;
-    for (const x of source.xs) {
+    const rowGrid = C.activeRowGrid(source);
+    if (rowGrid) {
+      for (let row = 0; row < source.rows; row++)
+        for (const x of rowGrid.xs[row]) {
+          ctx.beginPath();ctx.moveTo(x*c.width,rowGrid.ys[row]*c.height);
+          ctx.lineTo(x*c.width,rowGrid.ys[row+1]*c.height);ctx.stroke();
+        }
+    }
+    for (const x of rowGrid ? [] : source.xs) {
       const xx = Math.max(1, Math.min(c.width - 1, x * c.width));
       ctx.beginPath();
       ctx.moveTo(xx, 0);
@@ -898,7 +907,7 @@
         }
       }
     } else {
-      for (const y of source.ys) {
+      for (const y of rowGrid?.ys || source.ys) {
         const yy = Math.max(1, Math.min(c.height - 1, y * c.height));
         ctx.beginPath();
         ctx.moveTo(0, yy);
@@ -928,8 +937,8 @@
         const slot = source.assignments[r * source.columns + col];
         ctx.fillStyle = slot ? "#217653" : "#9c7565";
         ctx.fillRect(
-          source.xs[col] * c.width + 5,
-          (source.columnYs?.[col] || source.ys)[r] * c.height + 5,
+          (rowGrid?.xs[r] || source.xs)[col] * c.width + 5,
+          (rowGrid?.ys || source.columnYs?.[col] || source.ys)[r] * c.height + 5,
           22,
           20,
         );
@@ -937,13 +946,17 @@
         ctx.font = "11px sans-serif";
         ctx.fillText(
           slot ? String(slot).padStart(2, "0") : "×",
-          source.xs[col] * c.width + 9,
-          (source.columnYs?.[col] || source.ys)[r] * c.height + 19,
+          (rowGrid?.xs[r] || source.xs)[col] * c.width + 9,
+          (rowGrid?.ys || source.columnYs?.[col] || source.ys)[r] * c.height + 19,
         );
       }
   }
   $("split-canvas").onpointerdown = (e) => {
     if (state.busy || !state.sources[state.selectedSource]?.image) return;
+    if (C.activeRowGrid(state.sources[state.selectedSource])) {
+      notify("行別の自動境界を表示しています。手動調整する場合は、配置設定の列・行スライダーを変更して再加工してください。");
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect(),
       source = state.sources[state.selectedSource];
     const x = (e.clientX - rect.left) / rect.width,
@@ -1046,15 +1059,30 @@
       const detectedXs = vertical ? vertical.xs : source.xs;
       // Use column-specific boundaries when each column has clear white gutters.
       // Never silently fall back to a potentially destructive shared row line.
+      const uncertainCuts = [];
       const columnLines = C.suggestColumnRowLines(
-        source.image, detectedXs, source.rows,
+        source.image, detectedXs, source.rows, uncertainCuts,
       );
       if (vertical && columnLines) {
         source.xs = detectedXs;
         source.autoGridXs = [...detectedXs];
       }
+      source.uncertainCuts = columnLines && vertical ? uncertainCuts :
+        Array.from({ length: source.columns }, (_, column) =>
+          Array.from({ length: source.rows + 1 }, (_, boundary) => ({ column, boundary })),
+        ).flat();
       source.columnYs = columnLines || null;
-      source.gutterUncertain = !columnLines || (source.columns === 5 && source.rows === 8 && source.insets.left === 0 && source.insets.right === 0);
+      source.gutterUncertain = !vertical || !columnLines || (source.columns === 5 && source.rows === 8 && source.insets.left === 0 && source.insets.right === 0);
+      delete source.autoRowGrid;
+      if (!vertical || !columnLines || uncertainCuts.length) {
+        const rowGrid = C.suggestRowGrid(source.image, source.columns, source.rows);
+        if (rowGrid) {
+          source.autoRowGrid = {...rowGrid, key: JSON.stringify([source.xs, source.ys, !!source.manualColumnYs])};
+          source.columnYs = null;
+          source.uncertainCuts = [];
+          source.gutterUncertain = false;
+        }
+      }
       // Never substitute a shared horizontal boundary for a failed
       // column-specific search: it can cut off ears in staggered sheets.
     }
@@ -1086,7 +1114,12 @@
         source.tolerance,
         source.color,
       );
-      if (source.gutterUncertain) {
+      const column = cell % source.columns, row = Math.floor(cell / source.columns);
+      const uncertainCell = !source.manualColumnYs && source.uncertainCuts?.some(
+        cut => cut.column === column && (cut.boundary === row || cut.boundary === row + 1),
+      );
+      stamp.individualReviewRequired = !!uncertainCell || C.paintedCheckerboard(stamp.original);
+      if (source.gutterUncertain || uncertainCell) {
         stamp.boundaryReview = {
           needsReview: true,
           edges: [...stamp.boundaryReview.edges, "分割位置未確定"],
@@ -1134,7 +1167,7 @@
     source.cropReport = tiles.map((stamp) => stamp.cropDiagnostic).filter(Boolean);
     source.cropMethod = source.manualColumnYs
       ? "列別・手動調整"
-      : source.columnYs ? "列別・自動検出" : "共通線・要確認";
+      : C.activeRowGrid(source) ? "行別の列境界・自動検出" : source.columnYs ? "列別・自動検出" : "共通線・要確認";
     source.processSignature = signature(source);
     invalidate();
     if (state.sources[state.selectedSource] === source) renderGridControls();
@@ -1337,11 +1370,17 @@
         }
         if (stamp.boundaryReview?.needsReview && !stamp.reviewed) {
           report.warnings.push(
-            "元画像の分割境界に前景があります（" +
+            (stamp.boundaryReview.touching?.length === 0
+              ? "分割境界上の前景はありませんが、境界の近くに前景があります（"
+              : "元画像の分割境界に前景または確認対象があります（") +
             stamp.boundaryReview.edges.join("・") +
             "）。隣のコマの混入・文字や触角の欠けを個別編集で確認してください。",
           );
           if (report.status !== "エラー") report.status = "要確認";
+        }
+        if (stamp.individualReviewRequired && !stamp.reviewed) {
+          report.errors.push("分割境界または描き込み背景が未確定です。この画像を個別編集して確認済みにしてください。");
+          report.status = "エラー";
         }
         if (pendingSuggestion(stamp)) {
           report.errors.push(
