@@ -20,21 +20,28 @@ if(!dir || !process.env.STAMP_ACTUAL40_SOURCE) throw Error('Set STAMP_TEST_ARTIF
   const idle=()=>p.waitForFunction(()=>!document.body.classList.contains('busy'),{},{timeout:120000});
   await idle();await p.click('#easy-process');await idle();
   assert.equal(await p.locator('.stamp-card').count(),40);
+  const restored=await p.evaluate(()=>{
+   const s=real[1],mask=new Uint8ClampedArray(s.mask.length);
+   for(let i=0;i<mask.length;i++)mask[i]=s.original.data[i*4+3];
+   return StampCore.renderStamp({...s,mask}).canvas.toDataURL()===
+     StampCore.renderStamp({...s,mask,matteData:null}).canvas.toDataURL();
+  });
+  assert(restored,'restoring the original alpha also restores original RGB');
   const report=await p.evaluate(()=>Object.values(real).sort((a,b)=>a.slot-b.slot).map(s=>({slot:s.slot,rect:s.sourceRect,boundary:s.boundaryReview,individual:s.individualReviewRequired,guide:s.guidePixelsRemoved,removed:StampCore.renderStamp(s).autoRemoved})));
   const pixels=await p.evaluate(()=>{
    const s=realSource,c=StampCore.canvas(s.width,s.height),ctx=c.getContext('2d');ctx.drawImage(s.image,0,0);
    const data=ctx.getImageData(0,0,c.width,c.height).data,bg=Array.from(data.slice(0,3));
    const ink=(x,y)=>bg.some((v,k)=>Math.abs(data[(y*c.width+x)*4+k]-v)>30);
-   let crossings=0,warm=0,lost=0,strong=0,strongLost=0;
+   let crossings=0,warm=0,lost=0,strong=0,strongLost=0,coreLost=0,bodyWarm=0,bodyWarmLost=0;
    for(const t of Object.values(real)) {
     const r=t.sourceRect;
     for(const x of [r.x,r.x+r.width])if(x>0&&x<c.width)for(let y=r.y;y<r.y+r.height;y++)crossings+=+ink(x,y);
     for(const y of [r.y,r.y+r.height])if(y>0&&y<c.height)for(let x=r.x;x<r.x+r.width;x++)crossings+=+ink(x,y);
-    for(let i=0;i<t.mask.length;i++) {const rgb=t.original.data.subarray(i*4,i*4+3),hi=Math.max(...rgb),lo=Math.min(...rgb);if(hi>=250&&lo>=230&&hi-lo>=12){warm++;if(t.mask[i]!==255)lost++;}if(bg.some((v,k)=>Math.abs(rgb[k]-v)>30)){strong++;if(t.mask[i]!==255)strongLost++;}}
+    for(let i=0;i<t.mask.length;i++) {const rgb=t.original.data.subarray(i*4,i*4+3),hi=Math.max(...rgb),lo=Math.min(...rgb);if(hi>=250&&lo>=230&&hi-lo>=12){warm++;if(t.mask[i]!==255)lost++;if(Math.floor(i/t.original.width)>=t.original.height*.30){bodyWarm++;if(t.mask[i]!==255)bodyWarmLost++;}}if(bg.some((v,k)=>Math.abs(rgb[k]-v)>30)){strong++;if(t.mask[i]!==255)strongLost++;if(t.mask[i]===0 && (hi-lo>6 || Math.min(...rgb)<215))coreLost++;}}
    }
-   return {crossings,warm,lost,strong,strongLost,rowGrid:StampCore.activeRowGrid(s)};
+   return {crossings,warm,lost,strong,strongLost,coreLost,bodyWarm,bodyWarmLost,rowGrid:StampCore.activeRowGrid(s)};
   });
-  if(process.env.STAMP_REVIEW_EXPORT==='1'){assert.equal(pixels.crossings,0);assert.equal(pixels.lost,0);assert.equal(pixels.strongLost,0);assert(pixels.warm>10000);assert(pixels.rowGrid);}
+  if(process.env.STAMP_REVIEW_EXPORT==='1'){assert.equal(pixels.crossings,0);assert.equal(pixels.bodyWarmLost,0);assert.equal(pixels.coreLost,0);assert(pixels.warm>10000);assert(pixels.rowGrid);}
   const pngs=await p.locator('.stamp-canvas').evaluateAll(cs=>cs.map(c=>c.toDataURL().split(',')[1]));
   for(let i=0;i<40;i++)await fs.writeFile(`${dir}/${String(i+1).padStart(2,'0')}.png`,Buffer.from(pngs[i],'base64'));
   await p.selectOption('#production-mode','normal');await p.click('#bulk-inspect');await idle();

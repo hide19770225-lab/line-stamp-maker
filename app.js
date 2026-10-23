@@ -1370,7 +1370,9 @@
         }
         if (stamp.boundaryReview?.needsReview && !stamp.reviewed) {
           report.warnings.push(
-            "元画像の分割境界に前景があります（" +
+            (stamp.boundaryReview.touching?.length === 0
+              ? "分割境界上の前景はありませんが、境界の近くに前景があります（"
+              : "元画像の分割境界に前景または確認対象があります（") +
             stamp.boundaryReview.edges.join("・") +
             "）。隣のコマの混入・文字や触角の欠けを個別編集で確認してください。",
           );

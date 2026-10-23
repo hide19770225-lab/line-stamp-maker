@@ -139,6 +139,83 @@
     }
     return mask;
   }
+  // Only exterior-connected neutral white is background. Warm white artwork
+  // and enclosed white areas are deliberately excluded from this wider flood.
+  function exteriorWhiteMatte(image, mask) {
+    const {data,width,height}=image;
+    const bg=backgroundColor(data,width,height);
+    if (Math.min(...bg)<245 || paintedCheckerboard(image) ||
+        [0,width-1,(height-1)*width,width*height-1].some(i=>data[i*4+3]!==255)) return null;
+    const queue=new Uint32Array(mask.length), seen=new Uint8Array(mask.length);
+    let head=0,tail=0;
+    function visit(i) {
+      if(seen[i])return;seen[i]=1;
+      const rgb=data.subarray(i*4,i*4+3);
+      if(mask[i]===0 || (data[i*4+3]===255 && Math.max(...rgb)-Math.min(...rgb)<=6 &&
+          bg.every((v,k)=>Math.abs(v-rgb[k])<=30))) {
+        mask[i]=0;queue[tail++]=i;
+      }
+    }
+    for(let x=0;x<width;x++){visit(x);visit((height-1)*width+x);}
+    for(let y=0;y<height;y++){visit(y*width);visit(y*width+width-1);}
+    while(head<tail){const i=queue[head++],x=i%width;
+      if(x)visit(i-1);if(x+1<width)visit(i+1);
+      if(i>=width)visit(i-width);if(i+width<mask.length)visit(i+width);
+    }
+    // Letter counters can be enclosed by a single glyph. Restrict this pass
+    // to small components entirely above the largest (character) component;
+    // never apply it to the face, hands, body, bedding or mouth interiors.
+    seen.fill(0);
+    const groups=[];
+    for(let start=0;start<mask.length;start++) {
+      if(seen[start]||!mask[start])continue;
+      head=0;tail=0;queue[tail++]=start;seen[start]=1;
+      let minY=height,maxY=0;
+      while(head<tail) {
+        const i=queue[head++],x=i%width,y=Math.floor(i/width),rgb=data.subarray(i*4,i*4+3);
+        minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+        for(const n of [x?i-1:-1,x+1<width?i+1:-1,i>=width?i-width:-1,i+width<mask.length?i+width:-1])
+          if(n>=0&&!seen[n]&&mask[n]){seen[n]=1;queue[tail++]=n;}
+      }
+      groups.push({pixels:queue.slice(0,tail),minY,maxY});
+    }
+    const main=groups.reduce((a,b)=>!a||b.pixels.length>a.pixels.length?b:a,null);
+    for(const g of groups)if(main&&g!==main&&g.maxY<main.minY&&g.maxY-g.minY<height*.32)
+      for(const i of g.pixels) {
+        const rgb=data.subarray(i*4,i*4+3);
+        if(data[i*4+3]===255&&Math.max(...rgb)-Math.min(...rgb)<=11&&bg.every((v,k)=>Math.abs(v-rgb[k])<=30))mask[i]=0;
+      }
+    const artwork=new Uint8Array(mask.length), upperGlyph=new Uint8Array(mask.length);
+    for(const g of groups)for(const i of g.pixels) {
+      if(main&&g.maxY>=main.minY)artwork[i]=1;
+      else if(main&&g.maxY-g.minY<height*.32)upperGlyph[i]=1;
+    }
+    const result=new Uint8ClampedArray(data), base=mask.slice();
+    // Estimate coverage on the single exposed antialias rim from a nearby
+    // stronger sample, then remove the white contribution from RGB as well.
+    // Alpha-only fading would keep a white halo on dark chat backgrounds.
+    for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++) {
+      const i=y*width+x,p=i*4,rgb=data.subarray(p,p+3);
+      if(base[i]!==255 || data[p+3]!==255 ||
+          (!upperGlyph[i] && ![i-1,i+1,i-width,i+width].some(n=>base[n]===0)))continue;
+      const hi=Math.max(...rgb),lo=Math.min(...rgb);
+      if((artwork[i] || y>=height*.30) && hi>=250 && lo>=230 && hi-lo>=12)continue;
+      const distance=Math.max(...bg.map((v,k)=>Math.abs(v-rgb[k])));
+      if(distance<1 || distance>180)continue;
+      let strongest=distance;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++) {
+        const xx=x+dx,yy=y+dy;
+        if(xx<0||xx>=width||yy<0||yy>=height)continue;
+        const n=yy*width+xx;if(base[n]!==255)continue;
+        strongest=Math.max(strongest,...bg.map((v,k)=>Math.abs(v-data[n*4+k])));
+      }
+      if(strongest<distance+30)continue;
+      const alpha=distance/strongest;
+      mask[i]=Math.max(1,Math.round(alpha*255));
+      for(let k=0;k<3;k++)result[p+k]=Math.max(0,Math.min(255,Math.round((rgb[k]-bg[k]*(1-alpha))/alpha)));
+    }
+    return result;
+  }
   // Preview-only proposal. Change alpha on one exposed opaque matte rim;
   // never recolor artwork, flood further inward or modify existing partial alpha.
   function proposeMatteCleanup(
@@ -494,7 +571,16 @@
     }
     for (const side of suspicious)
       if (!edges.includes(side + "・小さな独立部分")) edges.push(side + "・小さな独立部分");
-    return { needsReview: edges.length > 0, edges };
+    const touching=[];
+    for(const side of ["left","right","top","bottom"]) {
+      const length=side==="left"||side==="right"?height:width;
+      for(let n=0;n<length;n++) {
+        const i=side==="left"?n*width:side==="right"?n*width+width-1:
+          side==="top"?n:(height-1)*width+n;
+        if(mask[i]>0){touching.push(side);break;}
+      }
+    }
+    return { needsReview: edges.length > 0, edges, touching };
   }
   // Inspect complete alpha components (including antialiasing), not only their
   // dark cores. A dark facial detail can be connected to a colored character.
@@ -608,6 +694,7 @@
     isolated.width = isolated.height = 1;
     const original = ctx.getImageData(0, 0, crop.width, crop.height);
     const mask = floodMask(original, mode, tolerance, color);
+    const matte = mode === "auto" ? exteriorWhiteMatte(original, mask) : null;
     crop.width = crop.height = 1;
     const isNumberedSheet = source.columns === 5 && source.rows === 8;
     // Guide numbers belong to the detected cell, not the equal-grid origin.
@@ -639,6 +726,7 @@
       boundaryReview,
       guidePixelsRemoved,
       original,
+      matteData: matte,
       mask,
       autoMask: mask.slice(),
       caption: "",
@@ -828,12 +916,16 @@
     const ctx = target.getContext("2d", { willReadFrequently: true });
     const { width, height } = stamp.original;
     const data = new ImageData(
-      new Uint8ClampedArray(stamp.original.data),
+      new Uint8ClampedArray(stamp.matteData || stamp.original.data),
       width,
       height,
     );
-    for (let i = 0; i < stamp.mask.length; i++)
+    for (let i = 0; i < stamp.mask.length; i++) {
+      // Manual restore/erase owns the pixel once it differs from the auto mask.
+      if(stamp.matteData && stamp.mask[i]!==stamp.autoMask?.[i])
+        data.data.set(stamp.original.data.subarray(i*4,i*4+3),i*4);
       data.data[i * 4 + 3] = stamp.mask[i];
+    }
     const layer = canvas(width, height);
     layer.getContext("2d").putImageData(data, 0, 0);
     const selectedCrop = stampCrop(stamp);
@@ -1109,6 +1201,7 @@
     backgroundColor,
     paintedCheckerboard,
     floodMask,
+    exteriorWhiteMatte,
     proposeMatteCleanup,
     alphaBounds,
     createTile,

@@ -56,7 +56,11 @@ const dir = process.env.STAMP_TEST_ARTIFACTS || '/tmp/stamp-grid40-results';
           if (!s.mask[i]) removed++; else remaining++;
         }
         const guideZone = x >= 5 && x < 38 && y >= gy + 5 && y < gy + 32;
-        if (!guideZone && s.original.data[i * 4] < 230 && !s.mask[i]) preserved = false;
+        const rgb=s.original.data.subarray(i*4,i*4+3);
+        // Neutral antialias matte (within 30 of white) is intentionally removed.
+        // Opaque dark/colored printed content must still survive.
+        const neutralMatte=Math.min(...rgb)>=225&&Math.max(...rgb)-Math.min(...rgb)<=11;
+        if (!guideZone && s.original.data[i * 4] < 230 && !neutralMatte && !s.mask[i]) preserved = false;
       }
       const bodyPixel = s.original.data[(Math.round(gy + 90) * s.original.width + 100) * 4];
       return { removed, remaining, preserved, ownBody: bodyPixel === 40 + tileIndex * 3, rect: s.sourceRect, caption: s.caption };
