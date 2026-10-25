@@ -1,6 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { chromium, devices } = require('playwright');
+const fs = require('node:fs/promises');
 (async () => {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
@@ -68,6 +69,14 @@ const { chromium, devices } = require('playwright');
     await page.selectOption('#production-mode','easy');
     await page.click('#easy-export'); await idle();
     assert(await page.locator('#download-direct').isVisible(),'42-image ZIP must be downloadable');
-    console.log('PASS browser: framed 40-sheet processed, 42 assets inspected, ZIP export ready');
+    const downloadEvent = page.waitForEvent('download');
+    await page.click('#download-direct');
+    const download = await downloadEvent;
+    const output = process.env.FRAMED_GRID_ZIP || '/tmp/framed-grid-browser-42.zip';
+    await fs.mkdir(require('node:path').dirname(output), { recursive: true });
+    await download.saveAs(output);
+    const stat = await fs.stat(output);
+    assert(stat.size > 1000,'exported ZIP must contain image data');
+    console.log('PASS browser: framed 40-sheet processed, 42 assets inspected, ZIP saved:', output, stat.size);
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
