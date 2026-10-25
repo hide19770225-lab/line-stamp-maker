@@ -885,6 +885,20 @@
     ctx.strokeStyle = "#21875c";
     ctx.lineWidth = 2;
     const rowGrid = C.activeRowGrid(source);
+    // Preview the actual detected frame boundaries, not the equal-grid guides.
+    // This keeps the visible crop guide consistent with the exported tiles.
+    if (source.framedGrid) {
+      ctx.strokeStyle = "#21875c";
+      for (const line of source.framedGrid.xs) {
+        const x = line.center / source.width * c.width;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, c.height); ctx.stroke();
+      }
+      for (const line of source.framedGrid.ys) {
+        const y = line.center / source.height * c.height;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(c.width, y); ctx.stroke();
+      }
+      return;
+    }
     if (rowGrid) {
       for (let row = 0; row < source.rows; row++)
         for (const x of rowGrid.xs[row]) {
