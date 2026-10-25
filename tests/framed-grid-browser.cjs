@@ -71,6 +71,27 @@ const fs = require('node:fs/promises');
     });
     assert.equal(coverage.found,true);
     assert.equal(coverage.retained,40,'all four near-edge artwork markers must survive in all 40 tiles');
+    // Reproduce the actual Koro sheet's non-uniform frame spacing.
+    // Equal-size 5x8 slicing loses lower body parts and right-hand captions.
+    const irregular = await page.evaluate(() => {
+      const xs=[1,204,388,576,768,958], ys=[1,185,361,538,715,894,1071,1273,1480];
+      const c=StampCore.canvas(961,1536),ctx=c.getContext('2d');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,961,1536);
+      ctx.fillStyle='#222';
+      for(const x of xs)ctx.fillRect(x,0,2,1536);
+      for(const y of ys)ctx.fillRect(0,y,961,2);
+      const grid=StampCore.detectFramedGrid(c,5,8);
+      if(!grid)return {detected:false};
+      let valid=0;
+      for(let row=0;row<8;row++)for(let col=0;col<5;col++){
+        const rect=StampCore.tileRect({image:c,framedGrid:grid,columns:5,rows:8},col,row);
+        if(rect.x>xs[col]+1 && rect.y>ys[row]+1 &&
+           rect.x+rect.width<xs[col+1] && rect.y+rect.height<ys[row+1])valid++;
+      }
+      return {detected:true,valid};
+    });
+    assert.equal(irregular.detected,true,'detect Koro non-uniform frame grid');
+    assert.equal(irregular.valid,40,'all 40 crops must follow detected lines, not equal divisions');
     const png = await page.evaluate(() => {
       const c = StampCore.canvas(1000, 1600), ctx = c.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0,0,1000,1600);
