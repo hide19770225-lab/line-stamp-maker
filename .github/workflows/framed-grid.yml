@@ -53,5 +53,18 @@ jobs:
                   assert data[:8]==bytes.fromhex('89504e470d0a1a0a'), name
                   assert struct.unpack('>II',data[16:24])==dimensions, name
                   assert len(data)>100, name
+                  if name not in ('main.png','tab.png'):
+                      # A complete opaque black rule at any exported image edge
+                      # indicates that the printed grid leaked into the sticker.
+                      from PIL import Image
+                      image=Image.open(__import__('io').BytesIO(data)).convert('RGBA')
+                      edges=[list(image.crop((0,0,image.width,1)).getdata()),
+                             list(image.crop((0,image.height-1,image.width,image.height)).getdata()),
+                             list(image.crop((0,0,1,image.height)).getdata()),
+                             list(image.crop((image.width-1,0,image.width,image.height)).getdata())]
+                      for edge in edges:
+                          black=sum(1 for r,g,b,a in edge if a>220 and max(r,g,b)<130)
+                          assert black < len(edge)*0.6, f'{name}: printed black border detected'
+
           print('PASS downloaded framed ZIP: 40 stickers + main + tab; all 42 PNG dimensions verified')
           PY
