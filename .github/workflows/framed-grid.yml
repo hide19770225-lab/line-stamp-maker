@@ -1,0 +1,23 @@
+name: Framed grid regression
+on:
+  push:
+    branches:
+      - feature/framed-40-grid
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  framed-grid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check core.js
+          node --check app.js
+      - name: Run framed-grid regression
+        run: node tests/framed-grid.test.cjs
