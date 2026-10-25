@@ -37,6 +37,8 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')" node tests/framed-grid-browser.cjs
+      - name: Install PNG inspection dependency
+        run: python3 -m pip install --user Pillow
       - name: Validate actual downloaded ZIP entries and PNG dimensions
         run: |
           python3 - <<'PY'
