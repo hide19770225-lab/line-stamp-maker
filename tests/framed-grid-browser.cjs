@@ -98,6 +98,11 @@ const fs = require('node:fs/promises');
       for(let row=0;row<8;row++) for(let col=0;col<5;col++){
         const x=col*200, y=row*200;
         ctx.fillStyle='#539e8c'; ctx.beginPath(); ctx.arc(x+100,y+85,42,0,Math.PI*2); ctx.fill();
+        // Distinct edge markers must survive the entire app export, not just tileRect.
+        ctx.fillStyle='#ed3456'; ctx.fillRect(x+8,y+8,12,12);
+        ctx.fillStyle='#37b85b'; ctx.fillRect(x+180,y+8,12,12);
+        ctx.fillStyle='#3456ed'; ctx.fillRect(x+8,y+180,12,12);
+        ctx.fillStyle='#d4a52d'; ctx.fillRect(x+180,y+180,12,12);
         ctx.fillStyle='#111'; ctx.font='18px sans-serif'; ctx.fillText('ありがとう',x+45,y+155);
       }
       ctx.fillStyle='#111';
