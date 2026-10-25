@@ -111,11 +111,12 @@ const fs = require('node:fs/promises');
       ctx.fillStyle='#111';
       for(const x of xs)ctx.fillRect(x,0,2,1536);
       for(const y of ys)ctx.fillRect(0,y,961,2);
-      return c.toDataURL().split(',')[1];
+      // The actual Koro sheet is JPEG; verify detection after lossy compression.
+      return c.toDataURL('image/jpeg',0.88).split(',')[1];
     });
     await page.selectOption('#easy-layout','5x8');
     await page.selectOption('#easy-caption-mode','existing');
-    await page.setInputFiles('#easy-files',{name:'synthetic-framed.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+    await page.setInputFiles('#easy-files',{name:'synthetic-koro-framed.jpg',mimeType:'image/jpeg',buffer:Buffer.from(png,'base64')});
     const idle=()=>page.waitForFunction(()=>!document.body.classList.contains('busy'),{},{timeout:120000});
     await idle(); await page.click('#easy-process'); await idle();
     assert.equal(await page.locator('.stamp-card').count(),40,'framed sheet must produce 40 preview cards');
