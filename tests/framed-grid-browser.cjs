@@ -92,22 +92,25 @@ const fs = require('node:fs/promises');
     });
     assert.equal(irregular.detected,true,'detect Koro non-uniform frame grid');
     assert.equal(irregular.valid,40,'all 40 crops must follow detected lines, not equal divisions');
+    // Full browser -> ZIP test with the *irregular* frame geometry seen in
+    // the user's Koro artwork. Keep the actual artwork out of the public repo.
     const png = await page.evaluate(() => {
-      const c = StampCore.canvas(1000, 1600), ctx = c.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,1000,1600);
-      for(let row=0;row<8;row++) for(let col=0;col<5;col++){
-        const x=col*200, y=row*200;
-        ctx.fillStyle='#539e8c'; ctx.beginPath(); ctx.arc(x+100,y+85,42,0,Math.PI*2); ctx.fill();
-        // Distinct edge markers must survive the entire app export, not just tileRect.
-        ctx.fillStyle='#ed3456'; ctx.fillRect(x+8,y+8,12,12);
-        ctx.fillStyle='#37b85b'; ctx.fillRect(x+180,y+8,12,12);
-        ctx.fillStyle='#3456ed'; ctx.fillRect(x+8,y+180,12,12);
-        ctx.fillStyle='#d4a52d'; ctx.fillRect(x+180,y+180,12,12);
-        ctx.fillStyle='#111'; ctx.font='18px sans-serif'; ctx.fillText('ありがとう',x+45,y+155);
+      const xs=[1,204,388,576,768,958],ys=[1,185,361,538,715,894,1071,1273,1480];
+      const c=StampCore.canvas(961,1536),ctx=c.getContext('2d');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,961,1536);
+      for(let row=0;row<8;row++)for(let col=0;col<5;col++){
+        const x=xs[col]+2,y=ys[row]+2,w=xs[col+1]-xs[col]-4,h=ys[row+1]-ys[row]-4;
+        ctx.fillStyle='#539e8c';ctx.beginPath();ctx.arc(x+w/2,y+h*.45,Math.min(w,h)*.2,0,Math.PI*2);ctx.fill();
+        // Four colored markers near the actual inner boundaries.
+        ctx.fillStyle='#ed3456';ctx.fillRect(x+8,y+8,12,12);
+        ctx.fillStyle='#37b85b';ctx.fillRect(x+w-20,y+8,12,12);
+        ctx.fillStyle='#3456ed';ctx.fillRect(x+8,y+h-20,12,12);
+        ctx.fillStyle='#d4a52d';ctx.fillRect(x+w-20,y+h-20,12,12);
+        ctx.fillStyle='#111';ctx.font='17px sans-serif';ctx.fillText('ありがとう',x+25,y+h*.75);
       }
       ctx.fillStyle='#111';
-      for(let x=0;x<=1000;x+=200)ctx.fillRect(Math.min(x,998),0,2,1600);
-      for(let y=0;y<=1600;y+=200)ctx.fillRect(0,Math.min(y,1598),1000,2);
+      for(const x of xs)ctx.fillRect(x,0,2,1536);
+      for(const y of ys)ctx.fillRect(0,y,961,2);
       return c.toDataURL().split(',')[1];
     });
     await page.selectOption('#easy-layout','5x8');
