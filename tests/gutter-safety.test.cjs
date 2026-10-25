@@ -68,3 +68,14 @@ test('mixed transparent and opaque corner backgrounds require manual review', ()
     assert.equal(C.suggestGridLines(image, 1, 2), null);
   });
 });
+test('an ambiguous boundary in one column preserves safe cuts in the other', () => {
+  const image = sheet(200);
+  image.box(25, 135, 26, 165, [10,10,10,255]);
+  withPixels(image, () => {
+    const diagnostics=[];
+    const lines=C.suggestColumnRowLines(image,[0,0.5,1],2,diagnostics);
+    assert.deepEqual(diagnostics,[{column:0,boundary:1}]);
+    assert.deepEqual(lines,[[0,0.5,1],[0,0.5,1]]);
+    assert.equal(C.suggestColumnRowLines(image,[0,0.5,1],2),null);
+  });
+});

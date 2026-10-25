@@ -49,6 +49,35 @@
     }
     return best;
   }
+  // Repeated opaque neutral alternation on multiple perimeter scanlines is
+  // evidence of a baked-in checkerboard, never evidence of alpha transparency.
+  // Conservative detection: preserve pixels and ask for local background edits.
+  function paintedCheckerboard({ data, width, height }) {
+    let patterned = 0;
+    const scan = (length, point) => {
+      const runs = [];
+      for (let n = 0; n < length; n++) {
+        const p = point(n) * 4;
+        const rgb = data.subarray(p, p + 3);
+        if (data[p + 3] !== 255 || Math.max(...rgb) - Math.min(...rgb) > 10 || Math.min(...rgb) < 150) return;
+        const value = Math.round((rgb[0] + rgb[1] + rgb[2]) / 3 / 12);
+        if (runs.length && runs.at(-1).value === value) runs.at(-1).size++;
+        else runs.push({value, size: 1});
+      }
+      const middle = runs.slice(1, -1);
+      if (middle.length < 4) return;
+      const sizes = middle.map(r => r.size), size = sizes.slice().sort((a,b)=>a-b)[Math.floor(sizes.length/2)];
+      if (size < 2 || !sizes.every(n => Math.abs(n-size) <= 1)) return;
+      if (!runs.every((r,i) => i < 2 || r.value === runs[i-2].value)) return;
+      if (Math.abs(runs[0].value-runs[1].value) < 2) return;
+      patterned++;
+    };
+    scan(width, x => x);
+    scan(width, x => (height-1)*width+x);
+    scan(height, y => y*width);
+    scan(height, y => y*width+width-1);
+    return patterned >= 2;
+  }
   function floodMask(
     imageData,
     mode = "auto",
@@ -62,6 +91,7 @@
     const corners = [0, width - 1, (height - 1) * width, width * height - 1];
     if (
       mode === "none" ||
+      paintedCheckerboard(imageData) ||
       (mode === "auto" && corners.some((i) => data[i * 4 + 3] === 0))
     )
       return mask;
@@ -75,6 +105,10 @@
       queue = new Uint32Array(width * height);
     let head = 0,
       tail = 0;
+    // Warm near-white fills in open outlines are artwork. A broad default
+    // tolerance swallows them from the exterior; keep auto white removal tight.
+    if (mode === "auto" && Math.min(...color) >= 245)
+      tolerance = Math.min(tolerance, 8);
     function visit(i) {
       if (!seen[i]) {
         seen[i] = 1;
@@ -104,6 +138,83 @@
       if (i + width < mask.length) visit(i + width);
     }
     return mask;
+  }
+  // Only exterior-connected neutral white is background. Warm white artwork
+  // and enclosed white areas are deliberately excluded from this wider flood.
+  function exteriorWhiteMatte(image, mask) {
+    const {data,width,height}=image;
+    const bg=backgroundColor(data,width,height);
+    if (Math.min(...bg)<245 || paintedCheckerboard(image) ||
+        [0,width-1,(height-1)*width,width*height-1].some(i=>data[i*4+3]!==255)) return null;
+    const queue=new Uint32Array(mask.length), seen=new Uint8Array(mask.length);
+    let head=0,tail=0;
+    function visit(i) {
+      if(seen[i])return;seen[i]=1;
+      const rgb=data.subarray(i*4,i*4+3);
+      if(mask[i]===0 || (data[i*4+3]===255 && Math.max(...rgb)-Math.min(...rgb)<=6 &&
+          bg.every((v,k)=>Math.abs(v-rgb[k])<=30))) {
+        mask[i]=0;queue[tail++]=i;
+      }
+    }
+    for(let x=0;x<width;x++){visit(x);visit((height-1)*width+x);}
+    for(let y=0;y<height;y++){visit(y*width);visit(y*width+width-1);}
+    while(head<tail){const i=queue[head++],x=i%width;
+      if(x)visit(i-1);if(x+1<width)visit(i+1);
+      if(i>=width)visit(i-width);if(i+width<mask.length)visit(i+width);
+    }
+    // Letter counters can be enclosed by a single glyph. Restrict this pass
+    // to small components entirely above the largest (character) component;
+    // never apply it to the face, hands, body, bedding or mouth interiors.
+    seen.fill(0);
+    const groups=[];
+    for(let start=0;start<mask.length;start++) {
+      if(seen[start]||!mask[start])continue;
+      head=0;tail=0;queue[tail++]=start;seen[start]=1;
+      let minY=height,maxY=0;
+      while(head<tail) {
+        const i=queue[head++],x=i%width,y=Math.floor(i/width),rgb=data.subarray(i*4,i*4+3);
+        minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+        for(const n of [x?i-1:-1,x+1<width?i+1:-1,i>=width?i-width:-1,i+width<mask.length?i+width:-1])
+          if(n>=0&&!seen[n]&&mask[n]){seen[n]=1;queue[tail++]=n;}
+      }
+      groups.push({pixels:queue.slice(0,tail),minY,maxY});
+    }
+    const main=groups.reduce((a,b)=>!a||b.pixels.length>a.pixels.length?b:a,null);
+    for(const g of groups)if(main&&g!==main&&g.maxY<main.minY&&g.maxY-g.minY<height*.32)
+      for(const i of g.pixels) {
+        const rgb=data.subarray(i*4,i*4+3);
+        if(data[i*4+3]===255&&Math.max(...rgb)-Math.min(...rgb)<=11&&bg.every((v,k)=>Math.abs(v-rgb[k])<=30))mask[i]=0;
+      }
+    const artwork=new Uint8Array(mask.length), upperGlyph=new Uint8Array(mask.length);
+    for(const g of groups)for(const i of g.pixels) {
+      if(main&&g.maxY>=main.minY)artwork[i]=1;
+      else if(main&&g.maxY-g.minY<height*.32)upperGlyph[i]=1;
+    }
+    const result=new Uint8ClampedArray(data), base=mask.slice();
+    // Estimate coverage on the single exposed antialias rim from a nearby
+    // stronger sample, then remove the white contribution from RGB as well.
+    // Alpha-only fading would keep a white halo on dark chat backgrounds.
+    for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++) {
+      const i=y*width+x,p=i*4,rgb=data.subarray(p,p+3);
+      if(base[i]!==255 || data[p+3]!==255 ||
+          ![i-1,i+1,i-width,i+width].some(n=>base[n]===0))continue;
+      const hi=Math.max(...rgb),lo=Math.min(...rgb);
+      if((artwork[i] || y>=height*.30) && hi>=250 && lo>=230 && hi-lo>=12)continue;
+      const distance=Math.max(...bg.map((v,k)=>Math.abs(v-rgb[k])));
+      if(distance<1 || distance>180)continue;
+      let strongest=distance;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++) {
+        const xx=x+dx,yy=y+dy;
+        if(xx<0||xx>=width||yy<0||yy>=height)continue;
+        const n=yy*width+xx;if(base[n]!==255)continue;
+        strongest=Math.max(strongest,...bg.map((v,k)=>Math.abs(v-data[n*4+k])));
+      }
+      if(strongest<distance+30)continue;
+      const alpha=distance/strongest;
+      mask[i]=Math.max(1,Math.round(alpha*255));
+      for(let k=0;k<3;k++)result[p+k]=Math.max(0,Math.min(255,Math.round((rgb[k]-bg[k]*(1-alpha))/alpha)));
+    }
+    return result;
   }
   // Preview-only proposal. Change alpha on one exposed opaque matte rim;
   // never recolor artwork, flood further inward or modify existing partial alpha.
@@ -171,10 +282,12 @@
   }
   function tileRect(source, column, row) {
     const { xs, ys, image } = source;
-    const left = Math.round(xs[column] * image.width);
-    const rowLines = source.columnYs?.[column] || ys;
+    const rowGrid = activeRowGrid(source);
+    const columnLines = rowGrid?.xs[row] || xs;
+    const left = Math.round(columnLines[column] * image.width);
+    const rowLines = rowGrid?.ys || source.columnYs?.[column] || ys;
     const top = Math.round(rowLines[row] * image.height);
-    const right = Math.round(xs[column + 1] * image.width);
+    const right = Math.round(columnLines[column + 1] * image.width);
     const bottom = Math.round(rowLines[row + 1] * image.height);
     const inset = source.insets || { left: 0, right: 0, top: 0, bottom: 0 };
     const x = Math.min(
@@ -223,7 +336,7 @@
   }
   // Locate nearly blank gutters close to the expected grid positions.
   // Only return strong suggestions; uncertain sheets keep their manual grid.
-  function suggestGridLines(image, columns, rows) {
+  function suggestGridLines(image, columns, rows, preferNearest = false) {
     const width = image.width, height = image.height;
     if (!columns || !rows || width < columns * 20 || height < rows * 20)
       return null;
@@ -258,13 +371,16 @@
         while (j + 1 < blank.length && blank[j + 1]) j++;
         const center = Math.round((i + j) / 2) + start;
         const candidate = { center, length: j - i + 1 };
-        if (!best || candidate.length > best.length ||
+        if (preferNearest && candidate.length < 2) { i = j + 1; continue; }
+        if (!best || (preferNearest
+          ? Math.abs(center - nominal) < Math.abs(best.center - nominal)
+          : candidate.length > best.length) ||
           (candidate.length === best.length &&
             Math.abs(center - nominal) < Math.abs(best.center - nominal)))
           best = candidate;
         i = j + 1;
       }
-      const minCorridor = Math.max(3, Math.round(total / count * 0.015));
+      const minCorridor = preferNearest ? 2 : Math.max(3, Math.round(total / count * 0.015));
       return best && best.length >= minCorridor ? best.center / total : null;
     }
     const xs = [0], ys = [0];
@@ -283,7 +399,7 @@
   }
   // Find a safe horizontal gutter separately in each column. Sticker artwork
   // can be vertically staggered, so a single row boundary may cut another cat.
-  function suggestColumnRowLines(image, xs, rows) {
+  function suggestColumnRowLines(image, xs, rows, diagnostics = null) {
     const width = image.width, height = image.height;
     const sample = canvas(width, height);
     const ctx = sample.getContext("2d", { willReadFrequently: true });
@@ -347,14 +463,52 @@
           i = j + 1;
         }
         // Never guess a boundary if there is no defensible separation.
-        if (!best) return null;
-        perColumn.push(best.center / height);
+        if (!best) {
+          if (!diagnostics) return null;
+          diagnostics.push({ column: c, boundary: r });
+        }
+        perColumn.push(best ? best.center / height : r / rows);
       }
       perColumn.push(1);
       if (perColumn.some((v,i)=>i>0 && v<=perColumn[i-1])) return null;
       lines.push(perColumn);
     }
     return lines;
+  }
+  function activeRowGrid(source) {
+    const grid = source.autoRowGrid;
+    return grid && grid.key === JSON.stringify([source.xs, source.ys, !!source.manualColumnYs]) ? grid : null;
+  }
+  // Some sheets have clear horizontal gutters but staggered column gaps.
+  // Accept this alternative only if there are exactly the requested row bands,
+  // and every row has foreground-free column corridors at full resolution.
+  function suggestRowGrid(image, columns, rows) {
+    const {width,height}=image, sample=canvas(width,height);
+    const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0);
+    const ink=gridInk(ctx.getImageData(0,0,width,height));
+    sample.width=sample.height=1;
+    if(!ink || rows<2) return null;
+    const occupied=[];
+    for(let y=0;y<height;y++) {
+      let found=false;for(let x=0;x<width&&!found;x++) found=ink(x,y);
+      occupied.push(found);
+    }
+    const gaps=[];
+    for(let y=0;y<height;) {
+      if(occupied[y]){y++;continue;}
+      const start=y;while(y<height&&!occupied[y])y++;
+      if(start>0&&y<height&&y-start>=Math.max(5,Math.round(height/rows*.018)))gaps.push((start+y-1)/2);
+    }
+    if(gaps.length!==rows-1)return null;
+    const ys=[0,...gaps.map(y=>Math.round(y)/height),1],xs=[];
+    for(let r=0;r<rows;r++) {
+      const top=Math.round(ys[r]*height),bottom=Math.round(ys[r+1]*height);
+      if(bottom-top<height/rows*.55||bottom-top>height/rows*1.45)return null;
+      const crop=isolateRect(image,{x:0,y:top,width,height:bottom-top});
+      const grid=suggestGridLines(crop,columns,1,true);crop.width=crop.height=1;
+      if(!grid)return null;xs.push(grid.xs);
+    }
+    return {xs,ys};
   }
   // A source-grid cut through visible artwork needs a human ownership check.
   // This is diagnostic only: never erase thin antennae, lettering or decorations.
@@ -417,7 +571,16 @@
     }
     for (const side of suspicious)
       if (!edges.includes(side + "・小さな独立部分")) edges.push(side + "・小さな独立部分");
-    return { needsReview: edges.length > 0, edges };
+    const touching=[];
+    for(const side of ["left","right","top","bottom"]) {
+      const length=side==="left"||side==="right"?height:width;
+      for(let n=0;n<length;n++) {
+        const i=side==="left"?n*width:side==="right"?n*width+width-1:
+          side==="top"?n:(height-1)*width+n;
+        if(mask[i]>0){touching.push(side);break;}
+      }
+    }
+    return { needsReview: edges.length > 0, edges, touching };
   }
   // Inspect complete alpha components (including antialiasing), not only their
   // dark cores. A dark facial detail can be connected to a colored character.
@@ -531,6 +694,7 @@
     isolated.width = isolated.height = 1;
     const original = ctx.getImageData(0, 0, crop.width, crop.height);
     const mask = floodMask(original, mode, tolerance, color);
+    const matte = mode === "auto" ? exteriorWhiteMatte(original, mask) : null;
     crop.width = crop.height = 1;
     const isNumberedSheet = source.columns === 5 && source.rows === 8;
     // Guide numbers belong to the detected cell, not the equal-grid origin.
@@ -538,8 +702,8 @@
     // insets do not move the search away from the original printed number.
     const sx = original.width / rect.width, sy = original.height / rect.height;
     const guideRegion = {
-      x: (Math.round(source.xs[column] * source.image.width) - rect.x) * sx,
-      y: (Math.round((source.columnYs?.[column] || source.ys)[row] * source.image.height) - rect.y) * sy,
+      x: (Math.round((activeRowGrid(source)?.xs[row] || source.xs)[column] * source.image.width) - rect.x) * sx,
+      y: (Math.round((activeRowGrid(source)?.ys || source.columnYs?.[column] || source.ys)[row] * source.image.height) - rect.y) * sy,
       width: source.image.width / source.columns * sx,
       height: source.image.height / source.rows * sy,
     };
@@ -547,6 +711,10 @@
     const guidePixelsRemoved = possibleNumber
       ? removeIsolatedGuideNumber(original, mask, guideRegion) : 0;
     const boundaryReview = tileBoundaryReview(mask, original.width, original.height);
+    if (paintedCheckerboard(original)) {
+      boundaryReview.needsReview = true;
+      boundaryReview.edges.push("描き込み市松模様：透過情報ではありません。個別編集で背景を調整");
+    }
     if (possibleNumber) {
       boundaryReview.needsReview = true;
       boundaryReview.edges.push(guidePixelsRemoved
@@ -558,6 +726,7 @@
       boundaryReview,
       guidePixelsRemoved,
       original,
+      matteData: matte,
       mask,
       autoMask: mask.slice(),
       caption: "",
@@ -747,12 +916,16 @@
     const ctx = target.getContext("2d", { willReadFrequently: true });
     const { width, height } = stamp.original;
     const data = new ImageData(
-      new Uint8ClampedArray(stamp.original.data),
+      new Uint8ClampedArray(stamp.matteData || stamp.original.data),
       width,
       height,
     );
-    for (let i = 0; i < stamp.mask.length; i++)
+    for (let i = 0; i < stamp.mask.length; i++) {
+      // Manual restore/erase owns the pixel once it differs from the auto mask.
+      if(stamp.matteData && stamp.mask[i]!==stamp.autoMask?.[i])
+        data.data.set(stamp.original.data.subarray(i*4,i*4+3),i*4);
       data.data[i * 4 + 3] = stamp.mask[i];
+    }
     const layer = canvas(width, height);
     layer.getContext("2d").putImageData(data, 0, 0);
     const selectedCrop = stampCrop(stamp);
@@ -1026,12 +1199,16 @@
     FONTS,
     canvas,
     backgroundColor,
+    paintedCheckerboard,
     floodMask,
+    exteriorWhiteMatte,
     proposeMatteCleanup,
     alphaBounds,
     createTile,
     isolateRect,
     tileRect,
+    activeRowGrid,
+    suggestRowGrid,
     suggestGridLines,
     suggestColumnRowLines,
     tileBoundaryReview,
