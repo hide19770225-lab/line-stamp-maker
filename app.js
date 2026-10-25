@@ -181,6 +181,10 @@
       s.ys,
       s.columnYs || null,
       C.activeRowGrid(s),
+      s.framedGrid ? [
+        s.framedGrid.xs.map(line => [line.start, line.end]),
+        s.framedGrid.ys.map(line => [line.start, line.end]),
+      ] : null,
       s.manualColumnYs === true,
       s.mode,
       s.tolerance,
