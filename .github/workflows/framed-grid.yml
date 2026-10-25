@@ -50,7 +50,7 @@ jobs:
               assert set(names)==set(expected), f'Unexpected ZIP entries: {set(names)^set(expected)}'
               for name, dimensions in expected.items():
                   data=z.read(name)
-                  assert data[:8]==b'\\x89PNG\\r\\n\\x1a\\n', name
+                  assert data[:8]==bytes.fromhex('89504e470d0a1a0a'), name
                   assert struct.unpack('>II',data[16:24])==dimensions, name
                   assert len(data)>100, name
           print('PASS downloaded framed ZIP: 40 stickers + main + tab; all 42 PNG dimensions verified')
