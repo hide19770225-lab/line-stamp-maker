@@ -751,7 +751,10 @@
     const mask = floodMask(original, mode, tolerance, color);
     const matte = mode === "auto" ? exteriorWhiteMatte(original, mask) : null;
     crop.width = crop.height = 1;
-    // Framed source artwork is intentionally number-free. Never interpret\n    // a Japanese caption or decoration as a removable guide number.\n    const isNumberedSheet = !source.framedGrid &&\n      source.columns === 5 && source.rows === 8;
+    // Framed source artwork is intentionally number-free. Never interpret
+    // a Japanese caption or decoration as a removable guide number.
+    const isNumberedSheet = !source.framedGrid &&
+      source.columns === 5 && source.rows === 8;
     // Guide numbers belong to the detected cell, not the equal-grid origin.
     // Map its un-inset top-left into crop pixels so row drift and manual
     // insets do not move the search away from the original printed number.
