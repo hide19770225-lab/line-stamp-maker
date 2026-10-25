@@ -9,7 +9,7 @@ permissions:
 jobs:
   framed-grid:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,3 +21,13 @@ jobs:
           node --check app.js
       - name: Run framed-grid regression
         run: node tests/framed-grid.test.cjs
+      - name: Install Chromium test tools
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Verify framed cropping in real Chromium
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')" node tests/framed-grid-browser.cjs
