@@ -1044,7 +1044,14 @@
     captureSlots(true);
     // A deliberately framed 5 x 8 sheet uses its printed dividers, not
     // foreground gutters. Never carry this mode over to an unframed upload.
-    source.framedGrid = C.detectFramedGrid(source.image, source.columns, source.rows);
+    // A user-adjusted grid is authoritative; do not silently replace it
+    // with automatically detected frame boundaries.
+    const untouched = values => values.every((v, i) =>
+      Math.abs(v - i / (values.length - 1)) < 0.0001);
+    source.framedGrid = !source.manualColumnYs &&
+      untouched(source.xs) && untouched(source.ys)
+      ? C.detectFramedGrid(source.image, source.columns, source.rows)
+      : null;
     if (source.framedGrid) {
       source.gutterUncertain = false;
       source.uncertainCuts = [];
