@@ -197,7 +197,7 @@
     for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++) {
       const i=y*width+x,p=i*4,rgb=data.subarray(p,p+3);
       if(base[i]!==255 || data[p+3]!==255 ||
-          (!upperGlyph[i] && ![i-1,i+1,i-width,i+width].some(n=>base[n]===0)))continue;
+          ![i-1,i+1,i-width,i+width].some(n=>base[n]===0))continue;
       const hi=Math.max(...rgb),lo=Math.min(...rgb);
       if((artwork[i] || y>=height*.30) && hi>=250 && lo>=230 && hi-lo>=12)continue;
       const distance=Math.max(...bg.map((v,k)=>Math.abs(v-rgb[k])));
