@@ -67,6 +67,18 @@ jobs:
                       for edge in edges:
                           black=sum(1 for r,g,b,a in edge if a>220 and max(r,g,b)<130)
                           assert black < len(edge)*0.6, f'{name}: printed black border detected'
+                      # Confirm all four near-boundary artwork markers survived
+                      # background removal, scaling and final PNG export.
+                      pixels=list(image.getdata())
+                      checks={
+                          'upper-left red':lambda r,g,b:r>170 and g<110 and b<150,
+                          'upper-right green':lambda r,g,b:g>120 and r<120 and b<150,
+                          'lower-left blue':lambda r,g,b:b>170 and r<130 and g<150,
+                          'lower-right gold':lambda r,g,b:r>150 and 100<g<200 and b<110,
+                      }
+                      for label,match in checks.items():
+                          count=sum(1 for r,g,b,a in pixels if a>180 and match(r,g,b))
+                          assert count>=8, f'{name}: {label} marker lost in exported PNG ({count} pixels)'
 
           print('PASS downloaded framed ZIP: 40 stickers + main + tab; all 42 PNG dimensions verified')
           PY
