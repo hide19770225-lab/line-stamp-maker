@@ -37,3 +37,21 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')" node tests/framed-grid-browser.cjs
+      - name: Validate actual downloaded ZIP entries and PNG dimensions
+        run: |
+          python3 - <<'PY'
+          import io, struct, zipfile
+          path='/tmp/framed-grid-browser-42.zip'
+          with zipfile.ZipFile(path) as z:
+              names=z.namelist()
+              assert len(names)==42, f'Expected 42 entries, got {len(names)}: {names}'
+              expected={f'{i:02}.png':(370,320) for i in range(1,41)}
+              expected.update({'main.png':(240,240),'tab.png':(96,74)})
+              assert set(names)==set(expected), f'Unexpected ZIP entries: {set(names)^set(expected)}'
+              for name, dimensions in expected.items():
+                  data=z.read(name)
+                  assert data[:8]==b'\\x89PNG\\r\\n\\x1a\\n', name
+                  assert struct.unpack('>II',data[16:24])==dimensions, name
+                  assert len(data)>100, name
+          print('PASS downloaded framed ZIP: 40 stickers + main + tab; all 42 PNG dimensions verified')
+          PY
