@@ -4,6 +4,12 @@ on:
     branches:
       - feature/framed-40-grid
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'core.js'
+      - 'app.js'
+      - 'tests/framed-grid*'
+      - '.github/workflows/framed-grid.yml'
 permissions:
   contents: read
 jobs:
