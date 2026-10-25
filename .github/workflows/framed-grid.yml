@@ -79,6 +79,20 @@ jobs:
                       for label,match in checks.items():
                           count=sum(1 for r,g,b,a in pixels if a>180 and match(r,g,b))
                           assert count>=8, f'{name}: {label} marker lost in exported PNG ({count} pixels)'
+                      # A printed divider can survive *inside* the sticker,
+                      # even when all four outside edges are transparent.
+                      for y in range(image.height):
+                          run=0
+                          for x in range(image.width):
+                              r,g,b,a=image.getpixel((x,y))
+                              run=run+1 if a>220 and max(r,g,b)<65 else 0
+                              assert run<image.width*.72, f'{name}: long internal horizontal frame line at y={y}'
+                      for x in range(image.width):
+                          run=0
+                          for y in range(image.height):
+                              r,g,b,a=image.getpixel((x,y))
+                              run=run+1 if a>220 and max(r,g,b)<65 else 0
+                              assert run<image.height*.72, f'{name}: long internal vertical frame line at x={x}'
 
           print('PASS downloaded framed ZIP: 40 stickers + main + tab; all 42 PNG dimensions verified')
           PY
