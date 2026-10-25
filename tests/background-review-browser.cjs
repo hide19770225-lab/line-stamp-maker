@@ -18,7 +18,17 @@ const assert=require('node:assert/strict');
   await page.setInputFiles('#easy-files',{name:'synthetic-checker.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
   const idle=()=>page.waitForFunction(()=>!document.body.classList.contains('busy'),{},{timeout:120000});
   await idle();await page.click('#easy-process');await idle();
-  assert.equal(await page.locator('.stamp-card').count(),40);
+  const cards=await page.locator('.stamp-card').count();
+  if(cards!==40){
+   const diagnostics=await page.evaluate(()=>({
+    status:document.querySelector('#easy-status')?.textContent,
+    errors:[...document.querySelectorAll('[role="alert"], .error, #status, #easy-result')].map(el=>el.textContent).filter(Boolean).slice(0,8),
+    busy:document.body.classList.contains('busy'),
+    heading:document.title
+   }));
+   console.error('PROCESS DIAGNOSTICS',JSON.stringify(diagnostics));
+  }
+  assert.equal(cards,40);
   await page.selectOption('#production-mode','normal');
   await page.click('#bulk-inspect');await idle();
   assert((await page.locator('#bulk-results').textContent()).includes('個別編集して確認済み'));
