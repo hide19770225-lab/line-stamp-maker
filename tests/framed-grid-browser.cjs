@@ -39,6 +39,38 @@ const fs = require('node:fs/promises');
       assert(rect.x + rect.width < result.grid.xs[col+1].start);
       assert(rect.y + rect.height < result.grid.ys[row+1].start);
     }
+    // Every cell must retain artwork close to all four inner edges.
+    // This guards against regressions that silently crop off legs, tails,
+    // antennae or captions even when the ZIP structure is valid.
+    const coverage = await page.evaluate(() => {
+      const c=StampCore.canvas(1000,1600),ctx=c.getContext('2d');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,1000,1600);
+      for(let row=0;row<8;row++)for(let col=0;col<5;col++){
+        const x=col*200,y=row*200;
+        ctx.fillStyle='#e35a62';
+        ctx.fillRect(x+8,y+8,14,14);
+        ctx.fillRect(x+178,y+8,14,14);
+        ctx.fillRect(x+8,y+178,14,14);
+        ctx.fillRect(x+178,y+178,14,14);
+      }
+      ctx.fillStyle='#111';
+      for(let x=0;x<=1000;x+=200)ctx.fillRect(Math.min(x,998),0,2,1600);
+      for(let y=0;y<=1600;y+=200)ctx.fillRect(0,Math.min(y,1598),1000,2);
+      const grid=StampCore.detectFramedGrid(c,5,8);
+      if(!grid)return {found:false};
+      let retained=0;
+      for(let row=0;row<8;row++)for(let col=0;col<5;col++){
+        const rect=StampCore.tileRect({image:c,framedGrid:grid,columns:5,rows:8},col,row);
+        const d=ctx.getImageData(rect.x,rect.y,rect.width,rect.height).data;
+        let colored=0;
+        for(let i=0;i<d.length;i+=4)
+          if(d[i]>190&&d[i+1]<150&&d[i+2]<160)colored++;
+        if(colored>=4*14*14)retained++;
+      }
+      return {found:true,retained};
+    });
+    assert.equal(coverage.found,true);
+    assert.equal(coverage.retained,40,'all four near-edge artwork markers must survive in all 40 tiles');
     const png = await page.evaluate(() => {
       const c = StampCore.canvas(1000, 1600), ctx = c.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0,0,1000,1600);
