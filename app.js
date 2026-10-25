@@ -1038,6 +1038,15 @@
     if (!source.image)
       throw new Error(`${source.name}の元画像を再選択してください。`);
     captureSlots(true);
+    // A deliberately framed 5 x 8 sheet uses its printed dividers, not
+    // foreground gutters. Never carry this mode over to an unframed upload.
+    source.framedGrid = C.detectFramedGrid(source.image, source.columns, source.rows);
+    if (source.framedGrid) {
+      source.gutterUncertain = false;
+      source.uncertainCuts = [];
+      source.columnYs = null;
+      delete source.autoRowGrid;
+    }
     // Respect manually adjusted grid lines. Suggest gutters only on the
     // untouched equal grid and only when every boundary has a clean corridor.
     const defaultGrid = (values) =>
@@ -1052,7 +1061,7 @@
     }
     const automaticColumns = source.autoGridXs &&
       source.xs.every((x, i) => x === source.autoGridXs[i]);
-    if (!source.manualColumnYs && (defaultGrid(source.xs) || automaticColumns) && defaultGrid(source.ys)) {
+    if (!source.framedGrid && !source.manualColumnYs && (defaultGrid(source.xs) || automaticColumns) && defaultGrid(source.ys)) {
       // Establish column gutters independently: requiring shared row gutters
       // first rejects staggered sheets, while equal columns can split guide digits.
       const vertical = C.suggestGridLines(source.image, source.columns, 1);
@@ -1086,7 +1095,7 @@
       // Never substitute a shared horizontal boundary for a failed
       // column-specific search: it can cut off ears in staggered sheets.
     }
-    if (!source.manualColumnYs && (!defaultGrid(source.xs) || !defaultGrid(source.ys)) &&
+    if (!source.framedGrid && !source.manualColumnYs && (!defaultGrid(source.xs) || !defaultGrid(source.ys)) &&
         !(source.autoGridXs && source.xs.every((x, i) => x === source.autoGridXs[i]) && defaultGrid(source.ys))) {
       source.columnYs = null;
       source.gutterUncertain = false; // User explicitly chose manual grid lines.
@@ -1165,8 +1174,8 @@
     }
     source.stamps = tiles;
     source.cropReport = tiles.map((stamp) => stamp.cropDiagnostic).filter(Boolean);
-    source.cropMethod = source.manualColumnYs
-      ? "列別・手動調整"
+    source.cropMethod = source.framedGrid ? "枠線検出・内側切り抜き"
+      : source.manualColumnYs ? "列別・手動調整"
       : C.activeRowGrid(source) ? "行別の列境界・自動検出" : source.columnYs ? "列別・自動検出" : "共通線・要確認";
     source.processSignature = signature(source);
     invalidate();
