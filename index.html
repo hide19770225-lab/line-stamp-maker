@@ -130,7 +130,8 @@
           aria-labelledby="easy-title"
         >
           <h2 id="easy-title">かんたん一括制作</h2>
-          <section aria-label="実装と検証の状況" class="site-progress">
+          <details class="site-progress easy-technical-info">
+            <summary>検証情報・技術的な注意事項</summary>
             <strong>実装と検証の状況</strong>
             <p>実装済み：40個の分割・番号除去、列別調整、個別修正、一括確認、透過PNG・ZIP生成</p>
             <p>自動テストで検証済み：合成5列×8段画像の01〜40除去・日本語画素保持、40個の確認操作、42画像のZIP内容・寸法・透過</p>
@@ -140,7 +141,7 @@
               <p>番号除去は形状推定です。接触した数字や異なる配置は個別修正が必要です。セリフの有無の自動判定は未実装のため、自動モードでは既存文字を保持します。加工後は全画像を目視確認してください。</p>
               <a href="docs/forty-sticker-final-validation.md">検証結果と未検証項目</a>
             </details>
-          </section>
+          </details>
           <ol id="easy-steps" class="easy-steps" aria-label="かんたん制作の流れ">
             <li aria-current="step">① 画像選択</li>
             <li>② 自動加工</li>
