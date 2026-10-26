@@ -33,7 +33,7 @@ jobs:
           echo "Installing Playwright at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           npm install --no-save --no-audit --no-fund playwright
           echo "Installing Chromium at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
           echo "Chromium installation completed at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
       - name: Verify framed cropping in real Chromium
         run: |
