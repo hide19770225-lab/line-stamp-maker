@@ -1980,3 +1980,9 @@ body.easy-mode.easy-details-open .project-panel { display: revert; }
 .easy-upload-title { display:block; font-weight: 800; margin-bottom: 12px; color: #155c42; }
 .easy-upload-zone input.easy-visible-file { display: block !important; position: static !important; width: 100% !important; height: auto !important; opacity: 1 !important; visibility: visible !important; clip: auto !important; pointer-events: auto !important; font-size: 16px; color: #123e2e; }
 .easy-upload-zone .hint { margin: 10px 0 0; }
+
+/* Five-stage mobile guide: presentation only; no processing controls hidden. */
+#easy-steps { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; padding:0; margin:14px 0 22px; list-style:none; }
+#easy-steps li { min-width:0; padding:9px 3px; border-radius:9px; background:#eef3ef; color:#536b5d; font-size:11px; text-align:center; line-height:1.45; overflow-wrap:anywhere; }
+#easy-steps li[aria-current="step"] { background:#217653; color:#fff; font-weight:700; }
+@media (max-width:600px) { #easy-steps { gap:3px; } #easy-steps li { padding:9px 2px; font-size:10px; } }
