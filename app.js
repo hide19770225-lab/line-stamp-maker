@@ -3305,8 +3305,12 @@
     feedback.textContent = `選択：${files.map((f) => f.name).join("、")}（読み込み中）`;
     await importFiles(files, true);
     const loaded = state.sources.filter((source) => source.image).length;
+    const sources = state.sources.filter((source) => source.image);
+    const layoutSummary = sources.length === 1
+      ? `配置：${sources[0].columns}列×${sources[0].rows}段（${$("easy-layout").value === "auto" ? "自動設定" : "手動指定"}）。`
+      : `配置：${sources.map((source) => `${source.columns}列×${source.rows}段`).join("、")}。`;
     feedback.textContent = loaded
-      ? `読み込み済み：${loaded}枚。次に一括加工へ進んでください。`
+      ? `読み込み済み：${loaded}枚。${layoutSummary} 次に②自動加工へ進んでください。`
       : "画像を読み込めませんでした。形式やサイズを確認してください。";
   };
   window.dispatchEvent(new Event("stamp-import-ready"));
