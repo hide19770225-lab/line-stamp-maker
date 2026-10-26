@@ -395,7 +395,8 @@
     });
     $("file-input").value = "";
     if (easy) {
-      $("easy-files").value = "";
+      // Keep the selected filename visible in the native iPhone file picker.
+      // The processed image remains stored in state.sources independently.
       easyWarnings([
         ...easyMessages,
         ...easyPlan().errors,
