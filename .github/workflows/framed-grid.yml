@@ -96,3 +96,31 @@ jobs:
 
           print('PASS downloaded framed ZIP: 40 stickers + main + tab; all 42 PNG dimensions verified')
           PY
+
+      - name: Validate unframed ZIP and transparent sticker content
+        run: |
+          python3 - <<'PY'
+          import io, zipfile
+          from PIL import Image
+          path='/tmp/unframed-grid-browser-42.zip'
+          expected={f'{i:02}.png':(370,320) for i in range(1,41)}
+          expected.update({'main.png':(240,240),'tab.png':(96,74)})
+          with zipfile.ZipFile(path) as z:
+              assert set(z.namelist())==set(expected), 'Unframed ZIP entries differ from 42 required assets'
+              for name,dimensions in expected.items():
+                  data=z.read(name)
+                  assert data.startswith(bytes.fromhex('89504e470d0a1a0a')), name
+                  image=Image.open(io.BytesIO(data)).convert('RGBA')
+                  assert image.size==dimensions, (name,image.size)
+                  alpha=image.getchannel('A')
+                  assert alpha.getbbox() is not None, f'{name}: sticker artwork disappeared'
+                  if name not in ('main.png','tab.png'):
+                      # The test source is a white-background sheet, so the
+                      # exported PNG must preserve transparent outer margins.
+                      corners=[image.getpixel((0,0))[3],
+                               image.getpixel((image.width-1,0))[3],
+                               image.getpixel((0,image.height-1))[3],
+                               image.getpixel((image.width-1,image.height-1))[3]]
+                      assert all(a==0 for a in corners), f'{name}: white background was not removed'
+          print('PASS downloaded unframed ZIP: 40 transparent stickers + main + tab')
+          PY
