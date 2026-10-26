@@ -53,6 +53,22 @@ const { chromium } = require('playwright');
       sourceText.includes('検出位置の確認');
     if (!compactReview) throw new Error('Compact review controls missing');
     console.log('PASS compact review disclosure controls are present');
+    // Exercise generated review cards and native disclosure behavior.
+    await page.locator('#easy-process').click();
+    await page.waitForFunction(() =>
+      document.querySelectorAll('#bulk-results .bulk-result').length === 42 &&
+      !document.body.classList.contains('busy'), null, { timeout: 120000 });
+    const normalCard = page.locator('#bulk-results .bulk-result[data-status="正常"]').first();
+    if (await normalCard.count() === 0) throw new Error('No successful audit card');
+    const details = normalCard.locator('details.audit-technical-details').first();
+    if (await details.count() !== 1) throw new Error('Collapsible audit details missing');
+    if (await details.evaluate(el => el.open)) throw new Error('Audit details initially expanded');
+    await details.locator('summary').click();
+    if (!(await details.evaluate(el => el.open))) throw new Error('Audit details did not expand');
+    await details.locator('summary').click();
+    if (await details.evaluate(el => el.open)) throw new Error('Audit details did not collapse');
+    console.log('PASS 42 actual review cards and audit details open/close');
+
 
     console.log('PASS automatic 5x8 selection and visible upload feedback');
     await page.screenshot({ path: '/tmp/stamp-atelier-mobile-preview.png', fullPage: true });
