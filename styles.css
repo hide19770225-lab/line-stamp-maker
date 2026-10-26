@@ -1991,3 +1991,16 @@ body.easy-mode.easy-details-open .project-panel { display: revert; }
 .easy-technical-info { margin: 0 0 14px; }
 .easy-technical-info > summary { cursor:pointer; padding:10px 12px; font-size:12px; font-weight:600; color:#536b5d; }
 .easy-technical-info[open] > summary { margin-bottom:8px; }
+
+/* Compact review cards on narrow iPhones; preserve full-size image inspection via existing editor. */
+@media (max-width: 600px) {
+  .bulk-review { scroll-margin-top: 18px; }
+  .bulk-review #bulk-summary,
+  .bulk-review #completion-status { font-size: 13px; line-height: 1.55; }
+  .bulk-results { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .bulk-result { padding: 7px; border-radius: 10px; min-width: 0; }
+  .bulk-result canvas { max-width: 100%; height: auto; }
+  .bulk-review #bulk-inspect,
+  .bulk-review #bulk-confirm { min-height: 48px; }
+  .bulk-review .check-label { line-height: 1.6; }
+}
