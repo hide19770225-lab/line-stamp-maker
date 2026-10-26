@@ -28,9 +28,13 @@ jobs:
       - name: Run framed-grid regression
         run: node tests/framed-grid.test.cjs
       - name: Install Chromium test tools
+        timeout-minutes: 5
         run: |
-          npm install --no-save playwright
+          echo "Installing Playwright at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          npm install --no-save --no-audit --no-fund playwright
+          echo "Installing Chromium at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           npx playwright install --with-deps chromium
+          echo "Chromium installation completed at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
       - name: Verify framed cropping in real Chromium
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 &
