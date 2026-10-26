@@ -1986,3 +1986,8 @@ body.easy-mode.easy-details-open .project-panel { display: revert; }
 #easy-steps li { min-width:0; padding:9px 3px; border-radius:9px; background:#eef3ef; color:#536b5d; font-size:11px; text-align:center; line-height:1.45; overflow-wrap:anywhere; }
 #easy-steps li[aria-current="step"] { background:#217653; color:#fff; font-weight:700; }
 @media (max-width:600px) { #easy-steps { gap:3px; } #easy-steps li { padding:9px 2px; font-size:10px; } }
+
+/* Technical notes stay available without crowding the iPhone first screen. */
+.easy-technical-info { margin: 0 0 14px; }
+.easy-technical-info > summary { cursor:pointer; padding:10px 12px; font-size:12px; font-weight:600; color:#536b5d; }
+.easy-technical-info[open] > summary { margin-bottom:8px; }
