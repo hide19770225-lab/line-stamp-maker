@@ -141,15 +141,12 @@
               <a href="docs/forty-sticker-final-validation.md">検証結果と未検証項目</a>
             </details>
           </section>
-          <ol
-            id="easy-steps"
-            class="easy-steps"
-            aria-label="かんたん制作の流れ"
-          >
-            <li aria-current="step">① 画像とセリフを読み込む</li>
-            <li>② 自動加工する</li>
-            <li>③ 一覧で確認・必要な箇所だけ修正</li>
-            <li>④ ZIPを保存する</li>
+          <ol id="easy-steps" class="easy-steps" aria-label="かんたん制作の流れ">
+            <li aria-current="step">① 画像選択</li>
+            <li>② 自動加工</li>
+            <li>③ 40枚を確認</li>
+            <li>④ 完成判定</li>
+            <li>⑤ ZIP保存</li>
           </ol>
           <label
             >制作枚数<select id="easy-target">
@@ -161,7 +158,7 @@
             </select></label
           >
           <div class="easy-upload-zone">
-            <label for="easy-files" class="easy-upload-title">② 元画像を添付する</label>
+            <label for="easy-files" class="easy-upload-title">① 元画像を選択する</label>
             <input id="easy-files" class="easy-visible-file" type="file"
               accept="image/png,image/jpeg,image/webp" multiple
               aria-describedby="easy-upload-help" />
@@ -263,7 +260,7 @@
             ③ 一括確認の一覧へ
           </button>
           <button id="easy-export" class="button primary wide">
-            ④ 確認済みのZIPを保存する
+            ⑤ 確認済みのZIPを保存する
           </button>
           <button
             id="easy-details"
