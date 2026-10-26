@@ -83,11 +83,12 @@
           <span class="heading-art" aria-hidden="true">✳︎</span>
         </div>
         <label class="mode-switch"
-          >制作モード<select id="production-mode">
+          >制作モード<select id="production-mode" aria-describedby="production-mode-help">
             <option value="normal">通常制作（詳細編集）</option>
             <option value="easy" selected>自動加工・一括確認（推奨）</option>
           </select></label
         >
+        <p id="production-mode-help" class="hint easy-mode-hint">通常は「自動加工・一括確認」で進めてください。分割位置や背景を細かく直す場合だけ「通常制作」を選びます。</p>
         <section id="auto-caption-panel" class="panel" hidden>
           <h2>セリフを自動提案（両モード共通）</h2>
           <p class="hint">
@@ -130,7 +131,8 @@
           aria-labelledby="easy-title"
         >
           <h2 id="easy-title">かんたん一括制作</h2>
-          <section aria-label="実装と検証の状況" class="site-progress">
+          <details class="site-progress easy-technical-info">
+            <summary>検証情報・技術的な注意事項</summary>
             <strong>実装と検証の状況</strong>
             <p>実装済み：40個の分割・番号除去、列別調整、個別修正、一括確認、透過PNG・ZIP生成</p>
             <p>自動テストで検証済み：合成5列×8段画像の01〜40除去・日本語画素保持、40個の確認操作、42画像のZIP内容・寸法・透過</p>
@@ -140,16 +142,13 @@
               <p>番号除去は形状推定です。接触した数字や異なる配置は個別修正が必要です。セリフの有無の自動判定は未実装のため、自動モードでは既存文字を保持します。加工後は全画像を目視確認してください。</p>
               <a href="docs/forty-sticker-final-validation.md">検証結果と未検証項目</a>
             </details>
-          </section>
-          <ol
-            id="easy-steps"
-            class="easy-steps"
-            aria-label="かんたん制作の流れ"
-          >
-            <li aria-current="step">① 画像とセリフを読み込む</li>
-            <li>② 自動加工する</li>
-            <li>③ 一覧で確認・必要な箇所だけ修正</li>
-            <li>④ ZIPを保存する</li>
+          </details>
+          <ol id="easy-steps" class="easy-steps" aria-label="かんたん制作の流れ">
+            <li aria-current="step">① 画像選択</li>
+            <li>② 自動加工</li>
+            <li>③ 40枚を確認</li>
+            <li>④ 完成判定</li>
+            <li>⑤ ZIP保存</li>
           </ol>
           <label
             >制作枚数<select id="easy-target">
@@ -161,15 +160,13 @@
             </select></label
           >
           <div class="easy-upload-zone">
-            <label for="easy-files" class="easy-upload-title">② 元画像を添付する</label>
+            <label for="easy-files" class="easy-upload-title">① 元画像を選択する</label>
             <input id="easy-files" class="easy-visible-file" type="file"
               accept="image/png,image/jpeg,image/webp" multiple
               aria-describedby="easy-upload-help" />
             <p id="easy-upload-feedback" role="status" aria-live="polite" style="font-weight:700">まだ画像は選択されていません。</p><p id="easy-upload-help" class="hint">ここをタップして写真・ファイルから画像を選択してください。複数枚の選択もできます。</p>
           </div>
-          <p class="hint">
-            元画像の配置は自動判定が初期設定です。40個入り1枚は5列×8段に設定します。判定が違う場合は配置を選び直してから読み込んでください。分割線は詳細調整で変更できます。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。
-          </p>
+          <details class="easy-upload-guide"><summary>画像の選び方・配置について</summary><p class="hint">元画像の配置は自動判定が初期設定です。40個入り1枚は5列×8段に設定します。判定が違う場合は配置を選び直してから読み込んでください。分割線は詳細調整で変更できます。選択した順に番号を割り当てます。既存画像の分割・加工設定は維持します。元画像は変更しません。</p></details>
           <label>元画像の配置<select id="easy-layout"><option value="auto" selected>自動判定（1枚40個は5列×8段）</option><option value="2x5">2列×5段（10個入り）</option><option value="5x8">5列×8段（40個入り）</option><option value="4x2">4列×2段（8個入り）</option><option value="4x4">4列×4段（16個入り）</option><option value="4x6">4列×6段（24個入り）</option><option value="4x8">4列×8段（32個入り）</option><option value="1x1">1列×1段（個別画像）</option></select></label><p id="easy-sources" class="hint"></p>
           <p id="easy-state" class="hint" role="status" aria-live="polite"></p>
           <p id="easy-failure" class="easy-failure" role="alert" hidden></p>
@@ -256,14 +253,14 @@
             画像を読み込んでください。10個だけのテスト加工もできます。申請用ZIPには選択枚数すべての加工と目視確認が必要です。
           </p>
           <p class="hint">
-            ③
-            全画像を一覧で確認し、問題のある画像だけ「個別編集」から余白・幅・位置・切り抜き範囲を調整してください。調整項目は削除されていません。確認後に一括確認してください。
+            ③ 一覧で40枚を確認し、気になる画像だけ個別編集してください。④ 自動検査の結果を確認し、全画像の目視確認が終わったら「すべて確認済みにする」を押してください。
           </p>
           <button id="easy-review" class="button secondary wide">
             ③ 一括確認の一覧へ
           </button>
+          <p class="hint">⑤ 40枚の確認が終わったらZIPを保存します。未確認の画像がある場合は保存できません。</p>
           <button id="easy-export" class="button primary wide">
-            ④ 確認済みのZIPを保存する
+            ⑤ 確認済みのZIPを保存する
           </button>
           <button
             id="easy-details"
@@ -638,7 +635,7 @@
           </button>
           <div class="stamp-grid" id="stamp-grid"></div>
           <section class="bulk-review" aria-labelledby="bulk-review-heading">
-            <h3 id="bulk-review-heading">スタンプ画像の一括透過確認</h3>
+            <h3 id="bulk-review-heading">③・④ スタンプ画像の一括確認と完成判定</h3>
             <p class="hint">
               画像は変更しません。検査後、全スタンプとメイン・タブを背景色を切り替えながら目視してください。「正常」は目視確認済みという意味ではありません。
             </p>

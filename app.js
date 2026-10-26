@@ -369,12 +369,13 @@
           const selectedLayout = easy ? $("easy-layout").value : "";
           const singleNewSheet = chosen.length === 1 &&
             state.sources.filter((source) => source.image).length === 0;
-          const likelyFortySheet = singleNewSheet && state.target === 40 &&
-            image.width / image.height >= 0.65 &&
-            image.width / image.height <= 1.15;
+          // A single 40-sticker sheet may have generous margins or a
+          // nonstandard aspect ratio. Do not misclassify it as a 10-grid.
+          // Explicit layout selection always overrides this default.
+          const autoFortySheet = singleNewSheet && state.target === 40;
           const easyLayout = easy
             ? (selectedLayout === "auto"
-                ? (likelyFortySheet ? [5, 8] : [2, 5])
+                ? (autoFortySheet ? [5, 8] : [2, 5])
                 : selectedLayout.split("x").map(Number))
             : null;
           addSource(image, file.name, easyLayout);
@@ -394,7 +395,8 @@
     });
     $("file-input").value = "";
     if (easy) {
-      $("easy-files").value = "";
+      // Keep the selected filename visible in the native iPhone file picker.
+      // The processed image remains stored in state.sources independently.
       easyWarnings([
         ...easyMessages,
         ...easyPlan().errors,
@@ -1454,7 +1456,16 @@
             overlay.hidden = !overlay.hidden;
             toggle.setAttribute("aria-pressed", String(!overlay.hidden));
           };
-          card.append(toggle);
+          if (report.status === "正常") {
+            const detail = document.createElement("details");
+            detail.className = "audit-technical-details";
+            const summary = document.createElement("summary");
+            summary.textContent = "検出位置の確認";
+            detail.append(summary, toggle);
+            card.append(detail);
+          } else {
+            card.append(toggle);
+          }
         }
         const metrics = document.createElement("p");
         metrics.textContent = `${width}×${height}px · PNG / RGBA · ${(blob.size / 1024).toFixed(1)}KB · 透明 ${report.transparent}px · 半透明 ${report.partial}px`;
@@ -1467,7 +1478,18 @@
       reasons.textContent =
         [...report.errors, ...report.warnings].join(" / ") ||
         "サイズ・RGBA透過・余白・容量・残留候補の検査に合格（目視確認は別途必要です）";
-      card.append(reasons);
+      // Keep the 40-up visual review compact on iPhone. Warnings and errors
+      // remain visible; successful technical details can be expanded.
+      if (report.status === "正常") {
+        const detail = document.createElement("details");
+        detail.className = "audit-technical-details";
+        const summary = document.createElement("summary");
+        summary.textContent = "検査の詳細を表示";
+        detail.append(summary, reasons);
+        card.append(detail);
+      } else {
+        card.append(reasons);
+      }
       if (stamp) {
         const edit = document.createElement("button");
         edit.className = "button secondary wide";
@@ -2800,10 +2822,12 @@
   };
   let easyCaptionDirty = false;
   function easyStep(index) {
+    // Progress reflects the actual completed review and ZIP export stages.
+    const visibleIndex = index;
     $("easy-steps")
       .querySelectorAll("li")
       .forEach((li, i) => {
-        if (i === index) li.setAttribute("aria-current", "step");
+        if (i === visibleIndex) li.setAttribute("aria-current", "step");
         else li.removeAttribute("aria-current");
       });
   }
@@ -3302,8 +3326,12 @@
     feedback.textContent = `選択：${files.map((f) => f.name).join("、")}（読み込み中）`;
     await importFiles(files, true);
     const loaded = state.sources.filter((source) => source.image).length;
+    const sources = state.sources.filter((source) => source.image);
+    const layoutSummary = sources.length === 1
+      ? `配置：${sources[0].columns}列×${sources[0].rows}段（${$("easy-layout").value === "auto" ? "自動設定" : "手動指定"}）。`
+      : `配置：${sources.map((source) => `${source.columns}列×${source.rows}段`).join("、")}。`;
     feedback.textContent = loaded
-      ? `読み込み済み：${loaded}枚。次に一括加工へ進んでください。`
+      ? `読み込み済み：${loaded}枚。${layoutSummary} 次に②自動加工へ進んでください。`
       : "画像を読み込めませんでした。形式やサイズを確認してください。";
   };
   window.dispatchEvent(new Event("stamp-import-ready"));
@@ -3507,7 +3535,7 @@
       );
       return;
     }
-    easyStep(3);
+    easyStep(4);
     $("download-button").onclick();
   };
   renderCaptionList();

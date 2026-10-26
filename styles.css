@@ -1980,3 +1980,42 @@ body.easy-mode.easy-details-open .project-panel { display: revert; }
 .easy-upload-title { display:block; font-weight: 800; margin-bottom: 12px; color: #155c42; }
 .easy-upload-zone input.easy-visible-file { display: block !important; position: static !important; width: 100% !important; height: auto !important; opacity: 1 !important; visibility: visible !important; clip: auto !important; pointer-events: auto !important; font-size: 16px; color: #123e2e; }
 .easy-upload-zone .hint { margin: 10px 0 0; }
+
+/* Five-stage mobile guide: presentation only; no processing controls hidden. */
+#easy-steps { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; padding:0; margin:14px 0 22px; list-style:none; }
+#easy-steps li { min-width:0; padding:9px 3px; border-radius:9px; background:#eef3ef; color:#536b5d; font-size:11px; text-align:center; line-height:1.45; overflow-wrap:anywhere; }
+#easy-steps li[aria-current="step"] { background:#217653; color:#fff; font-weight:700; }
+@media (max-width:600px) { #easy-steps { gap:3px; } #easy-steps li { padding:9px 2px; font-size:10px; } }
+
+/* Technical notes stay available without crowding the iPhone first screen. */
+.easy-technical-info { margin: 0 0 14px; }
+.easy-technical-info > summary { cursor:pointer; padding:10px 12px; font-size:12px; font-weight:600; color:#536b5d; }
+.easy-technical-info[open] > summary { margin-bottom:8px; }
+
+/* Compact review cards on narrow iPhones; preserve full-size image inspection via existing editor. */
+@media (max-width: 600px) {
+  .bulk-review { scroll-margin-top: 18px; }
+  .bulk-review #bulk-summary,
+  .bulk-review #completion-status { font-size: 13px; line-height: 1.55; }
+  .bulk-results { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .bulk-result { padding: 7px; border-radius: 10px; min-width: 0; }
+  .bulk-result canvas { max-width: 100%; height: auto; }
+  .bulk-review #bulk-inspect,
+  .bulk-review #bulk-confirm { min-height: 48px; }
+  .bulk-review .check-label { line-height: 1.6; }
+}
+
+/* Optional help remains reachable without pushing primary controls below the fold. */
+.easy-upload-guide { margin: 6px 0 14px; }
+.easy-upload-guide > summary { min-height: 44px; display:flex; align-items:center; cursor:pointer; font-weight:600; font-size:12px; color:#217653; }
+.easy-upload-guide > .hint { padding:4px 10px 12px; line-height:1.7; }
+
+/* Review readability: retain every diagnostic message, even on narrow screens. */
+@media (max-width: 600px) {
+  .bulk-result h4 { margin: 0 0 8px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+  .bulk-result p { font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+  .bulk-result .button { min-height: 44px; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+  .bulk-result[data-status="エラー"] { border-width: 2px; }
+  .bulk-result[data-status="要確認"] { border-width: 2px; }
+  .bulk-review #bulk-visual { min-width: 22px; min-height: 22px; }
+}
