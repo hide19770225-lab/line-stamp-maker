@@ -2800,10 +2800,13 @@
   };
   let easyCaptionDirty = false;
   function easyStep(index) {
+    // Preserve existing processing stages; the five-step visual guide adds
+    // a separate completion-check milestone before the ZIP download.
+    const visibleIndex = index === 3 ? 4 : index;
     $("easy-steps")
       .querySelectorAll("li")
       .forEach((li, i) => {
-        if (i === index) li.setAttribute("aria-current", "step");
+        if (i === visibleIndex) li.setAttribute("aria-current", "step");
         else li.removeAttribute("aria-current");
       });
   }
