@@ -16,6 +16,30 @@ const { chromium } = require('playwright');
     for (const id of ['#easy-process', '#easy-review', '#easy-export']) {
       if (!(await page.locator(id).isVisible())) throw new Error('Essential action is hidden: ' + id);
     }
+    // Verify the actual upload flow shows the resolved layout near the picker.
+    const source = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 600; canvas.height = 1000;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 600, 1000);
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 5; x++) {
+        ctx.fillStyle = '#398a66';
+        ctx.fillRect(30 + x * 112, 24 + y * 122, 35, 35);
+      }
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    await page.locator('#easy-target').selectOption('40');
+    await page.locator('#easy-layout').selectOption('auto');
+    await page.locator('#easy-files').setInputFiles({
+      name: 'forty-grid-test.png', mimeType: 'image/png',
+      buffer: Buffer.from(source, 'base64'),
+    });
+    await page.waitForFunction(() => document.querySelector('#easy-upload-feedback').textContent.includes('読み込み済み'), null, { timeout: 30000 });
+    const feedback = await page.locator('#easy-upload-feedback').textContent();
+    if (!feedback.includes('配置：5列×8段（自動設定）')) {
+      throw new Error('Grid recognition feedback missing or incorrect: ' + feedback);
+    }
+    console.log('PASS automatic 5x8 selection and visible upload feedback');
     await page.screenshot({ path: '/tmp/stamp-atelier-mobile-preview.png', fullPage: true });
     await mode.selectOption('normal');
     if (await page.locator('#easy-panel').isVisible()) throw new Error('Easy panel did not hide in detailed mode');
