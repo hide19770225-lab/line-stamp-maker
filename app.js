@@ -1456,7 +1456,16 @@
             overlay.hidden = !overlay.hidden;
             toggle.setAttribute("aria-pressed", String(!overlay.hidden));
           };
-          card.append(toggle);
+          if (report.status === "正常") {
+            const detail = document.createElement("details");
+            detail.className = "audit-technical-details";
+            const summary = document.createElement("summary");
+            summary.textContent = "検出位置の確認";
+            detail.append(summary, toggle);
+            card.append(detail);
+          } else {
+            card.append(toggle);
+          }
         }
         const metrics = document.createElement("p");
         metrics.textContent = `${width}×${height}px · PNG / RGBA · ${(blob.size / 1024).toFixed(1)}KB · 透明 ${report.transparent}px · 半透明 ${report.partial}px`;
@@ -1469,7 +1478,18 @@
       reasons.textContent =
         [...report.errors, ...report.warnings].join(" / ") ||
         "サイズ・RGBA透過・余白・容量・残留候補の検査に合格（目視確認は別途必要です）";
-      card.append(reasons);
+      // Keep the 40-up visual review compact on iPhone. Warnings and errors
+      // remain visible; successful technical details can be expanded.
+      if (report.status === "正常") {
+        const detail = document.createElement("details");
+        detail.className = "audit-technical-details";
+        const summary = document.createElement("summary");
+        summary.textContent = "検査の詳細を表示";
+        detail.append(summary, reasons);
+        card.append(detail);
+      } else {
+        card.append(reasons);
+      }
       if (stamp) {
         const edit = document.createElement("button");
         edit.className = "button secondary wide";
