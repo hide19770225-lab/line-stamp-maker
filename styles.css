@@ -2009,3 +2009,13 @@ body.easy-mode.easy-details-open .project-panel { display: revert; }
 .easy-upload-guide { margin: 6px 0 14px; }
 .easy-upload-guide > summary { min-height: 44px; display:flex; align-items:center; cursor:pointer; font-weight:600; font-size:12px; color:#217653; }
 .easy-upload-guide > .hint { padding:4px 10px 12px; line-height:1.7; }
+
+/* Review readability: retain every diagnostic message, even on narrow screens. */
+@media (max-width: 600px) {
+  .bulk-result h4 { margin: 0 0 8px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+  .bulk-result p { font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+  .bulk-result .button { min-height: 44px; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+  .bulk-result[data-status="エラー"] { border-width: 2px; }
+  .bulk-result[data-status="要確認"] { border-width: 2px; }
+  .bulk-review #bulk-visual { min-width: 22px; min-height: 22px; }
+}
