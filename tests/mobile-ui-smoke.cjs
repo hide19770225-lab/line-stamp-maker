@@ -39,6 +39,11 @@ const { chromium } = require('playwright');
     if (!feedback.includes('配置：5列×8段（自動設定）')) {
       throw new Error('Grid recognition feedback missing or incorrect: ' + feedback);
     }
+    const chosenFile = await page.locator('#easy-files').evaluate(input => input.files?.[0]?.name || '');
+    if (chosenFile !== 'forty-grid-test.png') {
+      throw new Error('Native file picker lost its selected filename: ' + chosenFile);
+    }
+    console.log('PASS selected filename remains visible in the native file control');
     console.log('PASS automatic 5x8 selection and visible upload feedback');
     await page.screenshot({ path: '/tmp/stamp-atelier-mobile-preview.png', fullPage: true });
     await mode.selectOption('normal');
