@@ -46,12 +46,11 @@ const { chromium } = require('playwright');
     console.log('PASS selected filename remains visible in the native file control');
     // The visual-review cards must keep successful technical details collapsed.
     // This assertion guards the UI contract without bypassing visual approval.
-    const compactReview = await page.evaluate(async () => {
-      const sourceText = await (await fetch('/app.js')).text();
-      return sourceText.includes('audit-technical-details') &&
-        sourceText.includes('検査の詳細を表示') &&
-        sourceText.includes('検出位置の確認');
-    });
+    // The app CSP disallows fetch; inspect the checked-out source in Node.
+    const sourceText = require('fs').readFileSync('app.js', 'utf8');
+    const compactReview = sourceText.includes('audit-technical-details') &&
+      sourceText.includes('検査の詳細を表示') &&
+      sourceText.includes('検出位置の確認');
     if (!compactReview) throw new Error('Compact review controls missing');
     console.log('PASS compact review disclosure controls are present');
 
