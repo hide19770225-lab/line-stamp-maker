@@ -1,0 +1,98 @@
+name: Framed grid regression
+on:
+  push:
+    branches:
+      - feature/framed-40-grid
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'core.js'
+      - 'app.js'
+      - 'tests/framed-grid*'
+      - '.github/workflows/framed-grid.yml'
+permissions:
+  contents: read
+jobs:
+  framed-grid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check core.js
+          node --check app.js
+      - name: Run framed-grid regression
+        run: node tests/framed-grid.test.cjs
+      - name: Install Chromium test tools
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Verify framed cropping in real Chromium
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')" node tests/framed-grid-browser.cjs
+      - name: Install PNG inspection dependency
+        run: python3 -m pip install --user Pillow
+      - name: Validate actual downloaded ZIP entries and PNG dimensions
+        run: |
+          python3 - <<'PY'
+          import io, struct, zipfile
+          path='/tmp/framed-grid-browser-42.zip'
+          with zipfile.ZipFile(path) as z:
+              names=z.namelist()
+              assert len(names)==42, f'Expected 42 entries, got {len(names)}: {names}'
+              expected={f'{i:02}.png':(370,320) for i in range(1,41)}
+              expected.update({'main.png':(240,240),'tab.png':(96,74)})
+              assert set(names)==set(expected), f'Unexpected ZIP entries: {set(names)^set(expected)}'
+              for name, dimensions in expected.items():
+                  data=z.read(name)
+                  assert data[:8]==bytes.fromhex('89504e470d0a1a0a'), name
+                  assert struct.unpack('>II',data[16:24])==dimensions, name
+                  assert len(data)>100, name
+                  if name not in ('main.png','tab.png'):
+                      # A complete opaque black rule at any exported image edge
+                      # indicates that the printed grid leaked into the sticker.
+                      from PIL import Image
+                      image=Image.open(__import__('io').BytesIO(data)).convert('RGBA')
+                      edges=[list(image.crop((0,0,image.width,1)).getdata()),
+                             list(image.crop((0,image.height-1,image.width,image.height)).getdata()),
+                             list(image.crop((0,0,1,image.height)).getdata()),
+                             list(image.crop((image.width-1,0,image.width,image.height)).getdata())]
+                      for edge in edges:
+                          black=sum(1 for r,g,b,a in edge if a>220 and max(r,g,b)<130)
+                          assert black < len(edge)*0.6, f'{name}: printed black border detected'
+                      # Confirm all four near-boundary artwork markers survived
+                      # background removal, scaling and final PNG export.
+                      pixels=list(image.getdata())
+                      checks={
+                          'upper-left red':lambda r,g,b:r>170 and g<110 and b<150,
+                          'upper-right green':lambda r,g,b:g>120 and r<120 and b<150,
+                          'lower-left blue':lambda r,g,b:b>170 and r<130 and g<150,
+                          'lower-right gold':lambda r,g,b:r>150 and 100<g<200 and b<110,
+                      }
+                      for label,match in checks.items():
+                          count=sum(1 for r,g,b,a in pixels if a>180 and match(r,g,b))
+                          assert count>=8, f'{name}: {label} marker lost in exported PNG ({count} pixels)'
+                      # A printed divider can survive *inside* the sticker,
+                      # even when all four outside edges are transparent.
+                      for y in range(image.height):
+                          run=0
+                          for x in range(image.width):
+                              r,g,b,a=image.getpixel((x,y))
+                              run=run+1 if a>220 and max(r,g,b)<65 else 0
+                              assert run<image.width*.72, f'{name}: long internal horizontal frame line at y={y}'
+                      for x in range(image.width):
+                          run=0
+                          for y in range(image.height):
+                              r,g,b,a=image.getpixel((x,y))
+                              run=run+1 if a>220 and max(r,g,b)<65 else 0
+                              assert run<image.height*.72, f'{name}: long internal vertical frame line at x={x}'
+
+          print('PASS downloaded framed ZIP: 40 stickers + main + tab; all 42 PNG dimensions verified')
+          PY

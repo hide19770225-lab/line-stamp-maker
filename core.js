@@ -280,8 +280,63 @@
       ? null
       : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
   }
+  // Detect a deliberately printed 5 x 8 rectangular frame. The dark rules
+  // must span most of the sheet, so artwork strokes cannot become dividers.
+  // Fail closed: unframed sheets keep the existing adaptive cutter.
+  function detectFramedGrid(image, columns = 5, rows = 8) {
+    if (columns !== 5 || rows !== 8) return null;
+    const width = image.width, height = image.height;
+    if (width < 300 || height < 480) return null;
+    const sample = canvas(width, height);
+    const ctx = sample.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    sample.width = sample.height = 1;
+    const xCounts = new Uint32Array(width), yCounts = new Uint32Array(height);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const p = (y * width + x) * 4;
+        if (pixels[p + 3] > 220 &&
+            Math.max(pixels[p], pixels[p + 1], pixels[p + 2]) < 130) {
+          xCounts[x]++;
+          yCounts[y]++;
+        }
+      }
+    function lines(counts, cross, expected) {
+      const runs = [];
+      for (let i = 0; i < counts.length;) {
+        if (counts[i] < cross * 0.58) { i++; continue; }
+        const start = i;
+        while (i < counts.length && counts[i] >= cross * 0.58) i++;
+        runs.push({start, end: i - 1, center: (start + i - 1) / 2});
+      }
+      if (runs.length !== expected) return null;
+      const gaps = runs.slice(1).map((r, i) => r.center - runs[i].center);
+      const sorted = [...gaps].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      if (!median || gaps.some(g => g < median * 0.65 || g > median * 1.4))
+        return null;
+      if (runs[0].start > counts.length * 0.035 ||
+          runs.at(-1).end < counts.length * 0.90) return null;
+      return runs;
+    }
+    const xs = lines(xCounts, height, columns + 1);
+    const ys = lines(yCounts, width, rows + 1);
+    return xs && ys ? {xs, ys} : null;
+  }
   function tileRect(source, column, row) {
     const { xs, ys, image } = source;
+    if (source.framedGrid) {
+      const frame = source.framedGrid;
+      // Exclude the entire printed rule and a small JPEG antialias halo.
+      const pad = Math.max(2, Math.round(Math.min(image.width, image.height) * 0.003));
+      const left = Math.ceil(frame.xs[column].end + pad);
+      const right = Math.floor(frame.xs[column + 1].start - pad);
+      const top = Math.ceil(frame.ys[row].end + pad);
+      const bottom = Math.floor(frame.ys[row + 1].start - pad);
+      return {x: left, y: top, width: Math.max(1, right - left),
+        height: Math.max(1, bottom - top)};
+    }
     const rowGrid = activeRowGrid(source);
     const columnLines = rowGrid?.xs[row] || xs;
     const left = Math.round(columnLines[column] * image.width);
@@ -696,7 +751,10 @@
     const mask = floodMask(original, mode, tolerance, color);
     const matte = mode === "auto" ? exteriorWhiteMatte(original, mask) : null;
     crop.width = crop.height = 1;
-    const isNumberedSheet = source.columns === 5 && source.rows === 8;
+    // Framed source artwork is intentionally number-free. Never interpret
+    // a Japanese caption or decoration as a removable guide number.
+    const isNumberedSheet = !source.framedGrid &&
+      source.columns === 5 && source.rows === 8;
     // Guide numbers belong to the detected cell, not the equal-grid origin.
     // Map its un-inset top-left into crop pixels so row drift and manual
     // insets do not move the search away from the original printed number.
@@ -1207,6 +1265,7 @@
     createTile,
     isolateRect,
     tileRect,
+    detectFramedGrid,
     activeRowGrid,
     suggestRowGrid,
     suggestGridLines,
