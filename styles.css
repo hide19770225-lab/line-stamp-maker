@@ -2004,3 +2004,8 @@ body.easy-mode.easy-details-open .project-panel { display: revert; }
   .bulk-review #bulk-confirm { min-height: 48px; }
   .bulk-review .check-label { line-height: 1.6; }
 }
+
+/* Optional help remains reachable without pushing primary controls below the fold. */
+.easy-upload-guide { margin: 6px 0 14px; }
+.easy-upload-guide > summary { min-height: 44px; display:flex; align-items:center; cursor:pointer; font-weight:600; font-size:12px; color:#217653; }
+.easy-upload-guide > .hint { padding:4px 10px 12px; line-height:1.7; }
