@@ -2800,9 +2800,8 @@
   };
   let easyCaptionDirty = false;
   function easyStep(index) {
-    // Preserve existing processing stages; the five-step visual guide adds
-    // a separate completion-check milestone before the ZIP download.
-    const visibleIndex = index === 3 ? 4 : index;
+    // Progress reflects the actual completed review and ZIP export stages.
+    const visibleIndex = index;
     $("easy-steps")
       .querySelectorAll("li")
       .forEach((li, i) => {
@@ -3510,7 +3509,7 @@
       );
       return;
     }
-    easyStep(3);
+    easyStep(4);
     $("download-button").onclick();
   };
   renderCaptionList();
