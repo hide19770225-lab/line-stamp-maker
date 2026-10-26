@@ -83,11 +83,12 @@
           <span class="heading-art" aria-hidden="true">✳︎</span>
         </div>
         <label class="mode-switch"
-          >制作モード<select id="production-mode">
+          >制作モード<select id="production-mode" aria-describedby="production-mode-help">
             <option value="normal">通常制作（詳細編集）</option>
             <option value="easy" selected>自動加工・一括確認（推奨）</option>
           </select></label
         >
+        <p id="production-mode-help" class="hint easy-mode-hint">通常は「自動加工・一括確認」で進めてください。分割位置や背景を細かく直す場合だけ「通常制作」を選びます。</p>
         <section id="auto-caption-panel" class="panel" hidden>
           <h2>セリフを自動提案（両モード共通）</h2>
           <p class="hint">
