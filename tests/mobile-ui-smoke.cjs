@@ -13,8 +13,16 @@ const { chromium } = require('playwright');
     const viewport = await page.evaluate(() => ({width: innerWidth, scrollWidth: document.documentElement.scrollWidth}));
     if (viewport.scrollWidth > viewport.width + 2) throw new Error('Horizontal overflow on iPhone viewport: ' + JSON.stringify(viewport));
     if (!(await page.locator('#easy-files').isVisible())) throw new Error('Upload input hidden');
+    for (const id of ['#easy-process', '#easy-review', '#easy-export']) {
+      if (!(await page.locator(id).isVisible())) throw new Error('Essential action is hidden: ' + id);
+    }
     await page.screenshot({ path: '/tmp/stamp-atelier-mobile-preview.png', fullPage: true });
+    await mode.selectOption('normal');
+    if (await page.locator('#easy-panel').isVisible()) throw new Error('Easy panel did not hide in detailed mode');
+    await mode.selectOption('easy');
+    if (!(await page.locator('#easy-panel').isVisible())) throw new Error('Easy panel did not reopen');
+    if (await steps.count() !== 5) throw new Error('Five-step guide disappeared after switching modes');
     if (errors.length) throw new Error('Browser JavaScript errors: ' + errors.join('; '));
-    console.log('PASS mobile viewport, guide, upload and default mode');
+    console.log('PASS mobile viewport, five-step guide, visible actions and mode switching');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exit(1); });
