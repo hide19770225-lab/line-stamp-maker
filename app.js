@@ -369,12 +369,13 @@
           const selectedLayout = easy ? $("easy-layout").value : "";
           const singleNewSheet = chosen.length === 1 &&
             state.sources.filter((source) => source.image).length === 0;
-          const likelyFortySheet = singleNewSheet && state.target === 40 &&
-            image.width / image.height >= 0.65 &&
-            image.width / image.height <= 1.15;
+          // A single 40-sticker sheet may have generous margins or a
+          // nonstandard aspect ratio. Do not misclassify it as a 10-grid.
+          // Explicit layout selection always overrides this default.
+          const autoFortySheet = singleNewSheet && state.target === 40;
           const easyLayout = easy
             ? (selectedLayout === "auto"
-                ? (likelyFortySheet ? [5, 8] : [2, 5])
+                ? (autoFortySheet ? [5, 8] : [2, 5])
                 : selectedLayout.split("x").map(Number))
             : null;
           addSource(image, file.name, easyLayout);
