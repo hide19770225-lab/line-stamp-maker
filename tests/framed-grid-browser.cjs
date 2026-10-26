@@ -140,5 +140,45 @@ const fs = require('node:fs/promises');
     const stat = await fs.stat(output);
     assert(stat.size > 1000,'exported ZIP must contain image data');
     console.log('PASS browser: framed 40-sheet processed, 42 assets inspected, ZIP saved:', output, stat.size);
+    // End-to-end regression: process an unframed 5x8 image through the same
+    // browser UI and export a separate 42-image ZIP. This exercises the legacy
+    // path after the framed-grid feature has been installed.
+    const unframed = await page.evaluate(() => {
+      const c=StampCore.canvas(1000,1600),ctx=c.getContext('2d');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,1000,1600);
+      for(let row=0;row<8;row++)for(let col=0;col<5;col++){
+        const x=col*200,y=row*200;
+        ctx.fillStyle='#64bca9';ctx.beginPath();ctx.arc(x+100,y+108,46,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#222';ctx.lineWidth=3;
+        ctx.beginPath();ctx.moveTo(x+80,y+74);ctx.lineTo(x+75,y+46);
+        ctx.moveTo(x+120,y+74);ctx.lineTo(x+125,y+46);ctx.stroke();
+        ctx.font='15px sans-serif';ctx.fillText('ありがとう',x+55,y+35);
+      }
+      return {png:c.toDataURL('image/png').split(',')[1],
+        detected:StampCore.detectFramedGrid(c,5,8)!==null};
+    });
+    assert.equal(unframed.detected,false,'unframed artwork must retain legacy processing');
+    await page.selectOption('#easy-layout','5x8');
+    await page.selectOption('#easy-caption-mode','existing');
+    await page.setInputFiles('#easy-files',{name:'unframed-40.png',mimeType:'image/png',
+      buffer:Buffer.from(unframed.png,'base64')});
+    await idle();await page.click('#easy-process');await idle();
+    assert.equal(await page.locator('.stamp-card').count(),40,'unframed source must produce 40 cards');
+    await page.selectOption('#production-mode','normal');
+    await page.click('#bulk-inspect');await idle();
+    assert.equal(await page.locator('.bulk-result').count(),42,'unframed source must inspect 42 images');
+    assert.equal(await page.locator('.bulk-result[data-status="エラー"]').count(),0);
+    await page.check('#bulk-visual');await page.click('#bulk-confirm');
+    await page.selectOption('#production-mode','easy');
+    await page.click('#easy-export');await idle();
+    assert(await page.locator('#download-direct').isVisible(),'unframed ZIP must be downloadable');
+    const unframedEvent=page.waitForEvent('download');
+    await page.click('#download-direct');
+    const unframedDownload=await unframedEvent;
+    const unframedOutput='/tmp/unframed-grid-browser-42.zip';
+    await unframedDownload.saveAs(unframedOutput);
+    assert((await fs.stat(unframedOutput)).size>1000);
+    console.log('PASS browser: unframed 40-sheet processed, 42 assets inspected, ZIP saved:',unframedOutput);
+
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
