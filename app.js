@@ -1154,7 +1154,7 @@
       const uncertainCell = !source.manualColumnYs && source.uncertainCuts?.some(
         cut => cut.column === column && (cut.boundary === row || cut.boundary === row + 1),
       );
-      stamp.individualReviewRequired = !!uncertainCell || C.paintedCheckerboard(stamp.original);
+      // A sheet-wide uncertain gutter must require review for every tile, not\n      // only the tiles with a locally uncertain column boundary.\n      // This is especially important for artwork with long tails, antennae,\n      // captions and decorations that can cross nominal 5 x 8 cell edges.\n      stamp.individualReviewRequired = !!source.gutterUncertain ||\n        !!uncertainCell || C.paintedCheckerboard(stamp.original);
       if (source.gutterUncertain || uncertainCell) {
         stamp.boundaryReview = {
           needsReview: true,
